@@ -317,9 +317,9 @@ function parseM3UText(text) {
         if (!line) continue;
         if (line.indexOf('#EXTINF:') === 0) {
             var comma = line.indexOf(','), title = comma >= 0 ? line.slice(comma + 1).trim() : 'Canal ' + nextId;
-            var group = (line.match(/group-title=["']([^"']*)["']/i) || [,''])[1] || 'Canais';
-            var logo = (line.match(/tvg-logo=["']([^"']*)["']/i) || [,''])[1] || '';
-            var tvg = (line.match(/tvg-name=["']([^"']*)["']/i) || [,''])[1] || '';
+            var group = (line.match(/group-title=["']([^"']*)["']/i) || line.match(/group-title=([^\s,]+)/i) || [,''])[1] || 'Canais';
+            var logo = (line.match(/tvg-logo=["']([^"']*)["']/i) || line.match(/tvg-logo=([^\s,]+)/i) || [,''])[1] || '';
+            var tvg = (line.match(/tvg-name=["']([^"']*)["']/i) || line.match(/tvg-name=([^\s,]+)/i) || [,''])[1] || '';
             cur = { name: tvg || title || ('Canal ' + nextId), group: group || 'Canais', stream_icon: logo, stream_id: nextId, num: nextId };
             nextId++;
         } else if (line.charAt(0) !== '#' && cur) {
@@ -329,9 +329,24 @@ function parseM3UText(text) {
     return all;
 }
 function classifyM3UItem(item) {
-    var raw = String((item.group || '') + ' ' + (item.name || '') + ' ' + (item.stream_url || '')).toLowerCase();
-    if (/(serie|series|série|séries|novela|novelas|temporada|season|tv show|anime)/i.test(raw)) return 'series';
-    if (/(filme|filmes|movie|movies|cinema|vod|documentário|documentario|desenho|cartoon)/i.test(raw)) return 'movies';
+    var group = String(item.group || '').trim(), name = String(item.name || '').trim(), url = String(item.stream_url || '');
+    var g = group.toLowerCase(), n = name.toLowerCase(), u = url.toLowerCase();
+    var groupSeries = /(serie|series|série|séries|novela|novelas|temporada|season|tv show|anime|episod)/i.test(g);
+    var groupMovies = /(filme|filmes|movie|movies|cinema|vod|documentário|documentario|desenho|cartoon)/i.test(g);
+    // O grupo tem prioridade. Em grupo misto, o padrão é Filme; só vira Série
+    // quando a própria entrada traz episódio/temporada ou caminho de série.
+    var titleSeries = /(serie|series|série|séries|novela|temporada|season|episod|s\d{1,2}e\d{1,2})/i.test(n);
+    if (groupSeries && groupMovies) {
+        if (/\/(series|episode|episodios?)\//i.test(u) || titleSeries) return 'series';
+        return 'movies';
+    }
+    if (groupSeries) return 'series';
+    if (groupMovies) return 'movies';
+    if (/\/(series|episode|episodios?)\//i.test(u)) return 'series';
+    if (/\/(movie|movies|vod)\//i.test(u)) return 'movies';
+    if (/\/live\//i.test(u)) return 'live';
+    if (titleSeries) return 'series';
+    if (/(filme|filmes|movie|movies|cinema|vod|documentário|documentario)/i.test(n)) return 'movies';
     return 'live';
 }
 function catalogFromM3U() {
@@ -1456,8 +1471,9 @@ function homeRecentHtml() {
             leftTxt = (hh > 0 ? hh + 'h ' + p2(mm) + 'm' : (mm > 0 ? mm + 'm' : '1m')) + ' ' + t('restantes');
             pct = Math.round((pr.pos / pr.dur) * 100); if (pct > 100) pct = 100;
         }
+        var initials = (name || 'UP').replace(/[^A-Za-zÀ-ÿ0-9 ]/g, '').trim().split(/\s+/).slice(0, 2).map(function (x) { return x.charAt(0); }).join('').toUpperCase() || 'UP';
         cards += '<a class="zh-poster" href="/' + it.kind + '/' + it.id + '">'
-            + '<div class="pt-img zh-art"' + (img ? ' data-src="' + attr(img) + '"' : '') + '></div>'
+            + '<div class="pt-img zh-art"' + (img ? ' data-src="' + attr(img) + '"' : '') + '><span class="zh-art-fallback">' + esc(initials) + '</span></div>'
             + '<div class="zh-cbody">'
             + (topLine ? '<div class="zh-cyear">' + esc(topLine) + '</div>' : '')
             + '<div class="zh-cname">' + esc(name) + '</div>'
@@ -1571,8 +1587,9 @@ function fillHomeNewest() {
             var topLine = '';
             var ym = nm.match(/\(((?:19|20)\d{2})\)/);
             if (ym) { topLine = ym[1]; nm = nm.replace(ym[0], '').replace(/\s{2,}/g, ' ').replace(/^\s+|\s+$/g, ''); }
+            var initials = (nm || 'UP').replace(/[^A-Za-zÀ-ÿ0-9 ]/g, '').trim().split(/\s+/).slice(0, 2).map(function (x) { return x.charAt(0); }).join('').toUpperCase() || 'UP';
             h += '<a class="zh-poster" href="/movies/' + sid + '">'
-                + '<div class="pt-img zh-art"' + (img ? ' data-src="' + attr(img) + '"' : '') + '></div>'
+                + '<div class="pt-img zh-art"' + (img ? ' data-src="' + attr(img) + '"' : '') + '><span class="zh-art-fallback">' + esc(initials) + '</span></div>'
                 + '<div class="zh-cbody">'
                 + (topLine ? '<div class="zh-cyear">' + esc(topLine) + '</div>' : '')
                 + '<div class="zh-cname">' + esc(nm) + '</div>'
@@ -1687,7 +1704,9 @@ function homeStyles(ac) {
         + '.zh-posters{display:flex;gap:1.2vw;align-items:stretch;}'
         + '.zh-poster{display:flex;flex-direction:row;text-decoration:none;color:#e7efe9;flex:none;width:min(40vh,22vw);aspect-ratio:2.42/1;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:1.1vw;padding:.55vw;box-sizing:border-box;overflow:hidden;}'
         + '.zh-poster:focus,.zh-poster:focus-visible{border-color:' + a + ';box-shadow:0 0 0 .25vw ' + a + '66;outline:none;}'
-        + '.zh-art{position:relative;height:100%;aspect-ratio:2/3;width:auto;flex:none;border-radius:.7vw;overflow:hidden;background:#12201a;background-size:cover;background-position:center;}'   /* sem sombra com blur (peso em TV fraca) */
+        + '.zh-art{position:relative;height:100%;aspect-ratio:2/3;width:auto;flex:none;border-radius:.7vw;overflow:hidden;background:linear-gradient(145deg,' + a + '55,#10251b 58%,#07110d);background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;}'   /* sem sombra com blur (peso em TV fraca) */
+        + '.zh-art-fallback{font-size:1.6vw;font-weight:900;letter-spacing:.08em;color:#d8f5e7;text-shadow:0 2px 7px rgba(0,0,0,.45);}'
+        + '.zh-art.is-loaded .zh-art-fallback{display:none;}'
         + '.zh-cbody{flex:1;min-width:0;display:flex;flex-direction:column;padding:.4vw .3vw .3vw .95vw;box-sizing:border-box;}'
         + '.zh-cyear{color:' + a + ';font-size:.95vw;font-weight:700;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
         + '.zh-cname{color:#fff;font-size:1.15vw;font-weight:800;line-height:1.25;margin-top:.15vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
@@ -1736,6 +1755,45 @@ function homeStyles(ac) {
         + '.zh-status b{color:#dbe7e0;font-weight:700;}'
         + '.zh-bar{width:1px;height:1.4vw;background:rgba(255,255,255,.14);}'
         + '.zh-badge{margin-left:auto;color:' + a + ';font-weight:800;text-transform:uppercase;letter-spacing:.06em;font-size:1vw;border:1px solid ' + a + '3a;border-radius:1vw;padding:.35vw .8vw;}'
+        + '@media (max-width:600px) and (orientation:portrait){'
+        + '.zx-home2{overflow-y:auto;}'
+        + '.zh-ui{position:relative;min-height:100vh;height:auto;overflow-y:visible;padding:14px 14px 24px;}'
+        + '.zh-top{gap:7px;align-items:center;}'
+        + '.zh-logo .brand-logo{font-size:22px;letter-spacing:4px;}'
+        + '.zh-clock{font-size:22px;}'
+        + '.zh-date{font-size:10px;margin-top:3px;}'
+        + '.zh-icons{gap:5px;}'
+        + '.zh-tbtn{height:32px;padding:0 8px;border-radius:9px;font-size:11px;gap:4px;}'
+        + '.zh-tbtn.ic{width:32px;padding:0;}'
+        + '.zh-tbtn svg{width:16px;height:16px;}'
+        + '.zh-profbtn .zx-pf-av{width:30px;height:30px;}'
+        + '.zh-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:16px;flex:none;min-height:auto;}'
+        + '.zh-nav>.zh-tile,.zh-navtop .zh-tile{flex:none;max-width:none;width:auto;min-height:108px;height:108px;gap:7px;padding:10px 6px;border-radius:12px;}'
+        + '.zh-navr,.zh-navtop,.zh-navbot{display:contents;}'
+        + '.zh-navtop .zh-ico{width:28px;height:28px;}'
+        + '.zh-navtop .zh-ico svg{width:27px;height:27px;}'
+        + '.zh-ico{width:30px;height:30px;}'
+        + '.zh-ico svg{width:29px;height:29px;}'
+        + '.zh-tl{font-size:13px;}'
+        + '.zh-tsub{font-size:10px;margin-top:3px;}'
+        + '.zh-stile{min-height:58px;height:58px;padding:8px 6px;border-radius:10px;gap:5px;}'
+        + '.zh-stile svg{width:18px;height:18px;}'
+        + '.zh-stile b{font-size:11px;}'
+        + '.zh-ssub{font-size:9px;margin-top:2px;}'
+        + '.zh-recent{margin-top:16px;gap:8px;}'
+        + '.zh-h2{font-size:14px;gap:6px;}'
+        + '.zh-h2 svg{width:16px;height:16px;}'
+        + '.zh-posters{gap:8px;overflow-x:auto;padding-bottom:2px;}'
+        + '.zh-poster{width:165px;min-width:165px;aspect-ratio:2.1/1;border-radius:9px;padding:5px;}'
+        + '.zh-cbody{padding:4px 3px 3px 7px;}'
+        + '.zh-art-fallback{font-size:22px;}'
+        + '.zh-cyear{font-size:10px;}'
+        + '.zh-cname{font-size:12px;}'
+        + '.zh-cleft{font-size:9px;}'
+        + '.zh-status{font-size:10px;gap:8px;margin-top:12px;white-space:nowrap;overflow:hidden;}'
+        + '.zh-status span{gap:3px;}'
+        + '.zh-badge{font-size:8px;padding:3px 6px;}'
+        + '}'
         + '</style>';
 }
 /* Aviso de vencimento (só na HOME). Usa license do resolve (zero rede extra).
