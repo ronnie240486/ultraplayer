@@ -1,7 +1,0 @@
-com.ultraplayer.app-pngs-0 /home/ubuntu/ultraplayer/native-webview/app/build/generated/res/pngs/debug
-com.ultraplayer.app-resValues-1 /home/ubuntu/ultraplayer/native-webview/app/build/generated/res/resValues/debug
-com.ultraplayer.app-packageDebugResources-2 /home/ubuntu/ultraplayer/native-webview/app/build/intermediates/incremental/debug/packageDebugResources/merged.dir
-com.ultraplayer.app-packageDebugResources-3 /home/ubuntu/ultraplayer/native-webview/app/build/intermediates/incremental/debug/packageDebugResources/stripped.dir
-com.ultraplayer.app-debug-4 /home/ubuntu/ultraplayer/native-webview/app/build/intermediates/merged_res/debug/mergeDebugResources
-com.ultraplayer.app-debug-5 /home/ubuntu/ultraplayer/native-webview/app/src/debug/res
-com.ultraplayer.app-main-6 /home/ubuntu/ultraplayer/native-webview/app/src/main/res

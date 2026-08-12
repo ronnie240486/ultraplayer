@@ -1,2 +1,0 @@
-com.ultraplayer.app:style/AppTheme = 0x7f020000
-com.ultraplayer.app:drawable/ic_launcher = 0x7f010000
