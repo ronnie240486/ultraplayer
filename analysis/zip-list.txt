@@ -1,0 +1,11 @@
+Archive:  /home/ubuntu/upload/ZuxoPlayer3.0.4.apk+
+  Length      Date    Time    Name
+---------  ---------- -----   ----
+      124  2026-08-06 13:25   apk+.json
+    22007  2026-08-06 13:25   icon.png
+  3446088  2026-08-06 13:25   base.apk
+    37273  2026-08-06 13:25   split_config.es.apk
+    37273  2026-08-06 13:25   split_config.pt.apk
+   263483  2026-08-06 13:25   split_config.xxhdpi.apk
+---------                     -------
+  3806248                     6 files

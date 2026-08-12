@@ -1,0 +1,28 @@
+# Android/Gradle
+.gradle/
+**/build/
+local.properties
+*.iml
+.idea/
+
+# IDE and OS
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Local analysis/tool caches
+jadx-cache/
+*.log.tmp
+
+# Signing material and secrets
+*.keystore
+*.jks
+*.pem
+*.p12
+.env
+.env.*
+
+# Generated output
+*.apk.sha256
+*.aab
+outputs/

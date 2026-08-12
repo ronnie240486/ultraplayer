@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Sem conexão</title>
+<style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+        width: 100%; height: 100%;
+        background: #0a0a0a; color: #f5f5f1;
+        font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        overflow: hidden;
+    }
+    .wrap {
+        width: 100%; min-height: 100%;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        text-align: center;
+        padding: clamp(20px, 5vh, 60px) clamp(16px, 5vw, 60px);
+        gap: clamp(14px, 2.5vh, 28px);
+    }
+    .brand {
+        font-family: 'Arial Black', 'Helvetica Neue', sans-serif;
+        font-weight: 900; letter-spacing: 3px;
+        font-size: clamp(30px, 7vw, 64px);
+        color: #f0f0f0; line-height: 1;
+    }
+    .brand .x { color: #10b981; }
+    .icon {
+        width: clamp(80px, 16vw, 150px);
+        height: clamp(80px, 16vw, 150px);
+        color: #10b981;
+    }
+    .icon svg { width: 100%; height: 100%; display: block; }
+    h1 { font-size: clamp(20px, 3.4vw, 34px); font-weight: 700; }
+    p  { font-size: clamp(14px, 1.9vw, 20px); color: #aaa; max-width: 640px; line-height: 1.5; }
+    .btn {
+        margin-top: clamp(6px, 1.5vh, 14px);
+        background: #10b981; color: #fff;
+        border: 3px solid transparent; border-radius: 10px;
+        padding: clamp(12px, 1.6vh, 18px) clamp(34px, 6vw, 60px);
+        font-size: clamp(16px, 1.8vw, 22px); font-weight: 700;
+        text-transform: uppercase; letter-spacing: 1px;
+        cursor: pointer; outline: none;
+    }
+    .btn:focus { border-color: #fff; }       /* foco do controle na TV */
+    .btn.is-loading { opacity: .6; pointer-events: none; }
+    .hint { font-size: clamp(12px, 1.4vw, 15px); color: #666; }
+</style>
+</head>
+<body>
+    <div class="wrap">
+        <div class="brand">Zux<span class="x">o</span> PLAYER</div>
+        <div class="icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 1l22 22"></path>
+                <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"></path>
+                <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"></path>
+                <path d="M10.71 5.05A16 16 0 0 1 22.58 9"></path>
+                <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"></path>
+                <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
+                <line x1="12" y1="20" x2="12.01" y2="20"></line>
+            </svg>
+        </div>
+        <h1 id="ttl">Sem conexão com a internet</h1>
+        <p id="msg">Não conseguimos conectar ao servidor. Verifique seu Wi-Fi ou cabo de rede e tente novamente.</p>
+        <button class="btn" id="retry" autofocus>Tentar novamente</button>
+        <div class="hint" id="hint">O app tenta reconectar sozinho quando a internet voltar.</div>
+    </div>
+<script>
+    (function () {
+        var btn = document.getElementById('retry');
+
+        // Aberto como offline.html#ssl = erro de CERTIFICADO (não de rede).
+        // Causa nº 1: data/hora errada no aparelho — dica específica.
+        if (location.hash === '#ssl') {
+            document.getElementById('ttl').textContent = 'Problema de segurança na conexão';
+            document.getElementById('msg').innerHTML =
+                'O aparelho não conseguiu validar a conexão segura.<br>' +
+                'Confira se a <strong style="color:#f5f5f1">DATA e a HORA</strong> do aparelho estão certas e tente de novo.';
+            document.getElementById('hint').textContent =
+                'Ajustes > Data e hora > usar data/hora automática (da rede).';
+        }
+        function doRetry() {
+            btn.className = 'btn is-loading';
+            btn.textContent = 'Reconectando...';
+            try {
+                if (window.Android && window.Android.retry) { window.Android.retry(); return; }
+            } catch (e) {}
+            // Fallback (se rodar fora do app): recarrega
+            location.reload();
+        }
+        btn.addEventListener('click', doRetry);
+        // Enter/OK do controle remoto
+        document.addEventListener('keydown', function (e) {
+            if (e.keyCode === 13 || e.keyCode === 23) { doRetry(); }
+        });
+    })();
+</script>
+</body>
+</html>
