@@ -281,9 +281,20 @@ function platform() {
 
 /* ---------- chamadas ---------- */
 // IPTV DIRETO
+function xtreamCreds() {
+    if (S.xtreamUnavailable) return { server: '', user: '', pass: '' };
+    if (S.xtreamDerived && S.xtreamDerived.server && S.xtreamDerived.user && S.xtreamDerived.pass) return S.xtreamDerived;
+    if ((S.playlistType || '').indexOf('m3u') === 0 && S.playlistUrl) {
+        var d = playlistToXtream({ playlist_url: S.playlistUrl }, 'Playlist');
+        if (d) { S.xtreamDerived = d; return d; }
+    }
+    return { server: S.server || '', user: S.user || '', pass: S.pass || '' };
+}
 function xt(action, extra) {
-    var u = S.server + '/player_api.php?username=' + enc(S.user) + '&password=' + enc(S.pass) + '&action=' + action + (extra || '');
-    return fetch(u, { credentials: 'omit' }).then(function (r) { return r.json(); }).catch(function () { return null; });
+    var c = xtreamCreds();
+    if (!c.server || !c.user || !c.pass || c.pass === '__direct__') return Promise.resolve(null);
+    var u = c.server + '/player_api.php?username=' + enc(c.user) + '&password=' + enc(c.pass) + '&action=' + action + (extra || '');
+    return fetchT(u, 20000).then(function (r) { return r.json(); }).catch(function () { return null; });
 }
 // fetch com TIMEOUT — VPS pendurada NÃO pode travar o app (cai pro cache rápido)
 function fetchT(url, ms, options) {
@@ -593,15 +604,15 @@ function xtSeriesInfo(id, tries) {
     });
 }
 function streamUrl(kind, id, ext) {
-    if ((S.playlistType || '').indexOf('m3u') === 0) {
+    if ((S.playlistType || '').indexOf('m3u') === 0 && (!S.xtreamDerived || S.xtreamUnavailable)) {
         var bucket = kind === 'live' ? 'live' : kind === 'movie' ? 'movies' : 'series';
         var m3u = (S.cat[bucket] && S.cat[bucket].all) || [];
         for (var mi = 0; mi < m3u.length; mi++) if (String(m3u[mi].stream_id) === String(id) || String(m3u[mi].series_id || '') === String(id)) return m3u[mi].stream_url || '';
     }
-    var u = enc(S.user), p = enc(S.pass);
-    if (kind === 'live') return S.server + '/live/' + u + '/' + p + '/' + id + '.m3u8';
-    if (kind === 'movie') return S.server + '/movie/' + u + '/' + p + '/' + id + '.' + (ext || 'mp4');
-    return S.server + '/series/' + u + '/' + p + '/' + id + '.' + (ext || 'mp4');
+    var c = xtreamCreds(), u = enc(c.user), p = enc(c.pass), base = c.server || S.server;
+    if (kind === 'live') return base + '/live/' + u + '/' + p + '/' + id + '.m3u8';
+    if (kind === 'movie') return base + '/movie/' + u + '/' + p + '/' + id + '.' + (ext || 'mp4');
+    return base + '/series/' + u + '/' + p + '/' + id + '.' + (ext || 'mp4');
 }
 
 /* ---------- branding (logo/nome/cor/fundo) ---------- */
@@ -737,24 +748,13 @@ function channelTiles(list) { var h = ''; for (var i = 0; i < list.length; i++) 
 
 /* ---------- catálogo (carrega tudo 1x por seção; igual HDX direto) ---------- */
 var PAGE = 100;
-function ensureCatalog(kind) {
-    // kind: 'movies' | 'series' | 'live'. Resolve → { cats:[{category_id,category_name,num,adult}], byCat:{}, all:[] }
-    if (S.cat[kind]) return Promise.resolve(S.cat[kind]);
-    if ((S.playlistType || '').indexOf('m3u') === 0) {
-        if (kind === 'live') return catalogFromM3U();
-        return Promise.resolve({ cats: [], byCat: {}, all: [] });
-    }
+function xtreamCatalog(kind) {
     var catsAction = kind === 'live' ? 'get_live_categories' : kind === 'movies' ? 'get_vod_categories' : 'get_series_categories';
     var listAction = kind === 'live' ? 'get_live_streams' : kind === 'movies' ? 'get_vod_streams' : 'get_series';
     var newKey = kind === 'series' ? 'last_modified' : 'added';
     return Promise.all([xt(catsAction), xt(listAction)]).then(function (res) {
-        // PC + ANDROID (não Samsung): o xt() devolve null quando o fetch FALHA
-        // (offline). Sem isto, processava [null,null] como sucesso e CACHEAVA o
-        // vazio → ao voltar a internet o `if(S.cat[kind])` devolvia o cache vazio
-        // (só limpava reabrindo). Agora: falhou → NÃO cacheia + sinaliza "Recarregar".
         if (!tizenAvail() && (res[0] === null || res[1] === null)) throw { zxOffline: 1 };
-        var cats = arr1(res[0]), all = arr1(res[1]);
-        var byCat = {};
+        var cats = arr1(res[0]), all = arr1(res[1]), byCat = {};
         for (var i = 0; i < all.length; i++) {
             var cid = String(all[i].category_id || '');
             if (!byCat[cid]) byCat[cid] = [];
@@ -768,6 +768,23 @@ function ensureCatalog(kind) {
         }
         S.cat[kind] = { cats: outCats, byCat: byCat, all: all };
         return S.cat[kind];
+    });
+}
+function ensureCatalog(kind) {
+    // kind: 'movies' | 'series' | 'live'. Resolve → { cats:[{category_id,category_name,num,adult}], byCat:{}, all:[] }
+    if (S.cat[kind]) return Promise.resolve(S.cat[kind]);
+    var isM3u = (S.playlistType || '').indexOf('m3u') === 0;
+    if (isM3u && !S.xtreamDerived && !S.xtreamUnavailable) xtreamCreds();
+    if (isM3u && (!S.xtreamDerived || S.xtreamUnavailable)) return catalogFromM3U();
+    var work = xtreamCatalog(kind);
+    return work.catch(function (err) {
+        if (isM3u && S.xtreamDerived) {
+            S.xtreamUnavailable = true;
+            S.xtreamDerived = null;
+            S.cat = { movies: null, series: null, live: null };
+            return catalogFromM3U();
+        }
+        throw err;
     });
 }
 function streamsForCat(kind, catId) {
@@ -937,8 +954,8 @@ function render(path) {
     m = p.match(/^\/movies\/(\d+)\/play$/); if (m) return renderPlayerMovie(m[1], query);
     m = p.match(/^\/series\/(\d+)\/episode\/(\d+)\/play$/); if (m) return renderPlayerEpisode(m[1], m[2], query);
     m = p.match(/^\/live\/channel\/(\d+)$/); if (m) return renderPlayerLive(m[1], query);
-    m = p.match(/^\/movies\/(\d+)$/); if (m) return (S.playlistType || '').indexOf('m3u') === 0 ? renderM3UDetail('movies', m[1]) : renderDetailMovie(m[1]);
-    m = p.match(/^\/series\/(\d+)$/); if (m) return (S.playlistType || '').indexOf('m3u') === 0 ? renderM3UDetail('series', m[1]) : renderDetailSeries(m[1]);
+    m = p.match(/^\/movies\/(\d+)$/); if (m) return ((S.playlistType || '').indexOf('m3u') === 0 && !S.xtreamDerived && !S.xtreamUnavailable) ? renderM3UDetail('movies', m[1]) : renderDetailMovie(m[1]);
+    m = p.match(/^\/series\/(\d+)$/); if (m) return ((S.playlistType || '').indexOf('m3u') === 0 && !S.xtreamDerived && !S.xtreamUnavailable) ? renderM3UDetail('series', m[1]) : renderDetailSeries(m[1]);
     renderHome();
 }
 
@@ -1095,10 +1112,12 @@ function directResponseToState(j, mode, fallback) {
     S.code = mode === 'mac' ? '__mac__' : '__credentials__';
     S.user = mode === 'mac' ? String(j.mac || fallback || '') : String(fallback || j.username || '');
     S.pass = '__direct__'; S.did = getDid(); S.server = server;
+    S.xtreamDerived = creds || playlistToXtream({ playlist_url: chosenUrl }, 'Playlist');
+    S.xtreamUnavailable = false;
     S.playlistUrl = chosenUrl; S.playlistType = String(chosen.type || (chosenUrl.indexOf('get.php') >= 0 ? 'm3u_plus' : 'xtream')).toLowerCase();
     try { localStorage.setItem('zx_direct_mode', mode); if (mode === 'mac') localStorage.setItem('zx_mac', S.user); } catch (e) {}
     var d = { ok: true, dns: { base: server, name: j.dns_titulo || '' }, license: { mac: j.mac || fallback || '', exp_date: expTs }, branding: { app_name: j.app_name || 'UltraPlayer', logo: j.logo_url || '', background: j.bg_url || '', banner: j.banner_url || '' } };
-    S.cat = { movies: null, series: null, live: null }; S.m3uCatalogPromise = null; S.favDirty = { live: [], movie: [], series: [] };
+    S.cat = { movies: null, series: null, live: null }; S.m3uCatalogPromise = null; S.xtreamUnavailable = false; S.favDirty = { live: [], movie: [], series: [] };
     applyResolve(d, false); saveSnap(d); saveCreds(); go('/home', true); return true;
 }
 function renderLogin() {
