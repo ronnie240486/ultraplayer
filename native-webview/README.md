@@ -1,8 +1,8 @@
 # UltraPlayer Native WebView
 
-Esta é a base Android recomendada do UltraPlayer 1.2.0. Ela preserva a arquitetura observada no APK Zuxo: uma `MainActivity` hospeda o front-end local em `WebView`, e a interface conversa com uma ponte JavaScript chamada `HdxNative`. Quando a interface solicita reprodução, a ponte abre a `PlayerActivity` nativa.
+Esta é a base Android recomendada do UltraPlayer 1.3.0. Ela preserva a arquitetura híbrida recuperada do APK de referência: uma `MainActivity` hospeda o front-end local em `WebView`, e a interface conversa com uma ponte JavaScript chamada `HdxNative`. Quando a interface solicita reprodução, a ponte abre a `PlayerActivity` nativa.
 
-O diretório `app/src/main/assets/webui/` contém a interface recuperada do APK, incluindo `index.html`, `zlocal.js`, `tv.css`, `tv.js`, teclado, cache, HLS e scripts de player. O login foi adaptado para apresentar duas opções: MAC com 12 dígitos ou usuário e senha.
+O diretório `app/src/main/assets/webui/` contém a interface recuperada do APK, incluindo `index.html`, `zlocal.js`, `tv.css`, `tv.js`, teclado, cache, HLS e scripts de player. Na primeira abertura, o app exibe um MAC virtual estável de 12 dígitos, oferece cópia para o painel e consulta automaticamente o cadastro. Usuário e senha permanecem como opção alternativa.
 
 ## Build
 
@@ -13,7 +13,7 @@ export ANDROID_SDK_ROOT=/home/ubuntu/android-sdk
 ./gradlew assembleDebug --no-daemon --max-workers=1
 ```
 
-O resultado é `app/build/outputs/apk/debug/app-debug.apk`. O projeto usa `minSdk 21`, package `com.ultraplayer.app`, versionName `1.2.0` e versionCode `3`.
+O resultado é `app/build/outputs/apk/debug/app-debug.apk`. O projeto usa `minSdk 21`, package `com.ultraplayer.app`, versionName `1.3.0` e versionCode `4`.
 
 ## Observações
 

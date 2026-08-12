@@ -21,17 +21,17 @@ A interface recuperada está em `recovered/webui`. O arquivo `zlocal.js` concent
 | `analysis/` | Manifest, hashes, inventário do ZIP, log de descompilação e achados da inspeção. |
 | `docs/` | Arquitetura, inventário funcional, riscos e roadmap de melhorias. |
 | `mobile/` | Protótipo Expo/React Native 1.1.0, mantido como referência e não recomendado para distribuição. |
-| `native-webview/` | Base Android nativa 1.2.0 que hospeda os assets WebView recuperados do Zuxo e expõe `HdxNative` ao player. |
+| `native-webview/` | Base Android nativa UltraPlayer 1.3.0, com WebView local, player nativo, branding UltraPlayer e ativação por MAC exibido. |
 | `backend-reference/` | Código de referência das rotas do painel, incluindo o novo contrato de login por credenciais. |
 | `releases/` | APK de debug gerado localmente e seu hash SHA-256. |
 
-## Versão corrigida 1.2.0 — WebView nativo
+## Versão UltraPlayer 1.3.0 — ativação por MAC
 
-A versão anterior 1.1.0 foi um protótipo React Native e não reproduziu fielmente o shell do Zuxo. A base recomendada agora é `native-webview/`: ela usa uma `MainActivity` Android nativa, carrega `index.html`, `zlocal.js`, CSS e scripts recuperados no armazenamento local do APK e expõe a ponte `HdxNative` esperada pelo front-end. A reprodução é encaminhada a uma `PlayerActivity` Android separada, seguindo a arquitetura híbrida observada no APK original.
+A versão 1.3.0 usa a base Android nativa `native-webview/`, com interface local, ponte `HdxNative` e `PlayerActivity` separada. Todas as referências visíveis de marca foram substituídas por **UltraPlayer**, incluindo título, splash, user-agent, marca d’água, avisos e telas de configuração.
 
-A tela de listas mantém a lógica visual do Zuxo e agora oferece **MAC com 12 dígitos** ou **usuário e senha**. O modo MAC chama `GET /api/v5/check_mac.php`; o modo de credenciais chama `POST /api/v5/login.php`, desde que esse endpoint esteja publicado no backend.
+Na primeira abertura, o aplicativo gera um identificador estável em formato MAC virtual de 12 dígitos, exibe esse código na tela e oferece o botão **Copiar MAC**. Você cadastra esse código no painel; o aplicativo consulta automaticamente `GET /api/v5/check_mac.php` a cada sete segundos até a lista ser liberada. O login com usuário e senha continua disponível como alternativa separada.
 
-O novo APK de debug está em [`releases/UltraPlayer-1.2.0-zuxo-webview-debug.apk`](releases/UltraPlayer-1.2.0-zuxo-webview-debug.apk) e será entregue diretamente como anexo. O APK usa package `com.ultraplayer.app`, `minSdk 21`, versionName `1.2.0` e versionCode `3`.
+O APK está em [`releases/UltraPlayer-1.3.0-mac-activation-debug.apk`](releases/UltraPlayer-1.3.0-mac-activation-debug.apk). Ele usa package `com.ultraplayer.app`, `minSdk 21`, versionName `1.3.0` e versionCode `4`.
 
 ## Primeiras melhorias propostas
 

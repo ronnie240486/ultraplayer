@@ -86,7 +86,7 @@ public final class MainActivity extends Activity {
         s.setDisplayZoomControls(false);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         s.setCacheMode(WebSettings.LOAD_DEFAULT);
-        s.setUserAgentString("UltraPlayer/1.2 (ZuxoWebView)");
+        s.setUserAgentString("UltraPlayer/1.3 (UltraPlayerWebView)");
         view.setBackgroundColor(android.graphics.Color.rgb(11, 15, 26));
         view.setWebChromeClient(new WebChromeClient());
         view.setWebViewClient(new WebViewClient() {
@@ -145,6 +145,22 @@ public final class MainActivity extends Activity {
                 String id = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID);
                 return id == null ? "" : id;
             } catch (Throwable ignored) { return ""; }
+        }
+
+        @JavascriptInterface
+        public String appMac() {
+            try {
+                String seed = deviceId();
+                java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+                byte[] hash = digest.digest(seed.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                hash[0] = (byte) ((hash[0] | 0x02) & 0xFE);
+                StringBuilder mac = new StringBuilder(17);
+                for (int i = 0; i < 6; i++) {
+                    if (i > 0) mac.append(':');
+                    mac.append(String.format(java.util.Locale.US, "%02X", hash[i] & 0xFF));
+                }
+                return mac.toString();
+            } catch (Throwable ignored) { return "02:00:00:00:00:01"; }
         }
 
         @JavascriptInterface

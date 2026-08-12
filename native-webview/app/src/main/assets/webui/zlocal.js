@@ -1,7 +1,7 @@
 /* ============================================================
- * Zuxo Player — controlador LOCAL (app desktop/Windows).
+ * UltraPlayer — controlador LOCAL (app desktop/Windows).
  * A interface roda no aparelho (igual Roku). O catálogo vem DIRETO do
- * IPTV (Xtream player_api.php). O painel tv.zuxoplayer.com é usado só
+ * IPTV (Xtream player_api.php). O painel tv.renciaapp.manus.space é usado só
  * via /api/r/* (login/licença/favoritos/progresso/recent/continue/
  * busca/aviso/branding). NADA é renderizado no servidor.
  *
@@ -30,7 +30,7 @@
     } catch (e) {}
 })();
 // base da API lida DINAMICAMENTE (o shell pode injetar __API_BASE após o boot)
-function apiBase() { return String(global.__API_BASE || 'https://tv.zuxoplayer.com').replace(/\/+$/, ''); }
+function apiBase() { return String(global.__API_BASE || 'https://renciaapp.manus.space').replace(/\/+$/, ''); }
 var S = {
     code: '', user: '', pass: '', did: '', directAuth: false,
     server: '',                 // base do IPTV (dns.base do resolve)
@@ -195,16 +195,16 @@ var I18N_EN = {
     'Já paguei': 'I already paid', 'Sair': 'Exit', 'Verificando…': 'Checking…', 'Ainda não consta': 'Not showing yet',
     'Aparelho:': 'Device:', 'Renove em': 'Renew at',
     // ---- 1º uso: idioma / celular-TV / pirataria ----
-    'Como você vai usar o Zuxo?': 'How will you use Zuxo?',
+    'Como você vai usar o UltraPlayer?': 'How will you use UltraPlayer?',
     'Ajusta o tamanho dos posters e ícones pra sua tela.': 'Adjusts poster and icon size for your screen.',
     'Posters menores, mais por linha': 'Smaller posters, more per row',
     'TV / Caixa': 'TV / Box', 'Posters maiores (tela grande)': 'Bigger posters (large screen)',
     'Dá pra trocar depois em Configurações.': 'You can change it later in Settings.',
     'Escolha o idioma do app.': 'Choose the app language.',
-    'Bem-vindo ao Zuxo Player': 'Welcome to Zuxo Player',
-    '<strong>O Zuxo Player é apenas um reprodutor de mídia.</strong> Ele não fornece, hospeda, vende nem inclui canais, filmes, séries ou mídia de qualquer tipo.': '<strong>Zuxo Player is only a media player.</strong> It does not provide, host, sell or include any channels, movies, series or media of any kind.',
+    'Bem-vindo ao UltraPlayer': 'Welcome to UltraPlayer',
+    '<strong>O UltraPlayer é apenas um reprodutor de mídia.</strong> Ele não fornece, hospeda, vende nem inclui canais, filmes, séries ou mídia de qualquer tipo.': '<strong>UltraPlayer is only a media player.</strong> It does not provide, host, sell or include any channels, movies, series or media of any kind.',
     'Para assistir, você adiciona <strong>a sua própria lista</strong> de um provedor que você já tem. Você é o único responsável pelas listas e fontes que adicionar.': 'To watch anything, you add <strong>your own playlist</strong> from a provider you already have. You alone are responsible for the lists and sources you add.',
-    '<strong>Pirataria é crime.</strong> Não use o Zuxo Player para acessar conteúdo que você não está autorizado a ver.': '<strong>Piracy is a crime.</strong> Do not use Zuxo Player to access content you are not authorized to view.',
+    '<strong>Pirataria é crime.</strong> Não use o UltraPlayer para acessar conteúdo que você não está autorizado a ver.': '<strong>Piracy is a crime.</strong> Do not use UltraPlayer to access content you are not authorized to view.',
     'Entendi e concordo': 'I understand & agree'
 };
 function arr1(x) { if (x == null) return []; return (typeof x.length === 'number' && typeof x !== 'string') ? x : [x]; }
@@ -233,6 +233,19 @@ function tmdbResize(u, size) {
 }
 function h2(n) { n = Math.max(0, Math.min(255, Math.floor(n))); var s = n.toString(16); return s.length < 2 ? '0' + s : s; }
 
+function getAppMac() {
+    try {
+        if (global.HdxNative && typeof global.HdxNative.appMac === 'function') return String(global.HdxNative.appMac() || '').toUpperCase();
+        var seed = global.HdxNative && typeof global.HdxNative.deviceId === 'function' ? String(global.HdxNative.deviceId() || '') : '';
+        if (!seed) { try { seed = localStorage.getItem('zx_did') || ''; } catch (e) {} }
+        if (!seed) seed = 'ultraplayer-device';
+        var h1 = 2166136261, h2 = 2246822519;
+        for (var i = 0; i < seed.length; i++) { var c = seed.charCodeAt(i); h1 = Math.imul(h1 ^ c, 16777619); h2 = Math.imul(h2 ^ (c + i), 3266489917); }
+        var hex = ((h1 >>> 0).toString(16) + (h2 >>> 0).toString(16) + '000000000000').slice(0, 12).toUpperCase();
+        var oct = parseInt(hex.slice(0, 2), 16); oct = (oct | 2) & 254; var octHex = oct.toString(16).toUpperCase(); if (octHex.length < 2) octHex = '0' + octHex; hex = octHex + hex.slice(2);
+        return (hex.match(/.{1,2}/g) || []).join(':');
+    } catch (e) { return '00:00:00:00:00:00'; }
+}
 function getDid() {
     // MAC injetado pelo shell (licenciamento por aparelho) tem prioridade.
     if (global.__DID) return global.__DID;
@@ -334,7 +347,7 @@ function loadSnap() {
 }
 function snapAgeDays(s) { try { return (Date.now() - (s.ts || 0)) / 86400000; } catch (e) { return 1e9; } }
 // Quanto tempo o snapshot pode abrir o app SEM re-verificar na VPS:
-// • Aparelho GRÁTIS (DNS cadastrado/server_code) NUNCA expira no lado Zuxo →
+// • Aparelho GRÁTIS (DNS cadastrado/server_code) NUNCA expira no lado UltraPlayer →
 //   numa queda longa do painel ele continua abrindo por ~anos (não derruba os
 //   10 mil de uma operadora). A licença real é a do IPTV, que é checada no play.
 // • Aparelho PAGO (URL avulsa) re-verifica em 30 dias, pra valer a cobrança.
@@ -499,8 +512,8 @@ function streamUrl(kind, id, ext) {
 /* ---------- branding (logo/nome/cor/fundo) ---------- */
 function brandLogoHtml() {
     var b = S.branding || {};
-    if (b.logo_url) return '<img src="' + attr(b.logo_url) + '" alt="' + attr(b.brand_name || 'Zuxo') + '" class="brand-logo-img">';
-    var name = b.brand_name || 'Zuxo';
+    if (b.logo_url) return '<img src="' + attr(b.logo_url) + '" alt="' + attr(b.brand_name || 'UltraPlayer') + '" class="brand-logo-img">';
+    var name = b.brand_name || 'UltraPlayer';
     if (name.length >= 2) return '<div class="brand-logo">' + esc(name.slice(0, -1)) + '<span class="accent">' + esc(name.slice(-1)) + '</span></div>';
     return '<div class="brand-logo"><span class="accent">' + esc(name) + '</span></div>';
 }
@@ -534,7 +547,7 @@ function applyWallpaper(url) {
 function applyBranding(b) {
     if (!b) return;
     S.branding = b;
-    var title = b.app_title || ((b.brand_name || 'Zuxo') + ' Player');
+    var title = b.app_title || ((b.brand_name || 'UltraPlayer') + ' Player');
     try { document.title = title; } catch (e) {}
     applyAccent(b.accent || '#10b981');
     applyWallpaper(b.wallpaper_url || '');
@@ -921,8 +934,35 @@ function installRouter() {
  * TELAS
  * ============================================================ */
 
-/* ---- LOGIN ---- */
+/* ---- ATIVAÇÃO E LOGIN ---- */
 var DIRECT_PANEL_BASE = 'https://renciaapp.manus.space/api/v5';
+function macActivationStop() { try { if (S.macPoll) clearInterval(S.macPoll); } catch (e) {} S.macPoll = null; }
+function macActivationCheck(mac, statusEl, button) {
+    if (button) button.disabled = true;
+    fetchT(DIRECT_PANEL_BASE + '/check_mac.php?mac=' + enc(mac), 10000).then(function (r) { return r.json(); }).then(function (j) {
+        if (j && j.success && j.registered && directResponseToState(j, 'mac', mac)) { macActivationStop(); return; }
+        if (statusEl) statusEl.textContent = 'Aguardando cadastro no painel para este MAC…';
+    }).catch(function () { if (statusEl) statusEl.textContent = 'Sem conexão com o painel. Tentando novamente…'; }).then(function () { if (button) button.disabled = false; });
+}
+function renderMacActivation() {
+    macActivationStop();
+    var mac = getAppMac();
+    var copied = 'MAC copiado';
+    setHtml('<div class="zx-login-screen"><div class="zx-login-card zx-mac-activation">'
+        + '<div class="zx-login-logo">' + brandLogoHtml() + '</div>'
+        + '<h1 class="zx-login-h1">Ative seu UltraPlayer</h1>'
+        + '<div class="zx-login-sub">Copie este MAC e cadastre a lista no painel.</div>'
+        + '<div class="zx-mac-value" id="zx-mac-value">' + esc(mac) + '</div>'
+        + '<button type="button" class="zx-login-btn" id="zx-copy-mac">Copiar MAC</button>'
+        + '<div id="zx-mac-status" class="zx-login-err" style="color:#b7c5be">Aguardando cadastro no painel…</div>'
+        + '<button type="button" class="zx-login-alt" id="zx-login-alt">Entrar com usuário e senha</button>'
+        + '</div></div>' + loginFormStyles() + '<style>.zx-mac-value{margin:18px 0;padding:16px 12px;border:1px solid rgba(76,232,240,.55);border-radius:12px;background:#07131a;color:#4ce8f0;font-size:24px;font-weight:800;letter-spacing:2px;text-align:center}.zx-login-alt{width:100%;margin-top:12px;padding:11px;border:1px solid rgba(255,255,255,.18);border-radius:11px;background:transparent;color:#cdd5d1;font-size:14px}.zx-login-alt:focus{outline:2px solid #4ce8f0}</style>');
+    var status = $('zx-mac-status'), copy = $('zx-copy-mac'), alt = $('zx-login-alt');
+    if (copy) copy.addEventListener('click', function () { try { if (navigator.clipboard) navigator.clipboard.writeText(mac); else { var ta = document.createElement('textarea'); ta.value = mac; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); } } catch (e) {} copy.textContent = copied; setTimeout(function () { if (copy) copy.textContent = 'Copiar MAC'; }, 1800); });
+    if (alt) alt.addEventListener('click', function () { macActivationStop(); renderLogin(); });
+    macActivationCheck(mac, status, null); S.macPoll = setInterval(function () { macActivationCheck(mac, status, null); }, 7000); afterRender();
+}
+/* ---- LOGIN ---- */
 function directModeStored() { try { return localStorage.getItem('zx_direct_mode') || ''; } catch (e) { return ''; } }
 function normalizeMacInput(v) { var hex = String(v || '').replace(/[^0-9a-f]/gi, '').toUpperCase().slice(0, 12), pairs = hex.match(/.{1,2}/g); return pairs ? pairs.join(':') : ''; }
 function playlistToXtream(p, fallbackName) {
@@ -1223,12 +1263,12 @@ function renderHome() {
         + (S.server
             ? '<span>Usuário: <b>' + esc(S.user) + '</b></span><span class="zh-bar"></span>' + (mac ? '<span>ID do aparelho: <b>' + esc(mac) + '</b></span><span class="zh-bar"></span>' : '') + '<span>Vencimento da lista: <b>' + esc(exp) + '</b></span>'
             : '<span>Adicione uma lista em <b>Playlist</b> pra começar</span>')
-        + '<span class="zh-badge">Zuxo Player</span>'
+        + '<span class="zh-badge">UltraPlayer</span>'
         + '</footer>';
 
     // announceStyles: SEM ele a faixa/pop-up de aviso do painel renderiza CRUA no
     // canto (o redesign da home tinha deixado a função órfã — bug 19/07).
-    setHtml('<div class="zx-home2">' + bannerHtml + '<div class="zh-amb"></div><div class="zh-wm" aria-hidden="true">ZUXO</div><div class="zh-ui">'
+    setHtml('<div class="zx-home2">' + bannerHtml + '<div class="zh-amb"></div><div class="zh-wm" aria-hidden="true">ULTRA</div><div class="zh-ui">'
         + top + nav + recent + status + '</div>' + popHtml + '</div>' + homeStyles(ac) + announceStyles(ac));
     if (!srvName) startHomeClock();   // com nome de parceiro no topo não há relógio pra atualizar
     loadHomePosters();   // capas do "Assistido Recentemente" (o lazy-loader global é escopado a grid)
@@ -1682,7 +1722,7 @@ function wireAnnounce(ann) {
    Bug corrigido: o tile "Favoritos" da home ia pra /favorites = renderSection
    ('movies',...) e mostrava SÓ favoritos de filme. Agora junta os 3 tipos numa
    grade só; cada tile roteia certo (filme→detalhe, série→detalhe, canal→toca). */
-/* Padrão visual (degradê + marca d'água ZUXO + pill Voltar verde) pras telas
+/* Padrão visual (degradê + marca d'água ULTRA + pill Voltar verde) pras telas
    simples: FAVORITOS e LISTAS/Playlist. Injetado no setHtml de cada uma. */
 function flatStyles() {
     var a = S.accent || '#10b981';
@@ -1887,7 +1927,7 @@ function findCat(cat, id) { for (var i = 0; i < cat.cats.length; i++) if (String
 
 /* ---- SEÇÃO LIVE (lista + EPG + busca inline) ---- */
 /* Visual novo das seções TV AO VIVO + FILMES + SÉRIES (Android teste): mesmo
-   padrão da home — fundo em degradê + marca d'água ZUXO, pills "vidro" verde e
+   padrão da home — fundo em degradê + marca d'água ULTRA, pills "vidro" verde e
    foco em ANEL verde (acabou o fundo branco estourado). Os seletores de canal/
    EPG só casam na tela de canais; nas de VOD ficam inertes. O <style> vai no
    setHtml de cada tela, então NÃO vaza pras outras plataformas. */
@@ -2401,14 +2441,14 @@ function lazyGrid(grid) {
 
 /* ---- SETTINGS ---- */
 /* Redesign das Configurações (só Android teste): mesmo visual da home nova —
-   fundo em degradê + marca d'água ZUXO, itens "vidro" verde, foco SEMPRE anel
+   fundo em degradê + marca d'água ULTRA, itens "vidro" verde, foco SEMPRE anel
    verde (nada de fundo branco) e "Sair da conta" NEUTRO com tom vermelho de
    perigo (antes tinha borda verde permanente = parecia selecionado). */
 function settingsStyles() {
     var a = S.accent || '#10b981';
     return '<style>'
         + '.settings-screen{background:radial-gradient(130% 100% at 50% 0%,#0e2019,#0a1712 45%,#050d09);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}'
-        + '.settings-screen::before{content:"ZUXO";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) translateZ(0);font-size:38vw;font-weight:900;letter-spacing:-.03em;color:' + a + ';opacity:.04;pointer-events:none;white-space:nowrap;z-index:0;}'
+        + '.settings-screen::before{content:"ULTRA";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) translateZ(0);font-size:38vw;font-weight:900;letter-spacing:-.03em;color:' + a + ';opacity:.04;pointer-events:none;white-space:nowrap;z-index:0;}'
         // ⚠️ NÃO usar .settings-screen>*{position:relative} — mataria o position:absolute
         // do .settings-layout (menu+conteúdo) e a tela colapsa. Só o header precisa subir.
         + '.settings-header{position:relative;z-index:1;}'
@@ -2471,7 +2511,7 @@ function renderSettings() {
         + '<button type="button" class="action-btn" id="zx-pin-save"><div class="ab-title">Salvar nova senha</div></button>'
         + '</div></div>';
     setHtml(settingsStyles() + '<div class="settings-screen"><a href="/home" class="settings-back">← Voltar</a>'
-        + '<div class="settings-header"><h1>Configurações</h1><div class="settings-sub">' + te('Personalize o seu ') + esc((S.branding && (S.branding.app_title)) || 'Zuxo Player') + '</div></div>'
+        + '<div class="settings-header"><h1>Configurações</h1><div class="settings-sub">' + te('Personalize o seu ') + esc((S.branding && (S.branding.app_title)) || 'UltraPlayer') + '</div></div>'
         + '<div class="settings-layout"><div class="settings-menu" id="settings-menu">'
         + '<a href="#info" class="sm-item is-active" data-pane="pane-info" autofocus><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></span><span class="sm-label">Informação Geral</span></a>'
         + '<a href="#player" class="sm-item" data-pane="pane-player"><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg></span><span class="sm-label">Player de Vídeo</span></a>'
@@ -2650,9 +2690,9 @@ function startAvplay(video, url, kind, hideLoading, showError, fallback, resumeA
         });
 
         av.open(url);
-        // UA da marca no stream Samsung: o IPTV identifica como ZuxoPlayer.
+        // UA da marca no stream Samsung: o IPTV identifica como UltraPlayer.
         // Tem que vir DEPOIS do open() e ANTES do prepareAsync().
-        try { av.setStreamingProperty('USER_AGENT', 'ZuxoPlayer/2.7'); } catch (e) {}
+        try { av.setStreamingProperty('USER_AGENT', 'UltraPlayer/2.7'); } catch (e) {}
         try { av.setDisplayRect(0, 0, 1920, 1080); } catch (e) {}
         try { av.setDisplayMethod('PLAYER_DISPLAY_MODE_FULL_SCREEN'); } catch (e) {}
         av.prepareAsync(function () {
@@ -3065,7 +3105,7 @@ function doLogout() {
     // Sair da conta cai na tela de LISTAS (Adicionar lista COM a barra de topo
     // "← Voltar | Listas") — igual ao fluxo do Trocar lista. Antes ia pro /login
     // pelado (formulário sem menu no topo), destoando do resto (pedido do Leonardo).
-    go('/lists', true);
+    if (S.directAuth || directModeStored()) { renderMacActivation(); } else { go('/lists', true); }
 }
 
 /* ============================================================
@@ -3101,7 +3141,7 @@ function renderPaywall(d) {
     var mac = d.mac || lic.mac || '';
     // Texto mostra SÓ até /renovar (sem ?mac=... — ninguém digita URL-encoded);
     // o MAC já aparece por extenso logo abaixo e o QR leva o link completo.
-    var pay = (d.pay_url || lic.pay_url || 'https://zuxoplayer.com/renovar').replace(/^https?:\/\//, '').replace(/\?.*$/, '');
+    var pay = (d.pay_url || lic.pay_url || 'https://renciaapp.manus.space/renovar').replace(/^https?:\/\//, '').replace(/\?.*$/, '');
     var qr = d.qr_url || lic.qr_url || '';
     // Wrapper com scroll próprio + miolo com margin:auto: se couber, fica centrado;
     // se NÃO couber, rola a partir do TOPO. Em tela BAIXA (celular deitado — no
@@ -3272,11 +3312,11 @@ function showPiracyNotice() {
     var ov = document.createElement('div'); ov.id = 'zx-pir-ask'; ov.className = 'zx-ff-ask tv-modal';
     try { document.body.classList.add('tv-modal-open'); } catch (e) {}   // PRENDE o foco no modal (setas não escapam pro fundo)
     ov.innerHTML = '<div class="zx-ffa-card zx-pir-card"><div class="zx-ffa-logo">' + brandLogoHtml() + '</div>'
-        + '<div class="zx-ffa-title">' + te('Bem-vindo ao Zuxo Player') + '</div>'
+        + '<div class="zx-ffa-title">' + te('Bem-vindo ao UltraPlayer') + '</div>'
         + '<div class="zx-pir-body">'
-        + '<p>' + t('<strong>O Zuxo Player é apenas um reprodutor de mídia.</strong> Ele não fornece, hospeda, vende nem inclui canais, filmes, séries ou mídia de qualquer tipo.') + '</p>'
+        + '<p>' + t('<strong>O UltraPlayer é apenas um reprodutor de mídia.</strong> Ele não fornece, hospeda, vende nem inclui canais, filmes, séries ou mídia de qualquer tipo.') + '</p>'
         + '<p>' + t('Para assistir, você adiciona <strong>a sua própria lista</strong> de um provedor que você já tem. Você é o único responsável pelas listas e fontes que adicionar.') + '</p>'
-        + '<p>' + t('<strong>Pirataria é crime.</strong> Não use o Zuxo Player para acessar conteúdo que você não está autorizado a ver.') + '</p>'
+        + '<p>' + t('<strong>Pirataria é crime.</strong> Não use o UltraPlayer para acessar conteúdo que você não está autorizado a ver.') + '</p>'
         + '</div>'
         + '<button type="button" class="zx-pir-ok" id="zxPirOk" data-modal-ok>' + te('Entendi e concordo') + '</button></div>';
     document.body.appendChild(ov);
@@ -3349,7 +3389,7 @@ function maybeAskFormFactor() {
     var ov = document.createElement('div'); ov.id = 'zx-ff-ask'; ov.className = 'zx-ff-ask tv-modal';
     try { document.body.classList.add('tv-modal-open'); } catch (e) {}   // PRENDE o foco no modal
     ov.innerHTML = '<div class="zx-ffa-card"><div class="zx-ffa-logo">' + brandLogoHtml() + '</div>'
-        + '<div class="zx-ffa-title">' + te('Como você vai usar o Zuxo?') + '</div>'
+        + '<div class="zx-ffa-title">' + te('Como você vai usar o UltraPlayer?') + '</div>'
         + '<div class="zx-ffa-sub">' + te('Ajusta o tamanho dos posters e ícones pra sua tela.') + '</div>'
         + '<div class="zx-ffa-opts">'
         + '<button type="button" class="zx-ffa-opt" data-ff="mobile"><div class="zx-ffa-emoji">📱</div><div class="zx-ffa-opt-t">' + te('Celular') + '</div><div class="zx-ffa-opt-d">' + te('Posters menores, mais por linha') + '</div></button>'
@@ -3774,7 +3814,7 @@ function boot() {
                              // do boot, um login novo (sem creds salvas → renderLogin
                              // + return) nunca ligava o sync.
     var c = loadCreds();
-    if (!(c && c.code && c.user && c.pass)) { go('/home', true); return; }   // abre SEM gate (lista é adicionada em /lists)
+    if (!(c && c.code && c.user && c.pass)) { renderMacActivation(); return; }
     S.code = c.code; S.user = c.user; S.pass = c.pass;
 
     var snap = loadSnap();
