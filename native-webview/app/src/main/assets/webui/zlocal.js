@@ -349,12 +349,27 @@ function classifyM3UItem(item) {
     if (/(filme|filmes|movie|movies|cinema|vod|documentário|documentario)/i.test(n)) return 'movies';
     return 'live';
 }
+function m3uFallbackArt(item, kind) {
+    var raw = String((item && item.name) || 'UltraPlayer').replace(/[<>&\"]/g, ' ').replace(/\s+/g, ' ').trim();
+    var bits = raw.split(' '), initials = '';
+    for (var i = 0; i < bits.length && initials.length < 2; i++) if (bits[i]) initials += bits[i].charAt(0).toUpperCase();
+    if (!initials) initials = 'UP';
+    var label = kind === 'movies' ? 'FILME' : kind === 'series' ? 'SÉRIE' : 'CANAL';
+    var tones = kind === 'movies' ? ['#2f2048','#6d3dad'] : kind === 'series' ? ['#123a48','#167f84'] : ['#123726','#18875d'];
+    var title = raw.slice(0, 30);
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 540"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="' + tones[0] + '"/><stop offset="1" stop-color="' + tones[1] + '"/></linearGradient></defs><rect width="360" height="540" fill="url(#g)"/><circle cx="292" cy="84" r="118" fill="#ffffff" opacity=".08"/><path d="M0 420L360 260V540H0Z" fill="#000000" opacity=".17"/><text x="28" y="54" fill="#ffffff" opacity=".8" font-family="Arial,sans-serif" font-size="18" font-weight="700" letter-spacing="3">' + label + '</text><text x="180" y="278" text-anchor="middle" fill="#ffffff" font-family="Arial,sans-serif" font-size="112" font-weight="800">' + initials + '</text><text x="180" y="484" text-anchor="middle" fill="#ffffff" opacity=".92" font-family="Arial,sans-serif" font-size="22" font-weight="700">' + title + '</text></svg>';
+    return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
+}
 function catalogFromM3U() {
     if (S.m3uCatalogPromise) return S.m3uCatalogPromise;
     if (!S.playlistUrl) return Promise.reject(new Error('playlist_url_missing'));
     S.m3uCatalogPromise = fetchPlaylistText(S.playlistUrl).then(function (text) {
         var all = parseM3UText(text), buckets = { live: [], movies: [], series: [] };
-        for (var i = 0; i < all.length; i++) { all[i].m3u_kind = classifyM3UItem(all[i]); buckets[all[i].m3u_kind].push(all[i]); }
+        for (var i = 0; i < all.length; i++) {
+            all[i].m3u_kind = classifyM3UItem(all[i]);
+            if (!all[i].stream_icon) all[i].stream_icon = m3uFallbackArt(all[i], all[i].m3u_kind);
+            buckets[all[i].m3u_kind].push(all[i]);
+        }
         var outputs = {};
         for (var kind in buckets) if (buckets.hasOwnProperty(kind)) {
             var byCat = {}, cats = [], catIds = {}, counter = 0, list = buckets[kind];
@@ -1363,6 +1378,7 @@ function renderHome() {
     // canto (o redesign da home tinha deixado a função órfã — bug 19/07).
     setHtml('<div class="zx-home2">' + bannerHtml + '<div class="zh-amb"></div><div class="zh-wm" aria-hidden="true">ULTRA</div><div class="zh-ui">'
         + top + nav + recent + status + '</div>' + popHtml + '</div>' + homeStyles(ac) + announceStyles(ac));
+    applyPhoneHomeLayout();
     if (!srvName) startHomeClock();   // com nome de parceiro no topo não há relógio pra atualizar
     loadHomePosters();   // capas do "Assistido Recentemente" (o lazy-loader global é escopado a grid)
     fillHomeNewest();    // catálogo já em cache → "Recém adicionados" entra ANTES do 1º paint
@@ -1373,6 +1389,7 @@ function renderHome() {
         S._homeFitBound = true;
         try {
             window.addEventListener('resize', function () {
+                applyPhoneHomeLayout();
                 if (!document.querySelector('.zh-posters')) return;
                 var ps = document.querySelectorAll('.zh-poster');
                 for (var i = 0; i < ps.length; i++) { ps[i].style.width = ''; ps[i].style.display = ''; }
@@ -1442,7 +1459,8 @@ function homeRecentHtml() {
     // catálogo carrega — fillHomeNewest). Assistiu algo → volta ao normal.
     if (!all.length) {
         if (!S.server) return '';
-        var nhead = '<h2 class="zh-h2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v8M8 12h8"></path></svg> ' + te('Recém adicionados') + '</h2>';
+        var newestLabel = (S.playlistType || '').indexOf('m3u') === 0 ? te('Filmes em destaque') : te('Recém adicionados');
+        var nhead = '<h2 class="zh-h2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v8M8 12h8"></path></svg> ' + newestLabel + '</h2>';
         return '<section class="zh-recent" id="zhNewest" style="display:none">' + nhead + '<div class="zh-posters" id="zhNewestRow"></div></section>';
     }
     var head = '<h2 class="zh-h2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><polyline points="12 7 12 12 15 14"></polyline></svg> Assistido Recentemente</h2>';
@@ -1569,7 +1587,7 @@ function pruneAdultRecent() {
         if (sec && sec.id !== 'zhNewest' && !sec.querySelector('.zh-poster')) sec.style.display = 'none';
     } catch (e) {}
 }
-/* Preenche o "Recém adicionados" da home (só existe quando NÃO há histórico):
+/* Preenche a faixa de destaques da home (só existe quando NÃO há histórico):
    pega os filmes mais NOVOS do catálogo (all já vem ordenado por added) e monta
    os cards no mesmo visual — sem barra de progresso. Pula adultos. */
 function fillHomeNewest() {
@@ -1669,6 +1687,15 @@ function startHomeClock() {
         if (!c) { try { clearInterval(S._homeClock); } catch (e) {} return; }
         var n = new Date(); c.textContent = p2(n.getHours()) + ':' + p2(n.getMinutes());
     }, 15000);
+}
+function applyPhoneHomeLayout() {
+    try {
+        var root = document.querySelector('.zx-home2'); if (!root) return;
+        var w = window.innerWidth || 0, h = window.innerHeight || 0;
+        var phone = w > 0 && h > w * 1.12 && w < 1200;
+        var c = String(root.className || '').replace(/\s+zx-phone\b/g, '');
+        root.className = c + (phone ? ' zx-phone' : '');
+    } catch (e) {}
 }
 function homeStyles(ac) {
     var a = ac || '#10b981';
@@ -1794,6 +1821,41 @@ function homeStyles(ac) {
         + '.zh-status span{gap:3px;}'
         + '.zh-badge{font-size:8px;padding:3px 6px;}'
         + '}'
+        + '.zx-home2.zx-phone{overflow-y:auto;}'
+        + '.zx-home2.zx-phone .zh-ui{position:relative;min-height:100vh;height:auto;overflow-y:visible;padding:16px 14px 30px;}'
+        + '.zx-home2.zx-phone .zh-top{gap:7px;align-items:center;}'
+        + '.zx-home2.zx-phone .zh-logo .brand-logo{font-size:24px;letter-spacing:3px;}'
+        + '.zx-home2.zx-phone .zh-clock{font-size:24px;}'
+        + '.zx-home2.zx-phone .zh-date{font-size:11px;margin-top:3px;}'
+        + '.zx-home2.zx-phone .zh-icons{gap:5px;}'
+        + '.zx-home2.zx-phone .zh-tbtn{height:34px;padding:0 8px;border-radius:9px;font-size:11px;gap:4px;}'
+        + '.zx-home2.zx-phone .zh-tbtn.ic{width:34px;padding:0;}'
+        + '.zx-home2.zx-phone .zh-tbtn svg{width:17px;height:17px;}'
+        + '.zx-home2.zx-phone .zh-profbtn .zx-pf-av{width:32px;height:32px;}'
+        + '.zx-home2.zx-phone .zh-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:18px;flex:none;min-height:auto;}'
+        + '.zx-home2.zx-phone .zh-nav>.zh-tile,.zx-home2.zx-phone .zh-navtop .zh-tile{flex:none;max-width:none;width:auto;min-height:122px;height:122px;gap:8px;padding:12px 6px;border-radius:12px;}'
+        + '.zx-home2.zx-phone .zh-navr,.zx-home2.zx-phone .zh-navtop,.zx-home2.zx-phone .zh-navbot{display:contents;}'
+        + '.zx-home2.zx-phone .zh-ico,.zx-home2.zx-phone .zh-navtop .zh-ico{width:36px;height:36px;}'
+        + '.zx-home2.zx-phone .zh-ico svg,.zx-home2.zx-phone .zh-navtop .zh-ico svg{width:35px;height:35px;}'
+        + '.zx-home2.zx-phone .zh-tl{font-size:15px;}'
+        + '.zx-home2.zx-phone .zh-tsub{font-size:11px;margin-top:4px;}'
+        + '.zx-home2.zx-phone .zh-stile{min-height:64px;height:64px;padding:9px 6px;border-radius:10px;gap:5px;}'
+        + '.zx-home2.zx-phone .zh-stile svg{width:19px;height:19px;}'
+        + '.zx-home2.zx-phone .zh-stile b{font-size:12px;}'
+        + '.zx-home2.zx-phone .zh-ssub{font-size:10px;margin-top:2px;}'
+        + '.zx-home2.zx-phone .zh-recent{margin-top:18px;gap:9px;}'
+        + '.zx-home2.zx-phone .zh-h2{font-size:15px;gap:6px;}'
+        + '.zx-home2.zx-phone .zh-h2 svg{width:17px;height:17px;}'
+        + '.zx-home2.zx-phone .zh-posters{gap:8px;overflow-x:auto;padding-bottom:2px;}'
+        + '.zx-home2.zx-phone .zh-poster{width:180px;min-width:180px;aspect-ratio:2.1/1;border-radius:9px;padding:5px;}'
+        + '.zx-home2.zx-phone .zh-cbody{padding:4px 3px 3px 7px;}'
+        + '.zx-home2.zx-phone .zh-art-fallback{font-size:24px;}'
+        + '.zx-home2.zx-phone .zh-cyear{font-size:11px;}'
+        + '.zx-home2.zx-phone .zh-cname{font-size:13px;}'
+        + '.zx-home2.zx-phone .zh-cleft{font-size:10px;}'
+        + '.zx-home2.zx-phone .zh-status{font-size:10px;gap:8px;margin-top:14px;white-space:nowrap;overflow:hidden;}'
+        + '.zx-home2.zx-phone .zh-status span{gap:3px;}'
+        + '.zx-home2.zx-phone .zh-badge{font-size:8px;padding:3px 6px;}'
         + '</style>';
 }
 /* Aviso de vencimento (só na HOME). Usa license do resolve (zero rede extra).
