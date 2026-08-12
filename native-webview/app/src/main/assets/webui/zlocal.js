@@ -328,22 +328,33 @@ function parseM3UText(text) {
     }
     return all;
 }
+function classifyM3UItem(item) {
+    var raw = String((item.group || '') + ' ' + (item.name || '') + ' ' + (item.stream_url || '')).toLowerCase();
+    if (/(serie|series|série|séries|novela|novelas|temporada|season|tv show|anime)/i.test(raw)) return 'series';
+    if (/(filme|filmes|movie|movies|cinema|vod|documentário|documentario|desenho|cartoon)/i.test(raw)) return 'movies';
+    return 'live';
+}
 function catalogFromM3U() {
+    if (S.m3uCatalogPromise) return S.m3uCatalogPromise;
     if (!S.playlistUrl) return Promise.reject(new Error('playlist_url_missing'));
-    return fetchPlaylistText(S.playlistUrl).then(function (text) {
-        var all = parseM3UText(text), byCat = {}, cats = [], catIds = {};
-        for (var i = 0; i < all.length; i++) {
-            var item = all[i], name = item.group || 'Canais';
-            if (!catIds[name]) { catIds[name] = String(Object.keys(catIds).length + 1); byCat[catIds[name]] = []; cats.push({ category_id: catIds[name], category_name: name, num: 0, adult: isAdultName(name) }); }
-            item.category_id = catIds[name]; byCat[catIds[name]].push(item);
+    S.m3uCatalogPromise = fetchPlaylistText(S.playlistUrl).then(function (text) {
+        var all = parseM3UText(text), buckets = { live: [], movies: [], series: [] };
+        for (var i = 0; i < all.length; i++) { all[i].m3u_kind = classifyM3UItem(all[i]); buckets[all[i].m3u_kind].push(all[i]); }
+        var outputs = {};
+        for (var kind in buckets) if (buckets.hasOwnProperty(kind)) {
+            var byCat = {}, cats = [], catIds = {}, counter = 0, list = buckets[kind];
+            for (var j = 0; j < list.length; j++) {
+                var item = list[j], name = item.group || (kind === 'movies' ? 'Filmes' : kind === 'series' ? 'Séries' : 'Canais');
+                if (!catIds[name]) { counter++; catIds[name] = String(counter); byCat[catIds[name]] = []; cats.push({ category_id: catIds[name], category_name: name, num: 0, adult: isAdultName(name) }); }
+                item.category_id = catIds[name]; byCat[catIds[name]].push(item);
+            }
+            for (var c = 0; c < cats.length; c++) cats[c].num = byCat[cats[c].category_id].length;
+            outputs[kind] = { cats: cats, byCat: byCat, all: list };
         }
-        for (var c = 0; c < cats.length; c++) cats[c].num = byCat[cats[c].category_id].length;
-        var out = { cats: cats, byCat: byCat, all: all };
-        S.cat.live = out;
-        S.cat.movies = { cats: [], byCat: {}, all: [] };
-        S.cat.series = { cats: [], byCat: {}, all: [] };
-        return out;
-    });
+        S.cat.live = outputs.live; S.cat.movies = outputs.movies; S.cat.series = outputs.series;
+        return outputs;
+    }).catch(function (err) { S.m3uCatalogPromise = null; throw err; });
+    return S.m3uCatalogPromise;
 }
 // painel /api/r/* (auth por code/user/pass/did) — com timeout + rastreio online/offline.
 // Retorna null quando a VPS está fora (o chamador usa cache/fila).
@@ -553,8 +564,9 @@ function xtSeriesInfo(id, tries) {
 }
 function streamUrl(kind, id, ext) {
     if ((S.playlistType || '').indexOf('m3u') === 0) {
-        var m3u = (S.cat.live && S.cat.live.all) || [];
-        for (var mi = 0; mi < m3u.length; mi++) if (String(m3u[mi].stream_id) === String(id)) return m3u[mi].stream_url || '';
+        var bucket = kind === 'live' ? 'live' : kind === 'movie' ? 'movies' : 'series';
+        var m3u = (S.cat[bucket] && S.cat[bucket].all) || [];
+        for (var mi = 0; mi < m3u.length; mi++) if (String(m3u[mi].stream_id) === String(id) || String(m3u[mi].series_id || '') === String(id)) return m3u[mi].stream_url || '';
     }
     var u = enc(S.user), p = enc(S.pass);
     if (kind === 'live') return S.server + '/live/' + u + '/' + p + '/' + id + '.m3u8';
@@ -895,8 +907,8 @@ function render(path) {
     m = p.match(/^\/movies\/(\d+)\/play$/); if (m) return renderPlayerMovie(m[1], query);
     m = p.match(/^\/series\/(\d+)\/episode\/(\d+)\/play$/); if (m) return renderPlayerEpisode(m[1], m[2], query);
     m = p.match(/^\/live\/channel\/(\d+)$/); if (m) return renderPlayerLive(m[1], query);
-    m = p.match(/^\/movies\/(\d+)$/); if (m) return renderDetailMovie(m[1]);
-    m = p.match(/^\/series\/(\d+)$/); if (m) return renderDetailSeries(m[1]);
+    m = p.match(/^\/movies\/(\d+)$/); if (m) return (S.playlistType || '').indexOf('m3u') === 0 ? renderM3UDetail('movies', m[1]) : renderDetailMovie(m[1]);
+    m = p.match(/^\/series\/(\d+)$/); if (m) return (S.playlistType || '').indexOf('m3u') === 0 ? renderM3UDetail('series', m[1]) : renderDetailSeries(m[1]);
     renderHome();
 }
 
@@ -1056,7 +1068,7 @@ function directResponseToState(j, mode, fallback) {
     S.playlistUrl = chosenUrl; S.playlistType = String(chosen.type || (chosenUrl.indexOf('get.php') >= 0 ? 'm3u_plus' : 'xtream')).toLowerCase();
     try { localStorage.setItem('zx_direct_mode', mode); if (mode === 'mac') localStorage.setItem('zx_mac', S.user); } catch (e) {}
     var d = { ok: true, dns: { base: server, name: j.dns_titulo || '' }, license: { mac: j.mac || fallback || '', exp_date: expTs }, branding: { app_name: j.app_name || 'UltraPlayer', logo: j.logo_url || '', background: j.bg_url || '', banner: j.banner_url || '' } };
-    S.cat = { movies: null, series: null, live: null }; S.favDirty = { live: [], movie: [], series: [] };
+    S.cat = { movies: null, series: null, live: null }; S.m3uCatalogPromise = null; S.favDirty = { live: [], movie: [], series: [] };
     applyResolve(d, false); saveSnap(d); saveCreds(); go('/home', true); return true;
 }
 function renderLogin() {
@@ -2303,6 +2315,35 @@ function renderDetailMovie(id) {
     }).catch(function () { showLoading(false); });
 }
 
+function m3uFindItem(kind, id) {
+    var list = (S.cat[kind] && S.cat[kind].all) || [];
+    for (var i = 0; i < list.length; i++) if (String(list[i].stream_id) === String(id)) return list[i];
+    return null;
+}
+function m3uDetail(kind, id) {
+    var item = m3uFindItem(kind, id);
+    if (!item) return false;
+    var name = item.name || (kind === 'movies' ? 'Filme' : 'Série'), poster = item.stream_icon || '', ext = 'mp4';
+    var pathKind = kind === 'movies' ? 'movies' : 'series';
+    var playHref = kind === 'movies' ? '/movies/' + enc(id) + '/play' : '/series/' + enc(id) + '/episode/' + enc(id) + '/play?ext=' + enc(ext);
+    var isFav = inArr(S.fav[kind === 'movies' ? 'movie' : 'series'], id);
+    var badge = kind === 'movies' ? 'Filme' : 'Série';
+    setHtml('<div class="detail-screen m3u-detail"><div class="detail-bg"' + (poster ? ' style="background-image:url(\'' + attr(poster) + '\')"' : '') + '></div>'
+        + '<div class="detail-hero"><a href="javascript:history.back()" class="dh-back">← Voltar</a><div class="dh-content">'
+        + '<div class="dh-meta"><span class="dh-badge">' + badge + '</span></div><h1>' + esc(name) + '</h1>'
+        + '<p class="dh-plot">Conteúdo disponível na sua lista.</p><div class="dh-buttons">'
+        + '<a class="btn-tv is-primary" href="' + playHref + '" data-ext="' + attr(ext) + '" autofocus><span class="btn-icon">▶</span>Reproduzir</a>'
+        + '<button type="button" class="btn-tv" id="btn-favorite" data-kind="' + (kind === 'movies' ? 'movie' : 'series') + '" data-id="' + attr(id) + '" data-name="' + attr(name) + '" data-poster="' + attr(poster) + '"><span class="btn-icon" id="fav-icon">' + (isFav ? '♥' : '+') + '</span><span id="fav-text">' + (isFav ? 'Remover dos Favoritos' : 'Favoritos') + '</span></button>'
+        + '</div></div></div></div>' + detailStyles());
+    S.playName = name; S.playPoster = poster; S.playExt = ext;
+    if (kind === 'series') S.playSeries = { id: parseInt(id, 10), name: name, poster: poster, list: [{ id: parseInt(id, 10), ext: ext, s: 1, e: 1 }] };
+    else S.playSeries = null;
+    wireFavBtn(); afterRender(); return true;
+}
+function renderM3UDetail(kind, id) {
+    if (m3uFindItem(kind, id)) { m3uDetail(kind, id); return; }
+    showLoading(true); catalogFromM3U().then(function () { showLoading(false); if (!m3uDetail(kind, id)) renderHome(); }).catch(function () { showLoading(false); renderOfflineReload(); });
+}
 /* ---- DETALHE: SÉRIE ---- */
 function renderDetailSeries(id) {
     // Cache do DETALHE (Android, em memória) — re-abrir série já vista = instantâneo + offline.

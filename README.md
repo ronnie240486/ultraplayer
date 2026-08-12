@@ -21,15 +21,17 @@ A interface recuperada está em `recovered/webui`. O arquivo `zlocal.js` concent
 | `analysis/` | Manifest, hashes, inventário do ZIP, log de descompilação e achados da inspeção. |
 | `docs/` | Arquitetura, inventário funcional, riscos e roadmap de melhorias. |
 | `mobile/` | Protótipo Expo/React Native 1.1.0, mantido como referência e não recomendado para distribuição. |
-| `native-webview/` | Base Android nativa UltraPlayer 1.3.0, com WebView local, player nativo, branding UltraPlayer e ativação por MAC exibido. |
+| `native-webview/` | Base Android nativa UltraPlayer 1.5.0, com WebView local, Media3/ExoPlayer, catálogo M3U separado e layout mobile responsivo. |
 | `backend-reference/` | Código de referência das rotas do painel, incluindo o novo contrato de login por credenciais. |
 | `releases/` | APK de debug gerado localmente e seu hash SHA-256. |
 
-## Versão UltraPlayer 1.4.0 — correção M3U
+## Versão UltraPlayer 1.5.0 — catálogo e player
 
-A versão 1.4.0 mantém a ativação inicial por MAC exibido e corrige o caso em que o painel retorna uma playlist `m3u_plus`. O app agora persiste `playlist_url`, baixa a M3U pela ponte nativa Android, interpreta `#EXTINF` e `group-title`, monta a seção de TV ao vivo e reproduz cada canal usando o `stream_url` direto.
+A versão 1.5.0 mantém a ativação por MAC e separa a M3U em **Canais**, **Filmes** e **Séries** usando `group-title`, nome e URL. Filmes e séries possuem detalhe e reprodução direta pelo `stream_url` original.
 
-O APK está em [`releases/UltraPlayer-1.4.0-m3u-fix-debug.apk`](releases/UltraPlayer-1.4.0-m3u-fix-debug.apk). Ele usa package `com.ultraplayer.app`, `minSdk 21`, versionName `1.4.0` e versionCode `5`. O diagnóstico detalhado está em [`docs/release-1.4.0.md`](docs/release-1.4.0.md).
+A reprodução nativa agora usa **Media3/ExoPlayer**, com suporte a HLS, MPEG-TS, tela cheia, controles, rotação por sensor e mensagens de erro. O layout em retrato para celular foi compactado, enquanto a apresentação de TV em paisagem permanece ampla.
+
+O APK está em [`releases/UltraPlayer-1.5.0-exoplayer-m3u-debug.apk`](releases/UltraPlayer-1.5.0-exoplayer-m3u-debug.apk). Ele usa package `com.ultraplayer.app`, `minSdk 21`, versionName `1.5.0` e versionCode `6`. O diagnóstico detalhado está em [`docs/release-1.5.0.md`](docs/release-1.5.0.md).
 
 ## Primeiras melhorias propostas
 

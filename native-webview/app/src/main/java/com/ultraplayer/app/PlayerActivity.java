@@ -1,6 +1,7 @@
 package com.ultraplayer.app;
 
 import android.app.Activity;
+import android.content.pm.ActivityInfo;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
@@ -10,17 +11,29 @@ import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
-import android.widget.MediaController;
 import android.widget.TextView;
-import android.widget.VideoView;
+
+import androidx.media3.common.MediaItem;
+import androidx.media3.common.MimeTypes;
+import androidx.media3.common.PlaybackException;
+import androidx.media3.common.Player;
+import androidx.media3.datasource.DefaultDataSource;
+import androidx.media3.datasource.DefaultHttpDataSource;
+import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+import androidx.media3.ui.PlayerView;
 
 import org.json.JSONObject;
 
+import java.util.Locale;
+
 public final class PlayerActivity extends Activity {
-    private VideoView video;
+    private ExoPlayer player;
+    private PlayerView playerView;
     private TextView title;
     private TextView error;
     private String url = "";
+    private String mediaTitle = "UltraPlayer";
     private long resumeMs = 0L;
 
     @Override
@@ -30,15 +43,21 @@ public final class PlayerActivity extends Activity {
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         getWindow().setNavigationBarColor(Color.BLACK);
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR);
+        hideSystemUi();
 
         parsePayload(getIntent().getStringExtra("payload"));
         if (url.isEmpty()) { finish(); return; }
 
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.BLACK);
-        video = new VideoView(this);
-        video.setBackgroundColor(Color.BLACK);
-        root.addView(video, new FrameLayout.LayoutParams(-1, -1));
+
+        playerView = new PlayerView(this);
+        playerView.setUseController(true);
+        playerView.setControllerShowTimeoutMs(4500);
+        playerView.setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS);
+        playerView.setResizeMode(androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT);
+        root.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
 
         title = new TextView(this);
         title.setTextColor(Color.WHITE);
@@ -54,46 +73,76 @@ public final class PlayerActivity extends Activity {
         error.setTextSize(16);
         error.setGravity(Gravity.CENTER);
         error.setPadding(36, 20, 36, 20);
+        error.setBackgroundColor(0xCC07110D);
         error.setVisibility(View.GONE);
         FrameLayout.LayoutParams errorParams = new FrameLayout.LayoutParams(-1, -2, Gravity.CENTER);
+        errorParams.leftMargin = 32;
+        errorParams.rightMargin = 32;
         root.addView(error, errorParams);
 
         setContentView(root);
-        title.setText(getIntentTitle());
-        MediaController controls = new MediaController(this);
-        controls.setAnchorView(video);
-        video.setMediaController(controls);
-        video.setVideoURI(Uri.parse(url));
-        video.setOnPreparedListener(mp -> {
-            if (resumeMs > 0) {
-                try { mp.seekTo((int) Math.min(resumeMs, Integer.MAX_VALUE)); } catch (Throwable ignored) { }
+        title.setText(mediaTitle);
+        preparePlayer();
+    }
+
+    private void preparePlayer() {
+        DefaultHttpDataSource.Factory http = new DefaultHttpDataSource.Factory()
+                .setUserAgent("UltraPlayer/1.4")
+                .setAllowCrossProtocolRedirects(true)
+                .setConnectTimeoutMs(12000)
+                .setReadTimeoutMs(25000);
+        DefaultDataSource.Factory data = new DefaultDataSource.Factory(this, http);
+        player = new ExoPlayer.Builder(this)
+                .setMediaSourceFactory(new DefaultMediaSourceFactory(data))
+                .build();
+        playerView.setPlayer(player);
+        player.addListener(new Player.Listener() {
+            @Override
+            public void onPlaybackStateChanged(int playbackState) {
+                if (playbackState == Player.STATE_READY) {
+                    error.setVisibility(View.GONE);
+                    if (resumeMs > 0) player.seekTo(resumeMs);
+                    player.play();
+                } else if (playbackState == Player.STATE_ENDED) {
+                    finish();
+                }
             }
-            video.start();
+
+            @Override
+            public void onPlayerError(PlaybackException playbackException) {
+                String detail = playbackException.getMessage();
+                if (detail == null || detail.length() == 0) detail = "Formato ou servidor não suportado.";
+                error.setText("Não foi possível reproduzir este conteúdo.\n" + detail + "\n\nVolte e tente outro canal.");
+                error.setVisibility(View.VISIBLE);
+            }
         });
-        video.setOnCompletionListener(mp -> finish());
-        video.setOnErrorListener((mp, what, extra) -> {
-            error.setText("Não foi possível reproduzir este conteúdo.\nVerifique a lista ou tente novamente.");
-            error.setVisibility(View.VISIBLE);
-            return true;
-        });
-        video.requestFocus();
+
+        MediaItem.Builder item = new MediaItem.Builder().setUri(Uri.parse(url));
+        String low = url.toLowerCase(Locale.US);
+        if (low.contains(".m3u8") || low.contains("m3u8")) item.setMimeType(MimeTypes.APPLICATION_M3U8);
+        else if (low.contains(".mpd") || low.contains("manifest")) item.setMimeType(MimeTypes.APPLICATION_MPD);
+        player.setMediaItem(item.build());
+        player.prepare();
+    }
+
+    private void hideSystemUi() {
+        getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
     }
 
     private void parsePayload(String payload) {
         try {
             JSONObject json = new JSONObject(payload == null ? "{}" : payload);
             url = json.optString("url", "").trim();
+            mediaTitle = json.optString("title", "UltraPlayer");
             long resume = json.optLong("resume", 0L);
-            // O WebView trabalha em segundos; VideoView/MediaPlayer usa milissegundos.
             resumeMs = resume > 0 && resume < 10_000_000 ? resume * 1000L : resume;
         } catch (Throwable ignored) { }
-    }
-
-    private String getIntentTitle() {
-        try {
-            JSONObject json = new JSONObject(getIntent().getStringExtra("payload") == null ? "{}" : getIntent().getStringExtra("payload"));
-            return json.optString("title", "UltraPlayer");
-        } catch (Throwable ignored) { return "UltraPlayer"; }
     }
 
     @Override
@@ -106,8 +155,11 @@ public final class PlayerActivity extends Activity {
     }
 
     @Override
-    protected void onPause() {
-        if (video != null && video.isPlaying()) video.pause();
-        super.onPause();
+    protected void onDestroy() {
+        if (player != null) {
+            player.release();
+            player = null;
+        }
+        super.onDestroy();
     }
 }
