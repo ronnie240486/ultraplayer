@@ -1,0 +1,3869 @@
+/* ============================================================
+ * UltraPlayer — controlador LOCAL (app desktop/Windows).
+ * A interface roda no aparelho (igual Roku). O catálogo vem DIRETO do
+ * IPTV (Xtream player_api.php). O painel tv.renciaapp.manus.space é usado só
+ * via /api/r/* (login/licença/favoritos/progresso/recent/continue/
+ * busca/aviso/branding). NADA é renderizado no servidor.
+ *
+ * Reaproveita SEM MUDAR: tv.css, tv.js (nav D-pad/teclado/relógio/
+ * favoritar canal/teclas do player), keyboard.js (teclado virtual),
+ * category_browser.js (grade: paginação/lazy/busca instantânea),
+ * player_touch.js (OSD touch/mouse), hdx-cache.js, hls.min.js.
+ *
+ * Este arquivo: roteador (History API → tv.js back funciona), telas
+ * (marcação IDÊNTICA às views PHP), camada IPTV + mapeadores, e um
+ * "shim" que serve as URLs que o category_browser/tv.js pedem
+ * (Tv.get/Tv.post) a partir do IPTV/api — sem servidor local.
+ * ============================================================ */
+(function (global) {
+'use strict';
+
+/* ---------- estado ---------- */
+// O shell (Windows) pode injetar did (MAC) e api base via query (?did=&api=)
+// ou via window.__DID/__API_BASE. Aqui consolidamos.
+(function () {
+    try {
+        var q = {}; var s = (location.search || '').replace(/^\?/, '');
+        if (s) { var ps = s.split('&'); for (var i = 0; i < ps.length; i++) { var kv = ps[i].split('='); q[decodeURIComponent(kv[0] || '')] = decodeURIComponent((kv[1] || '').replace(/\+/g, ' ')); } }
+        if (q.api) global.__API_BASE = q.api;
+        if (q.did) global.__DID = q.did;
+    } catch (e) {}
+})();
+// base da API lida DINAMICAMENTE (o shell pode injetar __API_BASE após o boot)
+function apiBase() { return String(global.__API_BASE || 'https://renciaapp.manus.space').replace(/\/+$/, ''); }
+var S = {
+    code: '', user: '', pass: '', did: '', directAuth: false,
+    server: '',                 // base do IPTV (dns.base do resolve)
+    info: null,                 // resposta do resolve
+    fav: { live: [], movie: [], series: [] },   // DESEJADO local (verdade da UI)
+    favDirty: { live: [], movie: [], series: [] }, // ids mudados OFFLINE (re-sincroniza ao voltar)
+    favMeta: {},                // {"movie:123":{name,poster}} p/ re-adicionar no sync
+    branding: null, accent: '#10b981',
+    adultOk: false,
+    online: true,               // VPS (painel) alcançável?
+    rawCss: '',
+    cat: { movies: null, series: null, live: null }   // {cats, byCat:{id:[...]}, all:[...]}
+};
+
+/* ---------- helpers ---------- */
+function $(id) { return document.getElementById(id); }
+function root() { return $('app-root'); }
+function enc(s) { return encodeURIComponent(s == null ? '' : s); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]); }); }
+function attr(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]); }); }
+/* ============ i18n (PT/EN) ============================================
+ * A CHAVE do dicionário é o próprio texto em PT: t('Filmes') -> 'Movies' se
+ * o idioma for EN, ou o próprio 'Filmes' se for PT. Assim o PT nunca quebra
+ * (fallback = a própria chave) e não precisamos de IDs. Idioma escolhido no
+ * 1º uso (maybeAskLanguage) e guardado em localStorage 'zx_lang'. */
+var ZL = { lang: null };
+function detectLang() { try { var l = String(navigator.language || navigator.userLanguage || '').toLowerCase(); return (l.indexOf('pt') === 0) ? 'pt' : 'en'; } catch (e) { return 'pt'; } }
+function langChosen() { try { var v = localStorage.getItem('zx_lang'); return (v === 'pt' || v === 'en'); } catch (e) { return false; } }
+function currentLang() {
+    if (ZL.lang === 'pt' || ZL.lang === 'en') return ZL.lang;
+    try { var v = localStorage.getItem('zx_lang'); if (v === 'pt' || v === 'en') { ZL.lang = v; return v; } } catch (e) {}
+    return detectLang();
+}
+function setLang(l) { if (l !== 'pt' && l !== 'en') return; ZL.lang = l; try { localStorage.setItem('zx_lang', l); } catch (e) {} }
+function t(s) { if (currentLang() !== 'en') return s; var v = I18N_EN[s]; return (v == null) ? s : v; }
+/* t() com esc embutido (pra textos que vão dentro de HTML). */
+function te(s) { return esc(t(s)); }
+/* Traduz (EN) o DOM já renderizado: nós de texto + placeholder/aria-label/vkb
+   cujo texto (sem espaços nas pontas) bata EXATO com uma chave PT do dicionário.
+   Conteúdo dinâmico (nome de filme/canal/categoria) não bate → fica intocado.
+   Em PT é no-op. Chamado no setHtml() → cobre toda tela sem envolver cada string. */
+function translateTree(rootEl) {
+    if (!rootEl || currentLang() !== 'en') return;
+    try {
+        var w = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT, null, false), n, list = [];
+        while ((n = w.nextNode())) list.push(n);
+        for (var i = 0; i < list.length; i++) {
+            var tn = list[i], p = tn.parentNode, raw = tn.nodeValue;
+            if (!raw || !p) continue;
+            var pn = p.nodeName; if (pn === 'STYLE' || pn === 'SCRIPT' || pn === 'TEXTAREA') continue;
+            var mid = raw.replace(/^\s+|\s+$/g, ''); if (!mid) continue;
+            var tr = I18N_EN[mid]; if (tr == null) continue;
+            tn.nodeValue = raw.match(/^\s*/)[0] + tr + raw.match(/\s*$/)[0];
+        }
+        var els = rootEl.querySelectorAll('[placeholder],[aria-label],[data-vkb-label],[data-vkb-placeholder]');
+        var attrs = ['placeholder', 'aria-label', 'data-vkb-label', 'data-vkb-placeholder'];
+        for (var j = 0; j < els.length; j++) {
+            for (var k = 0; k < attrs.length; k++) {
+                var v = els[j].getAttribute(attrs[k]); if (v == null) continue;
+                var trr = I18N_EN[v.replace(/^\s+|\s+$/g, '')];
+                if (trr != null) els[j].setAttribute(attrs[k], trr);
+            }
+        }
+    } catch (e) {}
+}
+var I18N_EN = {
+    // ---- Perfis ----
+    'Quem está assistindo?': "Who's watching?",
+    'Escolha um perfil para editar': 'Choose a profile to edit',
+    'Novo perfil': 'New profile', 'Editar perfis': 'Edit profiles', 'Concluído': 'Done',
+    'Editar perfil': 'Edit profile', 'Nome do perfil': 'Profile name',
+    'Escolha um avatar': 'Choose an avatar', 'Salvar': 'Save',
+    'Apagar perfil': 'Delete profile', 'Aperte de novo para apagar': 'Press again to delete',
+    'Perfis': 'Profiles', 'Perfil:': 'Profile:',
+    'Conheça os Perfis': 'Meet Profiles',
+    'Agora cada pessoa da casa pode ter seu próprio espaço no app.': 'Now everyone at home can have their own space in the app.',
+    'Até 4 perfis neste aparelho': 'Up to 4 profiles on this device',
+    'Cada um com seus favoritos e seu Continuar Assistindo': 'Each one keeps its own favorites and Continue Watching',
+    'Troque quando quiser no seu avatar, no alto da tela inicial': 'Switch anytime on your avatar at the top of the Home screen',
+    'Personalizar meu perfil': 'Set up my profile', 'Agora não': 'Not now',
+    // ---- Home / nav / status ----
+    'TV ao Vivo': 'Live TV', 'TV ao vivo': 'Live TV', 'Filmes': 'Movies', 'Séries': 'Series', 'Playlist': 'Playlist',
+    'canais': 'channels', 'filmes': 'movies', 'séries': 'series',
+    'Adicionar / gerenciar': 'Add / manage', 'itens': 'items',
+    'Assistido Recentemente': 'Recently Watched', 'restantes': 'left',
+    'Você ainda não assistiu nada — o que você reproduzir aparece aqui.': 'You haven’t watched anything yet — what you play shows up here.',
+    'Servidor': 'Server', 'Usuário': 'Username', 'Usuário:': 'Username:',
+    'ID do aparelho:': 'Device ID:', 'Vencimento da lista:': 'List expiry:', 'Sem expiração': 'No expiry',
+    'Fechar': 'Close', 'Entendi': 'Got it',
+    'Adicione uma lista em': 'Add a list in', 'pra começar': 'to start',
+    // ---- Login / listas ----
+    'URL ou código do servidor': 'Server URL or code', 'Senha': 'Password',
+    'código ou http://servidor:porta': 'code or http://server:port',
+    'seu usuário': 'your username', 'sua senha': 'your password',
+    'Entrar': 'Sign in', 'Entrando…': 'Signing in…', 'Preencha tudo.': 'Fill in everything.',
+    'Não foi possível entrar. Confira os dados.': 'Couldn’t sign in. Check your details.',
+    'Bem-vindo': 'Welcome', 'Adicione sua lista pra começar.': 'Add your list to get started.',
+    'Digite o código, usuário e senha da sua lista.': 'Enter your list’s code, username and password.',
+    'Voltar': 'Back', '← Voltar': '← Back', '← Início': '← Home', 'Listas': 'Lists', 'Sua lista': 'Your list',
+    'Trocar lista': 'Switch list', 'Adicionar lista': 'Add list',
+    'Sem conexão. Tente de novo.': 'No connection. Try again.',
+    'Playlist não adicionada': 'No playlist added',
+    'Adicione uma lista no menu Playlist para começar a assistir.': 'Add a list in the Playlist menu to start watching.',
+    // ---- offline / erros ----
+    '⚠ Sem conexão com o painel — usando dados salvos': '⚠ No connection to the panel — using saved data',
+    'Sem conexão': 'No connection',
+    'Não deu pra carregar este conteúdo. Verifique a internet e recarregue.': 'Couldn’t load this content. Check your internet and reload.',
+    'Recarregar': 'Reload', 'Não foi possível carregar. ': 'Couldn’t load. ', 'Não foi possível carregar': 'Couldn’t load',
+    'Não foi possível falar com o painel para o primeiro acesso. Verifique sua internet e tente de novo.': 'Couldn’t reach the panel for first access. Check your internet and try again.',
+    'Tentar de novo': 'Try again',
+    // ---- tiles de fallback ----
+    'Filme': 'Movie', 'Série': 'Series', 'Canal': 'Channel', 'Favoritar canal': 'Favorite channel',
+    // ---- sidebar / seções VOD ----
+    'Continue Assistindo': 'Continue Watching', 'Pesquisar': 'Search', 'Favoritos': 'Favorites',
+    'Recém adicionados': 'Recently added',
+    'Carregando mais séries…': 'Loading more series…', 'Carregando mais filmes…': 'Loading more movies…',
+    'Nenhuma série nessa categoria.': 'No series in this category.', 'Nenhum filme nessa categoria.': 'No movies in this category.',
+    // ---- canais / EPG ----
+    'Buscar canal': 'Search channel', 'Buscar canal…': 'Search channel…', 'Buscar': 'Search',
+    'Recentes': 'Recent', 'Canais Favoritos': 'Favorite Channels', 'Canais Recentes': 'Recent Channels',
+    'Selecione uma categoria para ver os canais.': 'Select a category to see the channels.',
+    'Passe num canal para ver a programação.': 'Focus a channel to see its schedule.',
+    'Carregando…': 'Loading…', '▶ Assistir': '▶ Watch',
+    'Carregando programação…': 'Loading schedule…', 'Sem programação para este canal.': 'No schedule for this channel.',
+    // ---- botões de play / detalhe ----
+    'Recomeçar': 'Restart', 'Reproduzir': 'Play', 'Continuar': 'Continue', 'Continuar de ': 'Resume from ', 'Próximo': 'Next', 'Rever': 'Rewatch',
+    'Nenhum resultado para': 'No results for', 'Personalize o seu ': 'Customize your ',
+    'Temporadas': 'Seasons', 'Temporada ': 'Season ', 'Remover dos Favoritos': 'Remove from Favorites',
+    'Você também pode gostar': 'You might also like',
+    // ---- busca ----
+    'Pesquisar Séries': 'Search Series', 'Pesquisar Filmes': 'Search Movies',
+    'Digite o nome da série…': 'Type the series name…', 'Digite o nome do filme…': 'Type the movie name…',
+    'Use o teclado para buscar.': 'Use the keyboard to search.',
+    'Digite pelo menos 3 letras.': 'Type at least 3 letters.', 'Buscando…': 'Searching…',
+    // ---- configurações ----
+    'Tela do app': 'App screen', 'Ajusta o tamanho dos': 'Adjusts the size of the', 'posters e ícones': 'posters and icons',
+    'pra sua tela.': 'for your screen.', 'Celular': 'Phone', 'deixa tudo menor (mais posters por linha).': 'makes everything smaller (more posters per row).',
+    '📱 Celular': '📱 Phone', '📺 TV / Caixa': '📺 TV / Box',
+    'Controle parental': 'Parental control',
+    'A senha bloqueia as categorias': 'The password blocks the', 'adultas (XXX)': 'adult categories (XXX)',
+    '. Fica guardada': '. Stored', 'só neste aparelho': 'only on this device',
+    '(nada no servidor). Padrão:': '(nothing on the server). Default:',
+    'Senha atual': 'Current password', 'Nova senha (4 dígitos)': 'New password (4 digits)', 'Confirmar nova senha': 'Confirm new password',
+    'Salvar nova senha': 'Save new password', 'Configurações': 'Settings',
+    'Informação Geral': 'General Info', 'Player de Vídeo': 'Video Player', 'Limpar Cache': 'Clear Cache', 'Sair da conta': 'Log out',
+    'Sua conta': 'Your account', 'Informações da sua assinatura.': 'Your subscription details.',
+    'Vencimento': 'Expiry', 'Status': 'Status', 'Mac': 'Mac', 'Plataforma': 'Platform',
+    'Configurações do Player': 'Player Settings', 'Vale só': 'Applies only to', 'neste aparelho': 'this device',
+    'é o padrão;': 'is the default;', 'oferece mais recursos.': 'offers more features.',
+    'Canais ao vivo': 'Live channels', 'Nativo': 'Native', 'Filmes e séries (VOD)': 'Movies and series (VOD)',
+    'Use caso esteja tendo problemas com o app.': 'Use if you’re having problems with the app.',
+    'Limpar cache local': 'Clear local cache', 'Remove dados temporários armazenados.': 'Removes stored temporary data.',
+    '✓ Cache local removido.': '✓ Local cache cleared.', 'Senha atual incorreta.': 'Current password is incorrect.',
+    'A nova senha deve ter 4 dígitos.': 'The new password must be 4 digits.', 'As senhas não coincidem.': 'The passwords don’t match.',
+    '✓ Senha alterada com sucesso.': '✓ Password changed successfully.',
+    // ---- player / episódios / PIN ----
+    'Pressione voltar e tente novamente.': 'Press back and try again.', 'Episódio': 'Episode', 'Próximo episódio': 'Next episode',
+    'Conteúdo adulto': 'Adult content', 'Digite o PIN para continuar.': 'Enter the PIN to continue.',
+    'Desbloquear': 'Unlock', 'Cancelar': 'Cancel', 'Senha incorreta.': 'Wrong password.', '✓ Atualizado': '✓ Updated',
+    // ---- paywall ----
+    'Período de uso expirado': 'Access period expired', 'Renove para continuar assistindo.': 'Renew to keep watching.',
+    'Já paguei': 'I already paid', 'Sair': 'Exit', 'Verificando…': 'Checking…', 'Ainda não consta': 'Not showing yet',
+    'Aparelho:': 'Device:', 'Renove em': 'Renew at',
+    // ---- 1º uso: idioma / celular-TV / pirataria ----
+    'Como você vai usar o UltraPlayer?': 'How will you use UltraPlayer?',
+    'Ajusta o tamanho dos posters e ícones pra sua tela.': 'Adjusts poster and icon size for your screen.',
+    'Posters menores, mais por linha': 'Smaller posters, more per row',
+    'TV / Caixa': 'TV / Box', 'Posters maiores (tela grande)': 'Bigger posters (large screen)',
+    'Dá pra trocar depois em Configurações.': 'You can change it later in Settings.',
+    'Escolha o idioma do app.': 'Choose the app language.',
+    'Bem-vindo ao UltraPlayer': 'Welcome to UltraPlayer',
+    '<strong>O UltraPlayer é apenas um reprodutor de mídia.</strong> Ele não fornece, hospeda, vende nem inclui canais, filmes, séries ou mídia de qualquer tipo.': '<strong>UltraPlayer is only a media player.</strong> It does not provide, host, sell or include any channels, movies, series or media of any kind.',
+    'Para assistir, você adiciona <strong>a sua própria lista</strong> de um provedor que você já tem. Você é o único responsável pelas listas e fontes que adicionar.': 'To watch anything, you add <strong>your own playlist</strong> from a provider you already have. You alone are responsible for the lists and sources you add.',
+    '<strong>Pirataria é crime.</strong> Não use o UltraPlayer para acessar conteúdo que você não está autorizado a ver.': '<strong>Piracy is a crime.</strong> Do not use UltraPlayer to access content you are not authorized to view.',
+    'Entendi e concordo': 'I understand & agree'
+};
+function arr1(x) { if (x == null) return []; return (typeof x.length === 'number' && typeof x !== 'string') ? x : [x]; }
+function inArr(a, v) { a = a || []; for (var i = 0; i < a.length; i++) { if (+a[i] === +v) return true; } return false; }
+function p2(n) { return ('0' + n).slice(-2); }
+function isAdultName(n) { n = (n || '').toLowerCase(); return n.indexOf('xxx') >= 0 || n.indexOf('+18') >= 0 || n.indexOf('18+') >= 0 || n.indexOf('adult') >= 0 || n.indexOf('porn') >= 0; }
+function showLoading(on) { var lo = $('app-loading'); if (lo) lo.className = on ? 'is-on' : ''; }
+function isTouch() { return ('ontouchstart' in global) || navigator.maxTouchPoints > 0; }
+// TV box / Android TV? (lado nativo via UiModeManager/leanback). Usado SÓ pra
+// dar menos colunas no grid (fitGrid), NÃO pra mexer no viewport/CSS — o layout
+// já é responsivo por clamp/vw/vh e redimensiona sozinho pela tela.
+function isTvDevice() {
+    try { if (global.HdxNative && typeof global.HdxNative.isTv === 'function') return !!global.HdxNative.isTv(); } catch (e) {}
+    try { if (global.__ZX_TV === true || global.__ZX_TV === 1) return true; } catch (e) {}
+    return false;
+}
+function tmdbResize(u, size) {
+    // w185 = MESMO tamanho da Samsung/web (tmdb_resize no helpers.php): ~15-25KB
+    // por capa (vs ~150-300KB do w780 original) → -90% de peso, sem perda visível
+    // em tile. CRÍTICO em TV box / aparelho fraco (menos a decodificar por quadro).
+    // Backdrops do detalhe passam 'w780' explícito → não são afetados.
+    size = size || 'w185';
+    if (!u) return '';
+    if (u.indexOf('image.tmdb.org/t/p/') !== -1) return u.replace(/\/t\/p\/(w\d+|original)\//, '/t/p/' + size + '/');
+    return u;
+}
+function h2(n) { n = Math.max(0, Math.min(255, Math.floor(n))); var s = n.toString(16); return s.length < 2 ? '0' + s : s; }
+
+function getAppMac() {
+    try {
+        if (global.HdxNative && typeof global.HdxNative.appMac === 'function') return String(global.HdxNative.appMac() || '').toUpperCase();
+        var seed = global.HdxNative && typeof global.HdxNative.deviceId === 'function' ? String(global.HdxNative.deviceId() || '') : '';
+        if (!seed) { try { seed = localStorage.getItem('zx_did') || ''; } catch (e) {} }
+        if (!seed) seed = 'ultraplayer-device';
+        var h1 = 2166136261, h2 = 2246822519;
+        for (var i = 0; i < seed.length; i++) { var c = seed.charCodeAt(i); h1 = Math.imul(h1 ^ c, 16777619); h2 = Math.imul(h2 ^ (c + i), 3266489917); }
+        var hex = ((h1 >>> 0).toString(16) + (h2 >>> 0).toString(16) + '000000000000').slice(0, 12).toUpperCase();
+        var oct = parseInt(hex.slice(0, 2), 16); oct = (oct | 2) & 254; var octHex = oct.toString(16).toUpperCase(); if (octHex.length < 2) octHex = '0' + octHex; hex = octHex + hex.slice(2);
+        return (hex.match(/.{1,2}/g) || []).join(':');
+    } catch (e) { return '00:00:00:00:00:00'; }
+}
+function getDid() {
+    // MAC injetado pelo shell (licenciamento por aparelho) tem prioridade.
+    if (global.__DID) return global.__DID;
+    // Android: id ESTÁVEL por aparelho (Settings.Secure.ANDROID_ID via HdxNative).
+    // Sobrevive à desinstalação/reinstalação → o cliente NÃO perde a licença paga
+    // ao reinstalar (sem isto, o zx_did do localStorage some e vira device novo).
+    try {
+        if (global.HdxNative && global.HdxNative.deviceId) {
+            var nd = global.HdxNative.deviceId();
+            if (nd && ('' + nd).length >= 8) {
+                global.__DID = 'and-' + nd;
+                try { localStorage.setItem('zx_did', global.__DID); } catch (e) {}
+                return global.__DID;
+            }
+        }
+    } catch (e) {}
+    try { var d = localStorage.getItem('zx_did'); if (!d) { d = 'win-' + Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem('zx_did', d); } return d; }
+    catch (e) { return 'win-anon'; }
+}
+function saveCreds() { try { localStorage.setItem('zx_creds', JSON.stringify({ code: S.code, user: S.user, pass: S.pass })); } catch (e) {} }
+function loadCreds() { try { return JSON.parse(localStorage.getItem('zx_creds') || 'null'); } catch (e) { return null; } }
+function clearCreds() { try { localStorage.removeItem('zx_creds'); } catch (e) {} }
+function platform() {
+    // Plataforma REAL do aparelho (vira o &plat= que o servidor usa no painel).
+    // Android = ponte HdxNative; Samsung = webapis.avplay; senão PC (WebView2).
+    try {
+        if (window.HdxNative && window.HdxNative.play) return 'android';
+        if (window.webapis && window.webapis.avplay && window.webapis.avplay.open) return 'tizen';
+    } catch (e) {}
+    return 'windows';
+}
+
+/* ---------- chamadas ---------- */
+// IPTV DIRETO
+function xt(action, extra) {
+    var u = S.server + '/player_api.php?username=' + enc(S.user) + '&password=' + enc(S.pass) + '&action=' + action + (extra || '');
+    return fetch(u, { credentials: 'omit' }).then(function (r) { return r.json(); }).catch(function () { return null; });
+}
+// fetch com TIMEOUT — VPS pendurada NÃO pode travar o app (cai pro cache rápido)
+function fetchT(url, ms, options) {
+    ms = ms || 8000;
+    options = options || { credentials: 'omit' };
+    if (!options.credentials) options.credentials = 'omit';
+    if (typeof AbortController === 'undefined') return fetch(url, options);
+    var ctl = new AbortController();
+    var t = setTimeout(function () { try { ctl.abort(); } catch (e) {} }, ms);
+    options.signal = ctl.signal;
+    return fetch(url, options)
+        .then(function (r) { clearTimeout(t); return r; }, function (e) { clearTimeout(t); throw e; });
+}
+// painel /api/r/* (auth por code/user/pass/did) — com timeout + rastreio online/offline.
+// Retorna null quando a VPS está fora (o chamador usa cache/fila).
+function api(path, qs, timeoutMs) {
+    if (S.directAuth || directModeStored()) return Promise.resolve(null);
+    var did = global.__DID || S.did || getDid();
+    var u = apiBase() + '/api/r/' + path + '?code=' + enc(S.code) + '&user=' + enc(S.user) + '&pass=' + enc(S.pass) + '&did=' + enc(did) + '&plat=' + platform() + (qs || '');
+    return fetchT(u, timeoutMs).then(function (r) { return r.json(); })
+        .then(function (j) { setOnline(true); return j; })
+        .catch(function () { setOnline(false); return null; });
+}
+
+/* ============================================================
+ * RESILIÊNCIA OFFLINE — se a VPS (painel) cair, o app continua com os
+ * dados salvos; re-verifica (vencimento/DNS/licença) quando ela voltar.
+ * O catálogo/stream vêm do IPTV (independe da VPS). Só o vídeo precisa de
+ * internet (inerente). Foco: nunca derrubar todos os clientes numa queda.
+ * ============================================================ */
+function lsGet(k) { try { return JSON.parse(localStorage.getItem(profKey(k)) || 'null'); } catch (e) { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(profKey(k), JSON.stringify(v)); } catch (e) {} }
+
+function setOnline(on) {
+    if (S.online === on) return;
+    S.online = on;
+    try { applyOfflineHint(); } catch (e) {}   // mostra/esconde (só vale na home)
+    if (on) { try { flushQueue(); } catch (e) {} }
+}
+// Aviso de offline: aparece SÓ na tela inicial (home). Em conteúdo (filmes/
+// séries/canais/detalhe/player) ele atrapalhava por cima da grade. É um <div>
+// no body (persiste entre renders) → reavaliado no render() e no setOnline().
+function applyOfflineHint() {
+    var show = (S.online === false) && (S.onHome === true);
+    var el = $('zx-offline');
+    if (!show) { if (el) el.style.display = 'none'; return; }
+    if (!el) {
+        el = document.createElement('div'); el.id = 'zx-offline';
+        el.style.cssText = 'position:fixed;left:14px;bottom:14px;z-index:99998;background:rgba(12,16,14,.96);border:1px solid #c9542e;color:#ffd9cc;font:13px "Segoe UI",sans-serif;padding:8px 14px;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.5)';
+        el.innerHTML = te('⚠ Sem conexão com o painel — usando dados salvos');
+        if (document.body) document.body.appendChild(el);
+    }
+    el.style.display = 'block';
+}
+
+/* ---- snapshot do resolve (dns/licença/branding/aviso) ---- */
+function saveSnap(d) { lsSet('zx_snap', { ts: Date.now(), code: S.code, user: S.user, d: d }); }
+function loadSnap() {
+    var s = lsGet('zx_snap');
+    if (s && s.code === S.code && s.user === S.user && s.d) return s;
+    return null;
+}
+function snapAgeDays(s) { try { return (Date.now() - (s.ts || 0)) / 86400000; } catch (e) { return 1e9; } }
+// Quanto tempo o snapshot pode abrir o app SEM re-verificar na VPS:
+// • Aparelho GRÁTIS (DNS cadastrado/server_code) NUNCA expira no lado UltraPlayer →
+//   numa queda longa do painel ele continua abrindo por ~anos (não derruba os
+//   10 mil de uma operadora). A licença real é a do IPTV, que é checada no play.
+// • Aparelho PAGO (URL avulsa) re-verifica em 30 dias, pra valer a cobrança.
+function snapMaxDays(s) { try { if (s && s.d && s.d.license && s.d.license.free) return 3650; } catch (e) {} return 30; }
+
+/* ---- favoritos: persistência + reconciliação ao reconectar ---- */
+function persistFav() { lsSet('zx_fav', S.fav); lsSet('zx_favdirty', S.favDirty); lsSet('zx_favmeta', S.favMeta); }
+function loadFav() {
+    var f = lsGet('zx_fav'); if (f) { S.fav = f; S.fav.live = S.fav.live || []; S.fav.movie = S.fav.movie || []; S.fav.series = S.fav.series || []; }
+    var d = lsGet('zx_favdirty'); if (d) S.favDirty = d;
+    var m = lsGet('zx_favmeta'); if (m) S.favMeta = m;
+}
+function markFavDirty(k, id) { id = +id; if (S.favDirty[k].indexOf(id) < 0) S.favDirty[k].push(id); }
+// Aplica o DESEJADO local em cima do que o servidor diz (ao reconectar). Empurra só
+// o que MUDOU offline (dirty) → idempotente, sobrevive a timeout falso-negativo e
+// respeita mudanças feitas em OUTRO aparelho (adota o servidor no que não é dirty).
+function reconcileFav(serverFav) {
+    serverFav = serverFav || { live: [], movie: [], series: [] };
+    ['live', 'movie', 'series'].forEach(function (k) {
+        var sv = (serverFav[k] || []).map(Number);
+        var dirty = (S.favDirty[k] || []).map(Number);
+        dirty.forEach(function (id) {
+            var desired = inArr(S.fav[k], id), serverHas = sv.indexOf(id) >= 0;
+            if (desired !== serverHas) {
+                var m = S.favMeta[k + ':' + id] || {};
+                api('fav/toggle', '&kind=' + enc(k) + '&id=' + enc(id) + '&name=' + enc(m.name || '') + '&poster=' + enc(m.poster || ''));
+            }
+        });
+        var merged = sv.filter(function (id) { return dirty.indexOf(id) < 0; });
+        dirty.forEach(function (id) { if (inArr(S.fav[k], id) && merged.indexOf(id) < 0) merged.push(id); });
+        S.fav[k] = merged;
+    });
+    S.favDirty = { live: [], movie: [], series: [] };
+    persistFav();
+}
+// Favoritar — 100% LOCAL (modelo HDX): vive no aparelho, NÃO vai pro painel.
+// Evita conflito de versões e funciona offline. id + nome/capa em localStorage.
+function favToggle(kind, id, name, poster) {
+    var k = kind === 'live' ? 'live' : kind === 'series' ? 'series' : 'movie';
+    id = parseInt(id, 10);
+    var on = !inArr(S.fav[k], id);
+    if (on) S.fav[k].push(id); else S.fav[k] = S.fav[k].filter(function (x) { return +x !== id; });
+    S.favMeta[k + ':' + id] = { name: name || '', poster: poster || '' };
+    persistFav();
+    return on;
+}
+// Lista de favoritos LOCAL pra montar a tela (mais novo primeiro).
+function localFavList(k) {
+    var ids = S.fav[k] || [], out = [];
+    for (var i = ids.length - 1; i >= 0; i--) { var id = ids[i], m = S.favMeta[k + ':' + id] || {}; out.push({ id: id, name: m.name || '', poster: m.poster || '', logo: m.poster || '' }); }
+    return out;
+}
+
+/* ---- fila de escrita (progresso/recentes) p/ enviar ao reconectar ---- */
+function enqueue(op) { var q = lsGet('zx_pending') || []; q.push(op); if (q.length > 800) q = q.slice(-800); lsSet('zx_pending', q); }
+function flushQueue() {
+    var q = lsGet('zx_pending') || []; if (!q.length) return;
+    // dedupe progresso por item (mantém o último)
+    var seen = {}, out = [];
+    for (var i = q.length - 1; i >= 0; i--) {
+        var o = q[i], key = o.t === 'prog' ? ('prog:' + o.kind + ':' + o.id) : null;
+        if (key) { if (seen[key]) continue; seen[key] = 1; }
+        out.unshift(o);
+    }
+    lsSet('zx_pending', []);
+    out.forEach(function (o) {
+        if (o.t === 'prog') api('progress/save', '&kind=' + enc(o.kind) + '&id=' + enc(o.id) + '&pos=' + enc(o.pos) + '&dur=' + enc(o.dur) + '&name=' + enc(o.name || '') + '&poster=' + enc(o.poster || ''));
+        else if (o.t === 'recent') api('recent/track', '&id=' + enc(o.id) + '&name=' + enc(o.name || '') + '&logo=' + enc(o.logo || '') + '&adult=' + enc(o.adult || 0));
+    });
+}
+
+/* ---- leituras com cache (fav/list, continue/list, recent/live) ---- */
+function apiCached(path, qs, key) {
+    return api(path, qs).then(function (d) {
+        if (d && d.ok) { lsSet(key, d); return d; }
+        return lsGet(key);   // VPS fora → último conhecido
+    });
+}
+
+/* ---- "Continue Assistindo" + progresso — 100% LOCAL (modelo HDX) ----
+ * Tudo vive no aparelho (localStorage), NADA vai pro painel. Evita conflito de
+ * versões e funciona offline. Série usa o SERIES_id (não o episódio). */
+/* Conteúdo ADULTO? Checa o nome (xxx/+18/adult/porn) e, se o catálogo já estiver
+   em cache, a CATEGORIA do item (flag adult vinda do isAdultName da categoria).
+   Usado pra NUNCA expor capa adulta na tela inicial (Assistido Recentemente). */
+function isAdultContent(kind, id, name) {
+    if (isAdultName(name)) return true;
+    try {
+        kind = (kind === 'series') ? 'series' : 'movies';
+        var c = S.cat && S.cat[kind]; if (!c || !c.all) return false;
+        id = parseInt(id, 10);
+        for (var i = 0; i < c.all.length; i++) {
+            var s = c.all[i];
+            var sid = parseInt((kind === 'series' ? (s.series_id || s.stream_id) : s.stream_id) || 0, 10);
+            if (sid === id) {
+                var cid = String(s.category_id || '');
+                for (var j = 0; j < c.cats.length; j++) { if (c.cats[j].category_id === cid) return !!c.cats[j].adult; }
+                return false;
+            }
+        }
+    } catch (e) {}
+    return false;
+}
+function bumpContinue(sec, id, name, poster, remove) {
+    sec = (sec === 'series') ? 'series' : 'vod';
+    id = parseInt(id, 10); if (!id) return;
+    var listKey = 'zx_cont_' + sec, d = lsGet(listKey) || { ok: true, items: [] };
+    if (!d.items) d.items = [];
+    d.items = d.items.filter(function (it) { return parseInt(it.id, 10) !== id; });
+    if (!remove) d.items.unshift({ id: id, name: name || '', poster: poster || '', ts: Date.now(), adult: isAdultContent(sec === 'series' ? 'series' : 'movies', id, name) ? 1 : 0 });
+    if (d.items.length > 60) d.items = d.items.slice(0, 60);
+    lsSet(listKey, d);
+}
+function continueList(sec) {
+    sec = (sec === 'series') ? 'series' : 'vod';
+    var d = lsGet('zx_cont_' + sec) || { ok: true, items: [] };
+    return Promise.resolve({ ok: true, items: d.items || [] });
+}
+// Progresso (posição) LOCAL — pra retomar de onde parou (resume).
+function saveProgress(kind, id, pos, dur, name, poster) {
+    try { lsSet('zx_prog:' + kind + ':' + parseInt(id, 10), { pos: pos, dur: dur, ts: Date.now() }); } catch (e) {}
+}
+function getProgress(kind, id) { return lsGet('zx_prog:' + kind + ':' + parseInt(id, 10)) || null; }
+// Canais recentes — LOCAL (no aparelho). Não guarda adulto no histórico.
+function trackRecent(id, name, logo, adult) {
+    if (+adult) return;
+    id = parseInt(id, 10); if (!id) return;
+    var key = 'zx_recent_live', d = lsGet(key) || { ok: true, items: [] };
+    if (!d.items) d.items = [];
+    d.items = d.items.filter(function (it) { return parseInt(it.id, 10) !== id; });
+    d.items.unshift({ id: id, name: name || '', logo: logo || '', ts: Date.now() });
+    if (d.items.length > 40) d.items = d.items.slice(0, 40);
+    lsSet(key, d);
+}
+function recentLiveList() { var d = lsGet('zx_recent_live') || { items: [] }; return d.items || []; }
+// info de detalhe com 1 retry — o IPTV às vezes responde vazio/lento e o
+// detalhe (capa/temporadas/episódios) vinha em branco. 2ª tentativa resolve.
+function xtInfo(action, extra) {
+    return xt(action, extra).then(function (d) {
+        if (d && (d.info || d.movie_data || d.episodes)) return d;
+        return xt(action, extra);
+    });
+}
+// Série: o get_series_info às vezes volta SEM episódios (IPTV lento) → o detalhe
+// abria vazio (sem episódios/botão). Re-tenta até vir com episódios.
+function xtSeriesInfo(id, tries) {
+    tries = tries || 0;
+    return xt('get_series_info', '&series_id=' + enc(id)).then(function (d) {
+        var eps = (d && d.episodes) || {}, has = false;
+        for (var z in eps) if (eps.hasOwnProperty(z)) { has = true; break; }
+        if (!has && tries < 2) return xtSeriesInfo(id, tries + 1);
+        return d;
+    });
+}
+function streamUrl(kind, id, ext) {
+    var u = enc(S.user), p = enc(S.pass);
+    if (kind === 'live') return S.server + '/live/' + u + '/' + p + '/' + id + '.m3u8';
+    if (kind === 'movie') return S.server + '/movie/' + u + '/' + p + '/' + id + '.' + (ext || 'mp4');
+    return S.server + '/series/' + u + '/' + p + '/' + id + '.' + (ext || 'mp4');
+}
+
+/* ---------- branding (logo/nome/cor/fundo) ---------- */
+function brandLogoHtml() {
+    var b = S.branding || {};
+    if (b.logo_url) return '<img src="' + attr(b.logo_url) + '" alt="' + attr(b.brand_name || 'UltraPlayer') + '" class="brand-logo-img">';
+    var name = b.brand_name || 'UltraPlayer';
+    if (name.length >= 2) return '<div class="brand-logo">' + esc(name.slice(0, -1)) + '<span class="accent">' + esc(name.slice(-1)) + '</span></div>';
+    return '<div class="brand-logo"><span class="accent">' + esc(name) + '</span></div>';
+}
+function applyAccent(accent) {
+    S.accent = accent || '#10b981';
+    if (!S.rawCss) return;
+    var css = S.rawCss;
+    var a = S.accent;
+    if (a && a.toLowerCase() !== '#ff2a3d' && /^#[0-9a-fA-F]{6}$/.test(a)) {
+        var r = parseInt(a.substr(1, 2), 16), g = parseInt(a.substr(3, 2), 16), b = parseInt(a.substr(5, 2), 16);
+        var darker = '#' + h2(r * 0.85) + h2(g * 0.85) + h2(b * 0.85);
+        css = css.replace(/#ff2a3d/gi, a).replace(/#e02531/gi, darker);
+        css = css.replace(/255,\s*42,\s*61/g, r + ',' + g + ',' + b);
+        css = css.replace(/40,\s*10,\s*12/g, Math.floor(r * 0.16) + ',' + Math.floor(g * 0.16) + ',' + Math.floor(b * 0.16));
+    }
+    var st = $('hdx-css');
+    if (!st) { st = document.createElement('style'); st.id = 'hdx-css'; document.head.appendChild(st); }
+    st.textContent = css;
+    // spinner do #app-loading acompanha o accent
+    try { var sp = document.querySelector('#app-loading .lo-spinner'); if (sp) sp.style.borderTopColor = S.accent; } catch (e) {}
+}
+function applyWallpaper(url) {
+    var st = $('zx-wall');
+    if (!url) { if (st) st.parentNode.removeChild(st); return; }
+    if (!st) { st = document.createElement('style'); st.id = 'zx-wall'; document.head.appendChild(st); }
+    st.textContent = '.bg-diamonds{background-color:#080808;'
+        + "background-image:url('" + url + "');"
+        + "background-image:linear-gradient(rgba(8,8,8,0.60),rgba(8,8,8,0.82)),url('" + url + "');"
+        + 'background-position:center center;background-repeat:no-repeat;background-size:cover;}';
+}
+function applyBranding(b) {
+    if (!b) return;
+    S.branding = b;
+    var title = b.app_title || ((b.brand_name || 'UltraPlayer') + ' Player');
+    try { document.title = title; } catch (e) {}
+    applyAccent(b.accent || '#10b981');
+    applyWallpaper(b.wallpaper_url || '');
+}
+function loadCss() {
+    // ⚠️ Android WebView BLOQUEIA fetch() de file:// — MAS o XMLHttpRequest
+    // respeita setAllowFileAccessFromFileURLs(true). Por isso usamos XHR (vale
+    // PC E Android): pega o texto do tv.css → applyAccent injeta com o accent
+    // esmeralda. Fallback <link> só se o XHR falhar (aí cai na cor base do CSS).
+    function viaLink() {
+        try {
+            if (document.getElementById('zx-css-link')) return;
+            var l = document.createElement('link');
+            l.id = 'zx-css-link'; l.rel = 'stylesheet'; l.href = 'assets/tv.css';
+            document.head.appendChild(l);
+        } catch (e) {}
+    }
+    function applyText(t) { if (t && t.length > 100) { S.rawCss = t; applyAccent(S.accent); } else viaLink(); }
+    try {
+        var x = new XMLHttpRequest();
+        x.open('GET', 'assets/tv.css', true);
+        x.onreadystatechange = function () {
+            if (x.readyState !== 4) return;
+            if ((x.status === 200 || x.status === 0) && x.responseText) applyText(x.responseText);
+            else viaLink();
+        };
+        x.onerror = viaLink;
+        x.send();
+    } catch (e) { viaLink(); }
+    return Promise.resolve();
+}
+
+/* ---------- mapeadores Xtream → tile ---------- */
+function sortNewest(list, key) {
+    list.sort(function (a, b) {
+        var av = parseInt(a[key] || 0, 10) || 0, bv = parseInt(b[key] || 0, 10) || 0;
+        if (av !== bv) return bv - av;
+        return (parseInt(b.stream_id || b.series_id || 0, 10) || 0) - (parseInt(a.stream_id || a.series_id || 0, 10) || 0);
+    });
+    return list;
+}
+// tile de pôster (EXATO _tiles_poster.php) — nome embaixo, sem nota, lazy
+function posterTile(s, kind) {
+    var sid, href, name, poster;
+    if (kind === 'movies') {
+        sid = parseInt(s.stream_id || 0, 10); href = '/movies/' + sid; name = s.name || 'Filme';
+        poster = tmdbResize(s.stream_icon || '');
+    } else {
+        sid = parseInt(s.series_id || s.stream_id || 0, 10); href = '/series/' + sid; name = s.name || 'Série';
+        poster = tmdbResize(s.cover || s.stream_icon || '');
+    }
+    return '<a class="poster-tile-tv" href="' + href + '">'
+        + '<div class="pt-img"' + (poster ? ' data-src="' + attr(poster) + '"' : '') + '>'
+        + '<div class="pt-fallback">' + esc((name || '').slice(0, 2)) + '</div></div>'
+        + '<div class="pt-name">' + esc(name) + '</div></a>';
+}
+function posterTiles(list, kind) { var h = ''; for (var i = 0; i < list.length; i++) h += posterTile(list[i], kind); return h; }
+// Ajusta os tiles de PÔSTER pra ENCHER a fileira do grid ATUAL. Favoritos e
+// busca são FULL-WIDTH (sem sidebar) e NÃO carregam o category_browser; sem isto
+// herdavam a % do CATÁLOGO (estreito por causa da sidebar) → pôsteres GIGANTES.
+// Recalcula pela largura REAL deste grid. Mesmo cálculo/elemento (#zx-grid-fit)
+// do category_browser. Não roda em ui-tv (Samsung/LG não passam por aqui).
+function fitPosterGrid(grid) {
+    if (!grid) return;
+    try { if ((' ' + document.body.className + ' ').indexOf(' ui-tv ') >= 0) return; } catch (e) {}
+    var w = grid.clientWidth || 0;
+    if (w < 40) return;
+    var c = Math.round(w / (global.__ZX_TILE_TARGET || 210));   // alvo menor no modo Celular → mais colunas
+    if (c < 3) c = 3; else if (c > 8) c = 8;
+    var pct = Math.floor((100 / c) * 10000) / 10000;
+    var id = grid.id || 'content-grid';
+    var st = $('zx-grid-fit');
+    if (!st) { st = document.createElement('style'); st.id = 'zx-grid-fit'; (document.head || document.documentElement).appendChild(st); }
+    st.textContent = '#' + id + ' .poster-tile-tv{width:' + pct + '%;margin:0 0 16px;padding:0 7px;-webkit-box-sizing:border-box;box-sizing:border-box}';
+}
+// tile de canal (EXATO _tiles_channel.php)
+function channelTile(s, i) {
+    var sid = parseInt(s.stream_id || 0, 10);
+    var name = s.name || 'Canal';
+    var num = parseInt(s.num || (i + 1), 10);
+    var logo = s.stream_icon || '';
+    var isFav = inArr(S.fav.live, sid);
+    return '<a class="channel-tile-tv" tabindex="0"'
+        + ' data-href="/live/channel/' + sid + '?name=' + encodeURIComponent(name) + '&logo=' + encodeURIComponent(logo) + '"'
+        + ' data-sid="' + sid + '" data-name="' + attr(name) + '" data-logo="' + attr(logo) + '">'
+        + '<div class="ct-logo"' + (logo ? ' data-logo="' + attr(logo) + '"' : '') + '><span class="ct-fallback">📺</span></div>'
+        + '<div class="ct-info"><div class="ct-num">#' + num + '</div><div class="ct-name">' + esc(name) + '</div></div>'
+        + '<span class="ct-fav ' + (isFav ? 'is-fav' : '') + '" tabindex="-1" data-sid="' + sid + '" data-name="' + attr(name) + '" data-logo="' + attr(logo) + '" aria-label="Favoritar canal">'
+        + '<svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></span></a>';
+}
+function channelTiles(list) { var h = ''; for (var i = 0; i < list.length; i++) h += channelTile(list[i], i); return h; }
+
+/* ---------- catálogo (carrega tudo 1x por seção; igual HDX direto) ---------- */
+var PAGE = 100;
+function ensureCatalog(kind) {
+    // kind: 'movies' | 'series' | 'live'. Resolve → { cats:[{category_id,category_name,num,adult}], byCat:{}, all:[] }
+    if (S.cat[kind]) return Promise.resolve(S.cat[kind]);
+    var catsAction = kind === 'live' ? 'get_live_categories' : kind === 'movies' ? 'get_vod_categories' : 'get_series_categories';
+    var listAction = kind === 'live' ? 'get_live_streams' : kind === 'movies' ? 'get_vod_streams' : 'get_series';
+    var newKey = kind === 'series' ? 'last_modified' : 'added';
+    return Promise.all([xt(catsAction), xt(listAction)]).then(function (res) {
+        // PC + ANDROID (não Samsung): o xt() devolve null quando o fetch FALHA
+        // (offline). Sem isto, processava [null,null] como sucesso e CACHEAVA o
+        // vazio → ao voltar a internet o `if(S.cat[kind])` devolvia o cache vazio
+        // (só limpava reabrindo). Agora: falhou → NÃO cacheia + sinaliza "Recarregar".
+        if (!tizenAvail() && (res[0] === null || res[1] === null)) throw { zxOffline: 1 };
+        var cats = arr1(res[0]), all = arr1(res[1]);
+        var byCat = {};
+        for (var i = 0; i < all.length; i++) {
+            var cid = String(all[i].category_id || '');
+            if (!byCat[cid]) byCat[cid] = [];
+            byCat[cid].push(all[i]);
+        }
+        if (kind !== 'live') { for (var c in byCat) if (byCat.hasOwnProperty(c)) sortNewest(byCat[c], newKey); sortNewest(all, newKey); }
+        var outCats = [];
+        for (var j = 0; j < cats.length; j++) {
+            var id = String(cats[j].category_id || '');
+            outCats.push({ category_id: id, category_name: cats[j].category_name || '—', num: (byCat[id] ? byCat[id].length : 0), adult: isAdultName(cats[j].category_name) });
+        }
+        S.cat[kind] = { cats: outCats, byCat: byCat, all: all };
+        return S.cat[kind];
+    });
+}
+function streamsForCat(kind, catId) {
+    var c = S.cat[kind]; if (!c) return [];
+    return c.byCat[String(catId)] || [];
+}
+
+/* ============================================================
+ * SHIM — intercepta Tv.get / Tv.post (XHR do tv.js) p/ servir as URLs
+ * que o category_browser.js e o controlador de EPG pedem, a partir do
+ * IPTV/api. hls.js (segmentos) NÃO passa por aqui → fica intocado.
+ * ============================================================ */
+function parseUrl(u) {
+    u = u || '';
+    var q = ''; var i = u.indexOf('?'); if (i >= 0) { q = u.slice(i + 1); u = u.slice(0, i); }
+    // tira base/origem
+    if (u.indexOf('http') === 0) { var m = u.match(/^https?:\/\/[^/]+(\/.*)$/); u = m ? m[1] : u; }
+    var b = global.__BASE || ''; if (b && u.indexOf(b) === 0) u = u.slice(b.length) || '/';
+    var qs = {}; if (q) { var ps = q.split('&'); for (var k = 0; k < ps.length; k++) { var kv = ps[k].split('='); qs[decodeURIComponent(kv[0] || '')] = decodeURIComponent(kv[1] || ''); } }
+    return { path: u, qs: qs };
+}
+function shimGet(url, cb) {
+    var pu = parseUrl(url), path = pu.path, qs = pu.qs, m;
+    // categoria de filmes/séries (paginada)
+    m = path.match(/^\/(movies|series)\/category\/(\d+)$/);
+    if (m && qs.ajax === '1') {
+        var kind = m[1], catId = m[2], page = parseInt(qs.page || '1', 10) || 1;
+        ensureCatalog(kind).then(function () {
+            var list = streamsForCat(kind, catId);
+            var start = (page - 1) * PAGE, slice = list.slice(start, start + PAGE);
+            cb({ html: posterTiles(slice, kind), has_more: (start + PAGE) < list.length }, 200);
+        });
+        return true;
+    }
+    // categoria de canais (sem paginação)
+    m = path.match(/^\/live\/category\/(\d+)$/);
+    if (m && qs.ajax === '1') {
+        var lc = m[1];
+        ensureCatalog('live').then(function () { cb({ html: channelTiles(streamsForCat('live', lc)) }, 200); });
+        return true;
+    }
+    // todos os canais (busca instantânea)
+    if (path === '/api/live/all') {
+        ensureCatalog('live').then(function () {
+            var all = S.cat.live.all, out = [];
+            for (var i = 0; i < all.length; i++) {
+                var s = all[i]; if (isAdultName(s.category_name)) {}
+                out.push({ id: parseInt(s.stream_id || 0, 10), name: s.name || '', logo: s.stream_icon || '', num: parseInt(s.num || (i + 1), 10), fav: inArr(S.fav.live, s.stream_id) ? 1 : 0 });
+            }
+            cb({ items: out }, 200);
+        });
+        return true;
+    }
+    // EPG de um canal
+    m = path.match(/^\/api\/live\/epg\/(\d+)$/);
+    if (m) {
+        var sid = m[1];
+        xt('get_short_epg', '&stream_id=' + enc(sid) + '&limit=6').then(function (d) {
+            var listings = (d && d.epg_listings) || [], epg = [];
+            for (var i = 0; i < listings.length; i++) {
+                var p = listings[i];
+                epg.push({ title: b64(p.title), start: hhmm(p.start), end: hhmm(p.end) });
+            }
+            cb({ epg: epg }, 200);
+        });
+        return true;
+    }
+    return false;
+}
+function shimPost(url, data, cb) {
+    var pu = parseUrl(url), path = pu.path;
+    if (path === '/api/favorites/toggle') {
+        // caminho ÚNICO (otimista + reconcilia ao reconectar)
+        var on = favToggle(fd(data, 'kind'), fd(data, 'item_id'), fd(data, 'name'), fd(data, 'poster'));
+        updateFavCounts();   // contador da sidebar reflete NA HORA (o coração do canal não navega)
+        cb({ ok: true, favorited: on }, 200);
+        return true;
+    }
+    if (path === '/api/progress/save' || path === '/api/progress/complete') {
+        var done = path.indexOf('complete') >= 0;
+        saveProgress(fd(data, 'kind'), fd(data, 'item_id'), done ? 0 : fd(data, 'position'), fd(data, 'duration'), fd(data, 'name'), fd(data, 'poster'));
+        cb({ ok: true }, 200);
+        return true;
+    }
+    if (path === '/api/csrf') { cb({ csrf: '' }, 200); return true; }
+    return false;
+}
+function fd(data, k) {
+    try { if (data && typeof data.get === 'function') return data.get(k) || ''; } catch (e) {}
+    return '';
+}
+function b64(s) {
+    if (!s) return '';
+    try { return decodeURIComponent(escape(global.atob(s))); } catch (e) { try { return global.atob(s); } catch (e2) { return s; } }
+}
+function hhmm(s) { s = String(s || ''); var m = s.match(/(\d{2}):(\d{2})/); return m ? (m[1] + ':' + m[2]) : ''; }
+
+function installShim() {
+    if (S._shim) return; S._shim = true;
+    if (!global.Tv) global.Tv = {};
+    var realGet = global.Tv.get, realPost = global.Tv.post;
+    global.Tv.get = function (url, cb) { if (shimGet(url, function (d, st) { if (cb) cb(d, st); })) return; if (realGet) realGet(url, cb); };
+    global.Tv.post = function (url, data, cb) { if (shimPost(url, data, function (d, st) { if (cb) cb(d, st); })) return; if (realPost) realPost(url, data, cb); };
+}
+
+/* ============================================================
+ * ROTEADOR (History API → tv.js history.back() funciona)
+ * ============================================================ */
+function setHtml(html) { root().innerHTML = html; translateTree(root()); }
+function afterRender() { try { if (global.__hdxTv && global.__hdxTv.afterSwap) global.__hdxTv.afterSwap(); } catch (e) {} }
+function runScript(src) { var s = document.createElement('script'); s.src = src; document.body.appendChild(s); }
+
+// ⚠️ Em file:// NÃO se pode mexer na URL (pushState('/movies/123') viraria
+// file:///movies/123 → ao Voltar/recarregar o WebView2 dá ERR_FILE_NOT_FOUND).
+// Por isso navegamos SÓ pelo estado do histórico, mantendo a URL = index.html.
+function patchHistory() {
+    if (history.__zxPatched) return; history.__zxPatched = true;
+    var op = history.pushState, orp = history.replaceState;
+    // ignora o arg de URL (3º) → a URL nunca muda do index.html
+    history.pushState = function (st, t) { return op.call(history, st, t); };
+    // replaceState(null,...) (ex.: category_browser) NÃO apaga nosso estado.
+    // ⚠️ MAS o caminho SPA tem que acompanhar a troca in-place de categoria
+    // (o category_browser chama replaceState(null,'','/movies/category/N')):
+    // sem isso, depois de uma virtual (Recém adicionados/Favoritos/Continue) o
+    // estado ficava preso em /movies/recent e o Voltar de um detalhe caía na
+    // virtual em vez da categoria real. Só filmes/séries — canais têm fluxo próprio.
+    history.replaceState = function (st, t, u) {
+        if (st == null && typeof u === 'string') {
+            var p = u, b = global.__BASE || '';
+            if (b && p.indexOf(b) === 0) p = p.slice(b.length) || '/';
+            if (/^\/(movies|series)\/category\/\d+$/.test(p)) return orp.call(history, { zx: 1, p: p }, t);
+        }
+        return orp.call(history, (st == null ? history.state : st), t);
+    };
+}
+function go(path, replace) {
+    try { if (replace) history.replaceState({ zx: 1, p: path }); else history.pushState({ zx: 1, p: path }); } catch (e) {}
+    render(path);
+}
+function render(path) {
+    // Saindo do player? salva o progresso ANTES de trocar a tela (o evento
+    // 'pause' NÃO dispara quando o <video> é removido do DOM, então só o save de
+    // 10 em 10s pegava — quem saísse antes perdia a posição). Agora sempre salva.
+    if (S.leavePlayer) { var lp = S.leavePlayer; S.leavePlayer = null; try { lp(); } catch (e) {} }
+    if (S._avCleanup) { var ac = S._avCleanup; S._avCleanup = null; try { ac(); } catch (e) {} }   // Tizen: para/fecha o AVPlay ao sair
+    path = path || '/home';
+    // tira query pra rotear; guarda pra player
+    var qIdx = path.indexOf('?'); var query = qIdx >= 0 ? path.slice(qIdx + 1) : ''; var p = qIdx >= 0 ? path.slice(0, qIdx) : path;
+    var b = global.__BASE || ''; if (b && p.indexOf(b) === 0) p = p.slice(b.length) || '/';
+    var m;
+    // aviso de offline só na home (não por cima do conteúdo)
+    S.onHome = (p === '/home' || p === '/' || p === '');
+    try { applyOfflineHint(); } catch (e) {}
+    if (p === '/login') return renderLogin();
+    if (p === '/lists') return renderLists(query);
+    if (p === '/home' || p === '/' || p === '') return renderHome();
+    if (p === '/reload') return doReload();
+    if (p === '/logout') return doLogout();
+    if (p === '/settings') return renderSettings();
+    if (p === '/favorites') return renderFavHome();   // TODOS os favoritos (filmes+séries+canais)
+    if (p === '/movies' || p === '/series' || p === '/live') return renderSection(p.slice(1), {});
+    m = p.match(/^\/(movies|series)\/search$/); if (m) return renderSearch(m[1]);
+    m = p.match(/^\/(movies|series)\/(favorites|recent|continue)$/); if (m) return renderSection(m[1], { virtual: m[2] });
+    m = p.match(/^\/live\/(favorites|recent)$/); if (m) return renderSection('live', { virtual: m[1] });
+    m = p.match(/^\/(movies|series)\/category\/(\d+)$/); if (m) return renderSection(m[1], { catId: m[2] });
+    m = p.match(/^\/live\/category\/(\d+)$/); if (m) return renderSection('live', { catId: m[1] });   // categorias live normalmente carregam in-place; esta rota é p/ o pós-PIN de adulto (go('/live/category/X'))
+    m = p.match(/^\/movies\/(\d+)\/play$/); if (m) return renderPlayerMovie(m[1], query);
+    m = p.match(/^\/series\/(\d+)\/episode\/(\d+)\/play$/); if (m) return renderPlayerEpisode(m[1], m[2], query);
+    m = p.match(/^\/live\/channel\/(\d+)$/); if (m) return renderPlayerLive(m[1], query);
+    m = p.match(/^\/movies\/(\d+)$/); if (m) return renderDetailMovie(m[1]);
+    m = p.match(/^\/series\/(\d+)$/); if (m) return renderDetailSeries(m[1]);
+    renderHome();
+}
+
+/* intercepta cliques internos + popstate */
+function findAnchor(el) { while (el && el !== document) { if (el.tagName && el.tagName.toUpperCase() === 'A') return el; el = el.parentNode; } return null; }
+function isLockedPill(a) { return a && a.querySelector && a.querySelector('.cat-lock'); }
+function installRouter() {
+    if (S._router) return; S._router = true;
+    // ⚠️ ESCUTA NA WINDOW (capture) — roda ANTES dos handlers do tv.js (que ficam
+    // no document e são registrados no parse, antes do boot). O tv.js tem um
+    // handler que faz location.replace(a.href) em QUALQUER link .cat-pill/
+    // .season-pill; em file:// isso vira location.replace("file:///home") =
+    // ERR_FILE_NOT_FOUND (o "← Voltar" da sidebar é um .cat-pill href="/home" →
+    // era exatamente esse o erro ao Voltar de dentro de uma categoria). Tratando
+    // aqui e PARANDO a propagação, o location.replace do tv.js nunca dispara pra
+    // navegação interna. (Pílulas de CATEGORIA seguem SEM parar → o
+    // category_browser troca in-place; o tv.js já tem guard que ignora
+    // /category/\d+. Cliques sem <a>/sem href — teclado, coração de canal,
+    // tile de canal por data-href — caem nos `return` e passam adiante intactos.)
+    global.addEventListener('click', function (e) {
+        var a = findAnchor(e.target);
+        if (!a) return;
+        var href = a.getAttribute('href') || '';
+        if (!href || href.charAt(0) === '#' || href.indexOf('javascript:') === 0) {
+            if (href.indexOf('javascript:history.back()') === 0) { e.preventDefault(); e.stopImmediatePropagation(); history.back(); }
+            return;
+        }
+        if (a.target === '_blank') return;
+        // só internos (mesma origem / relativos)
+        if (/^https?:\/\//i.test(href) && href.indexOf(location.origin) !== 0) return;
+        var b = global.__BASE || ''; var path = href; if (b && path.indexOf(b) === 0) path = path.slice(b.length) || '/';
+        // 🛡️ BLINDAGEM: é link INTERNO → mata JÁ a navegação NATIVA do <a>. Em
+        // file:// um <a href="/x"> não-prevenido vira file:///x =
+        // ERR_FILE_NOT_FOUND. Prevenindo aqui pra TODO link interno (categoria
+        // inclusive), NENHUM clique interno derruba o app, mesmo que um handler
+        // de baixo (category_browser/tv.js) falhe no futuro.
+        e.preventDefault();
+        // categorias normais: o category_browser troca in-place — deixamos a
+        // propagação SEGUIR (só já prevenimos o default acima); o tv.js ignora
+        // /category/\d+ pelo guard próprio.
+        if (/^\/(movies|series|live)\/category\/\d+(\?|$)/.test(path)) {
+            if (isLockedPill(a) && !S.adultOk) { e.stopImmediatePropagation(); promptPin(path); }
+            return;
+        }
+        // TODO o resto (Voltar/home, busca, favoritos/recent/continue, detalhe,
+        // play, settings…) é navegação do roteador local → PÁRA a propagação
+        // (mata o location.replace do tv.js em file://).
+        e.stopImmediatePropagation();
+        // Abrindo um DETALHE a partir do catálogo → guarda a rolagem e quantos
+        // tiles já estavam carregados; ao VOLTAR, renderVodSection re-renderiza a
+        // mesma quantidade e devolve a rolagem (antes voltava pro TOPO da categoria
+        // — pedido do Leonardo: "ficar em cima do filme que escolhi").
+        var dm = path.match(/^\/(movies|series)\/\d+$/);
+        if (dm) {
+            var scEl = document.getElementById('sidebar-content');
+            var grid = document.getElementById('content-grid');
+            if (scEl && grid) {
+                var sbEl = document.querySelector('.cat-sidebar');
+                S.vodPos = { kind: dm[1], top: scEl.scrollTop, count: grid.children.length, href: path,
+                             side: sbEl ? sbEl.scrollTop : 0 };
+            }
+        }
+        // data-replace=1 (ex.: recomendados do detalhe) → SUBSTITUI no histórico
+        // em vez de empilhar → Voltar cai na lista, não sobe de sugestão em
+        // sugestão (mesma intenção do _similar_row.php do web).
+        go(path, a.getAttribute('data-replace') === '1');
+    }, true);
+    global.addEventListener('popstate', function (e) { render((e.state && e.state.p) || '/home'); });
+    // Botão VOLTAR do Android (chamado pelo MainActivity.handleBack): o APP decide.
+    // Na tela INICIAL (home) ou no login → 'exit' (o Java mostra "Sair do app?").
+    // Nas demais telas → volta UMA página. Sem isto o Java dava goBack() cego no
+    // histórico do WebView e a home "voltava" pras telas do boot (ex.: Listas).
+    global.__zxBackAction = function () {
+        // Modal do PIN adulto aberto? Voltar FECHA o modal (antes navegava a
+        // página de trás com o modal ainda na tela).
+        if (S.pinClose) { try { S.pinClose(); } catch (e) {} return 'ok'; }
+        var p = '';
+        try { p = (history.state && history.state.p) || ''; } catch (e) {}
+        if (!p || p === '/home' || p === '/login') return 'exit';
+        try { if (history.length > 1) { history.back(); return 'ok'; } } catch (e) {}
+        try { go('/home', true); return 'ok'; } catch (e) {}
+        return 'exit';
+    };
+    // fechar o app / minimizar no meio do filme → salva o progresso (sync no
+    // localStorage via bumpContinue; o POST pode não completar, mas o "Continue
+    // Assistindo" aparece no próximo abrir e a fila reenvia).
+    global.addEventListener('pagehide', function () { if (S.leavePlayer) { try { S.leavePlayer(); } catch (e) {} } });
+    document.addEventListener('visibilitychange', function () { if (document.hidden && S.leavePlayer) { try { S.leavePlayer(); } catch (e) {} } });
+}
+
+/* ============================================================
+ * TELAS
+ * ============================================================ */
+
+/* ---- ATIVAÇÃO E LOGIN ---- */
+var DIRECT_PANEL_BASE = 'https://renciaapp.manus.space/api/v5';
+function macActivationStop() { try { if (S.macPoll) clearInterval(S.macPoll); } catch (e) {} S.macPoll = null; }
+function macActivationCheck(mac, statusEl, button) {
+    if (button) button.disabled = true;
+    fetchT(DIRECT_PANEL_BASE + '/check_mac.php?mac=' + enc(mac), 10000).then(function (r) { return r.json(); }).then(function (j) {
+        if (j && j.success && j.registered && directResponseToState(j, 'mac', mac)) { macActivationStop(); return; }
+        if (statusEl) statusEl.textContent = 'Aguardando cadastro no painel para este MAC…';
+    }).catch(function () { if (statusEl) statusEl.textContent = 'Sem conexão com o painel. Tentando novamente…'; }).then(function () { if (button) button.disabled = false; });
+}
+function renderMacActivation() {
+    macActivationStop();
+    var mac = getAppMac();
+    var copied = 'MAC copiado';
+    setHtml('<div class="zx-login-screen"><div class="zx-login-card zx-mac-activation">'
+        + '<div class="zx-login-logo">' + brandLogoHtml() + '</div>'
+        + '<h1 class="zx-login-h1">Ative seu UltraPlayer</h1>'
+        + '<div class="zx-login-sub">Copie este MAC e cadastre a lista no painel.</div>'
+        + '<div class="zx-mac-value" id="zx-mac-value">' + esc(mac) + '</div>'
+        + '<button type="button" class="zx-login-btn" id="zx-copy-mac">Copiar MAC</button>'
+        + '<div id="zx-mac-status" class="zx-login-err" style="color:#b7c5be">Aguardando cadastro no painel…</div>'
+        + '<button type="button" class="zx-login-alt" id="zx-login-alt">Entrar com usuário e senha</button>'
+        + '</div></div>' + loginFormStyles() + '<style>.zx-mac-value{margin:18px 0;padding:16px 12px;border:1px solid rgba(76,232,240,.55);border-radius:12px;background:#07131a;color:#4ce8f0;font-size:24px;font-weight:800;letter-spacing:2px;text-align:center}.zx-login-alt{width:100%;margin-top:12px;padding:11px;border:1px solid rgba(255,255,255,.18);border-radius:11px;background:transparent;color:#cdd5d1;font-size:14px}.zx-login-alt:focus{outline:2px solid #4ce8f0}</style>');
+    var status = $('zx-mac-status'), copy = $('zx-copy-mac'), alt = $('zx-login-alt');
+    if (copy) copy.addEventListener('click', function () { try { if (navigator.clipboard) navigator.clipboard.writeText(mac); else { var ta = document.createElement('textarea'); ta.value = mac; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); } } catch (e) {} copy.textContent = copied; setTimeout(function () { if (copy) copy.textContent = 'Copiar MAC'; }, 1800); });
+    if (alt) alt.addEventListener('click', function () { macActivationStop(); renderLogin(); });
+    macActivationCheck(mac, status, null); S.macPoll = setInterval(function () { macActivationCheck(mac, status, null); }, 7000); afterRender();
+}
+/* ---- LOGIN ---- */
+function directModeStored() { try { return localStorage.getItem('zx_direct_mode') || ''; } catch (e) { return ''; } }
+function normalizeMacInput(v) { var hex = String(v || '').replace(/[^0-9a-f]/gi, '').toUpperCase().slice(0, 12), pairs = hex.match(/.{1,2}/g); return pairs ? pairs.join(':') : ''; }
+function playlistToXtream(p, fallbackName) {
+    try {
+        var url = String((p && (p.playlist_url || p.url)) || '');
+        var u = new URL(url);
+        var user = u.searchParams.get('username') || '';
+        var pass = u.searchParams.get('password') || '';
+        if (!user || !pass) return null;
+        return { server: u.protocol + '//' + u.host, user: user, pass: pass, name: (p.playlist_name || p.name || fallbackName || 'Playlist') };
+    } catch (e) { return null; }
+}
+function directResponseToState(j, mode, fallback) {
+    if (!j || j.success === false || j.authorized === false) return null;
+    var list = Array.isArray(j.playlists) ? j.playlists : [];
+    if (!list.length && j.playlist_url) list = [{ playlist_url: j.playlist_url, playlist_name: j.playlist_name || 'Playlist' }];
+    var creds = null;
+    for (var i = 0; i < list.length && !creds; i++) creds = playlistToXtream(list[i], 'Playlist ' + (i + 1));
+    if (!creds) return null;
+    var exp = j.expire_date || j.dataExpiracao || null, expTs = 0;
+    if (exp) { var dt = new Date(exp); if (!isNaN(dt.getTime())) expTs = Math.floor(dt.getTime() / 1000); }
+    S.directAuth = true;
+    S.code = mode === 'mac' ? '__mac__' : '__credentials__';
+    S.user = mode === 'mac' ? String(j.mac || fallback || '') : String(fallback || j.username || '');
+    S.pass = '__direct__'; S.did = getDid(); S.server = creds.server;
+    try { localStorage.setItem('zx_direct_mode', mode); if (mode === 'mac') localStorage.setItem('zx_mac', S.user); } catch (e) {}
+    var d = { ok: true, dns: { base: creds.server, name: j.dns_titulo || '' }, license: { mac: j.mac || fallback || '', exp_date: expTs }, branding: { app_name: j.app_name || 'UltraPlayer', logo: j.logo_url || '', background: j.bg_url || '', banner: j.banner_url || '' } };
+    S.cat = { movies: null, series: null, live: null }; S.favDirty = { live: [], movie: [], series: [] };
+    applyResolve(d, false); saveSnap(d); saveCreds(); go('/home', true); return true;
+}
+function renderLogin() {
+    var c = loadCreds(), savedMac = ''; try { savedMac = localStorage.getItem('zx_mac') || ''; } catch (e) {}
+    setHtml('<div class="zx-login-screen"><form class="zx-login-card" id="login-form" onsubmit="return false">'
+        + '<div class="zx-login-logo">' + brandLogoHtml() + '</div>'
+        + '<h1 class="zx-login-h1">UltraPlayer</h1>'
+        + '<div class="zx-login-sub">Escolha MAC ou usuário e senha.</div>'
+        + loginFieldsHtml(savedMac || (c && c.user), c && c.user)
+        + '</form></div>' + loginFormStyles());
+    bindLoginForm(false); afterRender();
+}
+function loginErrShow(err, msg) { if (!err) return; err.textContent = msg; try { err.scrollIntoView({ block: 'nearest' }); } catch (e) {} }
+function doLogin() {
+    var mode = $('login-mode') ? $('login-mode').value : 'mac', err = $('login-err'), btn = $('login-submit');
+    if (btn && btn.className.indexOf('is-loading') >= 0) return;
+    if (btn) { btn.innerHTML = te('Entrando…'); btn.className += ' is-loading'; }
+    var url, opts, fallback;
+    if (mode === 'mac') {
+        var mac = normalizeMacInput($('login-mac') ? $('login-mac').value : '');
+        if (mac.replace(/:/g, '').length !== 12) { if (btn) btn.className = 'zx-login-btn'; loginErrShow(err, 'Digite um MAC com 12 dígitos hexadecimais.'); return; }
+        fallback = mac; url = DIRECT_PANEL_BASE + '/check_mac.php?mac=' + enc(mac); opts = { credentials: 'omit' };
+    } else {
+        var user = ($('login-user') ? $('login-user').value : '').trim(), pass = $('login-pass') ? $('login-pass').value : '';
+        if (!user || !pass) { if (btn) btn.className = 'zx-login-btn'; loginErrShow(err, t('Preencha tudo.')); return; }
+        fallback = user; url = DIRECT_PANEL_BASE + '/login.php'; opts = { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify({ username: user, password: pass }) };
+    }
+    fetchT(url, 12000, opts).then(function (r) { return r.json(); }).then(function (j) {
+        if (btn) { btn.innerHTML = te('Entrar'); btn.className = 'zx-login-btn'; }
+        if (!directResponseToState(j, mode, fallback)) loginErrShow(err, j && j.error ? j.error : 'Não foi possível entrar. Confira os dados.');
+    }).catch(function () { if (btn) { btn.innerHTML = te('Entrar'); btn.className = 'zx-login-btn'; } loginErrShow(err, 'Sem conexão. Tente de novo.'); });
+}
+/* ---- LISTAS ---- */
+function loginFieldsHtml(macVal, userVal) {
+    var mv = macVal && String(macVal).indexOf('__') !== 0 ? attr(normalizeMacInput(macVal)) : '', uv = userVal && String(userVal).indexOf('__') !== 0 ? attr(userVal) : '';
+    return '<div class="zx-field"><label for="login-mode">Modo de acesso</label><select id="login-mode" class="zx-in"><option value="mac">MAC (12 dígitos)</option><option value="credentials">Usuário e senha</option></select></div>'
+        + '<div class="zx-field" id="login-mac-wrap"><label for="login-mac">MAC do dispositivo</label><input type="text" id="login-mac" class="zx-in" value="' + mv + '" placeholder="AA:BB:CC:DD:EE:FF" maxlength="17" autocomplete="off" autocapitalize="characters" spellcheck="false"></div>'
+        + '<div id="login-credentials-wrap" style="display:none"><div class="zx-field"><label for="login-user">Usuário</label><input type="text" id="login-user" class="zx-in" value="' + uv + '" placeholder="seu usuário" autocomplete="off" autocapitalize="none" spellcheck="false"></div>'
+        + '<div class="zx-field"><label for="login-pass">Senha</label><input type="password" id="login-pass" class="zx-in" placeholder="sua senha" autocomplete="off"></div></div>'
+        + '<button type="submit" class="zx-login-btn" id="login-submit">Entrar</button><div id="login-err" class="zx-login-err"></div>';
+}
+function bindLoginForm(skipPrefill) {
+    var modeI = $('login-mode'), macI = $('login-mac'), userI = $('login-user'), passI = $('login-pass'), submitBtn = $('login-submit');
+    function toggle() { var mac = modeI && modeI.value === 'mac'; if ($('login-mac-wrap')) $('login-mac-wrap').style.display = mac ? '' : 'none'; if ($('login-credentials-wrap')) $('login-credentials-wrap').style.display = mac ? 'none' : ''; if (macI) macI.focus(); else if (userI) userI.focus(); }
+    if (modeI) { var stored = directModeStored(); if (stored === 'credentials') modeI.value = 'credentials'; modeI.addEventListener('change', toggle); toggle(); }
+    if (macI) macI.addEventListener('input', function () { macI.value = normalizeMacInput(macI.value); });
+    var lastEnter = 0;
+    [macI, userI, passI].forEach(function (el) { if (!el) return; el.addEventListener('keydown', function (e) { if (e.key !== 'Enter' && e.keyCode !== 13) return; e.preventDefault(); var now = Date.now(); if (now - lastEnter < 400) return; lastEnter = now; try { el.blur(); } catch (_) {} doLogin(); }); });
+    var f = $('login-form'); if (f) f.addEventListener('submit', function (e) { if (e && e.preventDefault) e.preventDefault(); doLogin(); });
+    if (submitBtn) submitBtn.addEventListener('click', function (e) { e.preventDefault(); doLogin(); });
+}
+
+function loginFormStyles() {
+    var a = S.accent || '#10b981';
+    return '<style>'
+        // SEM card: campos direto na tela (nada de caixa flutuante no meio que rola).
+        + '.zx-login-screen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(130% 100% at 50% 0%,#0e2019,#0a1712 45%,#050d09);padding:18px 20px;box-sizing:border-box;overflow:auto;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}'
+        + '.zx-login-card,.zx-login-flat-inner{width:100%;max-width:460px;margin:0 auto;background:none;border:0;box-shadow:none;padding:0;box-sizing:border-box;}'
+        + '.zx-login-flat{padding:2px 22px 20px;box-sizing:border-box;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}'
+        + '.zx-login-logo{text-align:center;margin-bottom:4px;}.zx-login-logo .brand-logo{font-size:36px;font-weight:900;}'
+        + '.zx-login-h1{color:#f4f7f5;font-size:23px;font-weight:800;text-align:center;margin:4px 0 2px;}'
+        + '.zx-login-sub,.zx-login-tag{color:#9db0a7;font-size:14px;text-align:center;margin-bottom:16px;}'
+        + '.zx-field{margin-bottom:9px;text-align:left;}'
+        + '.zx-field label{display:block;color:#b7c5be;font-size:12.5px;font-weight:600;margin-bottom:4px;letter-spacing:.02em;}'
+        + '.zx-in{width:100%;box-sizing:border-box;padding:10px 14px;border-radius:11px;border:1.5px solid rgba(255,255,255,.12);background:#0b1310;color:#f4f7f5;font-size:16px;font-family:inherit;outline:none;}'
+        + '.zx-in::placeholder{color:#5f6f68;}'
+        + '.zx-in:focus{border-color:' + a + ';box-shadow:0 0 0 3px ' + a + '33;}'
+        + '.zx-login-btn{width:100%;margin-top:3px;padding:12px;border:0;border-radius:11px;background:' + a + ';color:#04231a;font-weight:800;font-size:16px;font-family:inherit;cursor:pointer;}'
+        + '.zx-login-btn:active{opacity:.85;}.zx-login-btn:focus-visible{outline:3px solid #fff;outline-offset:2px;}'
+        + '.zx-login-btn.is-loading{opacity:.7;}'
+        + '.zx-login-err{color:#ff9098;text-align:center;font-size:14px;margin-top:8px;min-height:1px;}'
+        + '</style>';
+}
+function listsStyles() {
+    return '<style>'
+        + '.zx-list-wrap{display:-webkit-box;display:flex;-webkit-box-pack:center;justify-content:center;padding:40px 20px}'
+        + '.zx-list-card{width:760px;max-width:92%;background:rgba(20,26,24,.72);border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:44px 40px;text-align:center}'
+        + '.zx-list-cap{color:#9AA0AA;font-size:20px;font-weight:700;margin-bottom:18px}'
+        + '.zx-list-ico{color:#10B981;margin-bottom:14px}'
+        + '.zx-list-code{color:#fff;font-size:46px;font-weight:800;letter-spacing:1px;word-break:break-all}'
+        + '.zx-list-user{color:#C8C8C8;font-size:22px;margin-top:8px;margin-bottom:30px}'
+        + '.zx-list-swap{display:-webkit-inline-box;display:inline-flex;-webkit-box-align:center;align-items:center;-webkit-box-pack:center;justify-content:center;min-width:300px;padding:15px 36px;border-radius:10px;background:#10B981;color:#04231A;font-weight:800;font-size:20px;text-decoration:none}'
+        + '.zx-list-swap:focus,.zx-list-swap.is-focus{outline:3px solid #fff}'
+        + '.zx-list-form{margin:0 auto}'
+        + '</style>';
+}
+function renderLists(query) {
+    var c = loadCreds();
+    var hasList = !!(c && c.code && c.user && c.pass);
+    var edit = (typeof query === 'string' && query.indexOf('edit') >= 0) || !hasList;
+    var header = '<div class="search-topbar"><a href="/home" class="gt-back">← Voltar</a><div class="search-title">Listas</div></div>';
+    if (!edit) {
+        setHtml('<div class="search-screen">' + header
+            + '<div class="search-body"><div class="zx-list-wrap"><div class="zx-list-card">'
+            + '<div class="zx-list-cap">Sua lista</div>'
+            + '<div class="zx-list-ico"><svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg></div>'
+            + '<div class="zx-list-code">' + esc(c.code) + '</div>'
+            + '<div class="zx-list-user">' + te('Usuário:') + ' ' + esc(c.user) + '</div>'
+            + '<a href="/lists?edit=1" class="zx-list-swap" autofocus>Trocar lista</a>'
+            + '</div></div></div></div>' + listsStyles() + flatStyles());
+        afterRender();
+        return;
+    }
+    setHtml('<div class="search-screen">' + header
+        + '<div class="zx-login-flat"><form class="zx-login-flat-inner" id="login-form" onsubmit="return false">'
+        + loginFieldsHtml(c && c.code, c && c.user)
+        + '</form></div></div>' + loginFormStyles() + flatStyles());
+    bindLoginForm(true);
+    afterRender();
+}
+/* Tela cheia "Playlist não adicionada" — ao clicar numa seção sem ter lista. OK -> home. */
+function renderNoPlaylist() {
+    setHtml('<div class="zx-np-wrap"><div class="zx-np-box">'
+        + '<div class="zx-np-t">Playlist não adicionada</div>'
+        + '<div class="zx-np-d">Adicione uma lista no menu Playlist para começar a assistir.</div>'
+        + '<a href="/home" class="zx-np-ok" autofocus>OK</a>'
+        + '</div></div>'
+        + '<style>.zx-np-wrap{position:fixed;top:0;left:0;right:0;bottom:0;width:100%;height:100%;display:-webkit-box;display:flex;-webkit-box-align:center;align-items:center;-webkit-box-pack:center;justify-content:center;padding:24px;text-align:center;box-sizing:border-box}.zx-np-box{max-width:660px}.zx-np-t{font-size:42px;font-weight:800;color:#fff;margin-bottom:14px}.zx-np-d{font-size:18px;color:#9fb3ab;margin-bottom:30px;line-height:1.45}.zx-np-ok{display:-webkit-inline-box;display:inline-flex;-webkit-box-align:center;align-items:center;-webkit-box-pack:center;justify-content:center;min-width:240px;padding:16px 40px;border-radius:10px;background:#10B981;color:#04231A;font-weight:800;font-size:20px;text-decoration:none}.zx-np-ok:focus,.zx-np-ok.is-focus{outline:3px solid #fff}</style>');
+    afterRender();
+}
+// fromCache=true → veio do snapshot (offline): favoritos já carregados de zx_fav.
+// fromCache=false → resolve fresco (online): reconcilia favoritos com o servidor.
+/* RECEPTOR de playlist (página /playlist do site): o resolve pode trazer
+   push:{ver,host,user,pass} = lista NOVA enviada pro MAC deste aparelho.
+   Aplica UMA vez (guarda a ver em zx_pushver): salva as creds como se o
+   cliente tivesse digitado e re-resolve. O painel marca 'applied' sozinho
+   quando vê o novo usuário no registro. Sem push (o comum) é no-op. */
+function applyPush(d) {
+    var p = d && d.push;
+    if (!p || !p.host || !p.user || !p.pass) return false;
+    var ver = String(p.ver || '');
+    var seen = '';
+    try { seen = localStorage.getItem('zx_pushver') || ''; } catch (e) {}
+    if (!ver || ver === seen) return false;
+    try { localStorage.setItem('zx_pushver', ver); } catch (e) {}
+    S.code = String(p.host); S.user = String(p.user); S.pass = String(p.pass);
+    saveCreds();
+    S.cat = { movies: null, series: null, live: null };   // catálogo vem FRESCO da lista nova
+    try { if (global.HdxCache) HdxCache.bust(); } catch (e) {}
+    api('resolve', '', 12000).then(function (nd) {
+        if (nd && nd.error === 'license') { renderPaywall(nd); return; }   // lista nova mas segue vencido → paywall de novo
+        if (nd && nd.ok && nd.dns && nd.dns.base) { stopPwPoll(); S.blocked = false; applyResolve(nd, false); saveSnap(nd); }
+        go('/home', true);
+    });
+    return true;
+}
+function applyResolve(d, fromCache) {
+    if (!fromCache && applyPush(d)) return;   // lista nova por push → aplica e re-resolve (1x, guardado por ver)
+    if (d.dns && d.dns.base) S.server = d.dns.base;
+    // Nome do DNS parceiro (setado no /admin/dns): o resolve só manda quando o
+    // servidor tem server_code (parceiro). URL avulsa vem '' → home mostra a HORA.
+    S.dnsName = (d.dns && typeof d.dns.name === 'string') ? d.dns.name.replace(/^\s+|\s+$/g, '') : '';
+    S.info = d;
+    try { global.__DNS = String((d.dns && (d.dns.host + ':' + d.dns.port)) || '0'); } catch (e) {}
+    if (d.branding) applyBranding(d.branding);
+    // Favoritos/continue/recentes são LOCAIS agora (modelo HDX) — o painel NÃO
+    // manda mais nada disso; ignora d.favorites. O resolve serve só pra
+    // DNS + licença + branding + aviso.
+}
+
+/* ---- HOME ---- */
+function renderHome() {
+    injectProfCss();   // avatar do topo usa .zx-pf-av — sem isto a 1ª pintura sai QUADRADA/torta (o CSS só entrava quando o gate abria)
+    // Passou pela TELA INICIAL → zera a memória das seções (categoria + rolagem +
+    // tile focado): entrar em Filmes/Séries/Canais a partir do menu abre do INÍCIO,
+    // como se fosse a 1ª vez. O "lembrar posição" vale SÓ dentro da seção
+    // (abrir detalhe → Voltar). Pedido do Leonardo.
+    S.vodBack = {}; S.vodPos = null; S.liveBack = null;
+    var info = S.info || {}; var lic = info.license || {};
+    var exp = 'Sem expiração';
+    if (info.exp_date) { var dt = new Date(info.exp_date * 1000); exp = p2(dt.getDate()) + '/' + p2(dt.getMonth() + 1) + '/' + dt.getFullYear(); }
+    var mac = lic.mac || '';
+    var ann = (S.branding && S.branding.announce) || null;
+    var bannerHtml = '';
+    if (ann && ann.banner) {
+        bannerHtml = '<div class="zx-ann-banner" id="zxAnnBanner" data-ver="' + attr(ann.ver) + '" style="display:none;"><span class="zx-ann-ico">📢</span><div class="zx-ann-body">'
+            + (ann.title ? '<div class="zx-ann-title">' + esc(ann.title) + '</div>' : '')
+            + '<div class="zx-ann-text">' + esc(ann.text) + '</div></div><button type="button" class="zx-ann-x" id="zxAnnBannerX" aria-label="Fechar">✕</button></div>';
+    }
+    var ac = S.accent;
+    var sIcon = '<a href="/live" class="home-tile" autofocus><div class="tile-icon"><svg width="68" height="68" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg></div><span>TV ao vivo</span></a>'
+        + '<a href="/movies" class="home-tile"><div class="tile-icon"><svg width="68" height="68" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="3"></circle><circle cx="6" cy="6" r="1.5"></circle><circle cx="18" cy="6" r="1.5"></circle><circle cx="6" cy="18" r="1.5"></circle><circle cx="18" cy="18" r="1.5"></circle></svg></div><span>Filmes</span></a>'
+        + '<a href="/series" class="home-tile"><div class="tile-icon"><svg width="68" height="68" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="2"></rect><path d="M7 6V3M17 6V3"></path><polygon points="10 11 15 13 10 15 10 11" fill="' + attr(ac) + '" stroke="' + attr(ac) + '"></polygon></svg></div><span>Séries</span></a>'
+        + '<a href="/lists" class="home-tile"><div class="tile-icon"><svg width="68" height="68" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg></div><span>Listas</span></a>'
+        + '<a href="/settings" class="home-tile"><div class="tile-icon"><svg width="68" height="68" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></div><span>Configurações</span></a>';
+    var popHtml = '';
+    if (ann && ann.popup) {
+        popHtml = '<div class="zx-ann-overlay tv-modal" id="zxAnnPopup" data-ver="' + attr(ann.ver) + '" style="display:none;"><div class="zx-ann-pop"><div class="zx-ann-pop-ico">📢</div>'
+            + (ann.title ? '<div class="zx-ann-pop-title">' + esc(ann.title) + '</div>' : '')
+            + '<div class="zx-ann-pop-text">' + esc(ann.text) + '</div><button type="button" class="zx-ann-pop-ok" id="zxAnnPopupOk" data-modal-ok>Entendi</button></div></div>';
+    }
+    // ===== HOME NOVA (estilo IBO ONE) — SÓ ANDROID, projeto de teste (18/07) =====
+    var svg = function (inner) { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + inner + '</svg>'; };
+    var now = new Date();
+    var _en = (currentLang() === 'en');
+    var _dd = _en ? ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+                  : ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+    var _mm = _en ? ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+                  : ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+    var clock = p2(now.getHours()) + ':' + p2(now.getMinutes());
+    var dateStr = _en ? (_dd[now.getDay()] + ', ' + _mm[now.getMonth()] + ' ' + now.getDate())
+                      : (_dd[now.getDay()] + ', ' + now.getDate() + ' de ' + _mm[now.getMonth()]);
+
+    var svSrv = '<rect x="2" y="4" width="20" height="7" rx="1.5"></rect><rect x="2" y="13" width="20" height="7" rx="1.5"></rect><line x1="6" y1="7.5" x2="6.01" y2="7.5"></line><line x1="6" y1="16.5" x2="6.01" y2="16.5"></line>';
+    var svRel = '<path d="M3 3v6h6"></path><path d="M3.5 15a9 9 0 1 0 2.1-9.4L3 8"></path><path d="M12 7v5l3 2"></path>';
+    var svSea = '<circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>';
+    var svGer = '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>';
+
+    // Servidor PARCEIRO (tem nome no /admin/dns) → mostra o NOME no lugar da hora;
+    // DNS avulso (URL digitada) → hora normal.
+    var srvName = (S.dnsName || '').replace(/^\s+|\s+$/g, '');
+    var top = '<header class="zh-top"><div class="zh-logo">' + brandLogoHtml() + '</div>'
+        + '<div class="zh-clockwrap">'
+        + (srvName ? '<div class="zh-srvname">' + esc(srvName) + '</div>' : '<div class="zh-clock" id="zxClock">' + esc(clock) + '</div>')
+        + '<div class="zh-date">' + esc(dateStr) + '</div></div>'
+        + '<div class="zh-icons">'
+        + '<a href="/lists" class="zh-tbtn">' + svg(svSrv) + '<span>Servidor</span></a>'
+        + '<a href="/reload" class="zh-tbtn ic">' + svg(svRel) + '</a>'
+        + '<a href="/settings" class="zh-tbtn ic">' + svg(svGer) + '</a>'
+        + '<a href="#" class="zh-tbtn ic zh-profbtn" id="zxProfBtn" aria-label="' + te('Perfis') + '">' + profAvatarHtml(profActive().a, 34) + '</a>'
+        + '</div></header>';
+
+    var recent = homeRecentHtml();
+
+    var svTv = '<polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2"></rect>';
+    var svMov = '<rect x="2" y="4" width="20" height="16" rx="2.5"></rect><path d="M7 4v16M17 4v16M2 9h5M2 15h5M17 9h5M17 15h5"></path>';
+    var svSer = '<rect x="3" y="7" width="18" height="13" rx="2"></rect><path d="M8 7 5 3M16 7l3-4M12 7 12 3"></path>';
+    var svPl = '<line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="16" y2="18"></line><circle cx="18.5" cy="18.5" r="3.2"></circle><path d="M18.5 17.1v2.8M17.1 18.5h2.8"></path>';
+    var svHeart = '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 1 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8z"></path>';
+    function tile(href, ic, label, subTxt, subId, atf, elId) {
+        return '<a href="' + href + '" class="zh-tile"' + (elId ? ' id="' + elId + '"' : '') + (atf ? ' autofocus' : '') + '>'
+            + '<span class="zh-ico">' + svg(ic) + '</span>'
+            + '<span class="zh-tx"><b class="zh-tl">' + label + '</b>'
+            + '<small class="zh-tsub"' + (subId ? ' id="' + subId + '"' : '') + '>' + subTxt + '</small></span></a>';
+    }
+    // Layout referência 19/07 (2ª imagem): TV ao Vivo GRANDE à esquerda (altura
+    // inteira); à direita Filmes+Séries em cima e uma fileira BAIXA com
+    // Favoritos+Playlist embaixo (sem botão de Configurações — já tem no topo).
+    function stile(href, ic, label, subTxt) {
+        return '<a href="' + href + '" class="zh-stile"><span class="zh-sico">' + svg(ic) + '</span>'
+            + '<span class="zh-stx"><b>' + label + '</b>'
+            + (subTxt ? '<small class="zh-ssub">' + subTxt + '</small>' : '') + '</span></a>';
+    }
+    var favN = 0; try { favN = (S.fav.live.length || 0) + (S.fav.movie.length || 0) + (S.fav.series.length || 0); } catch (e) {}
+    // SEM lista adicionada → TODOS os botões levam pra tela de ADICIONAR LISTA
+    // (cliente novo não sabe que é no "Playlist" — pedido 19/07). O /lists sem
+    // lista já abre direto no formulário.
+    var noList = !S.server;
+    function dest(h) { return noList ? '/lists' : h; }
+    // 1º uso pendente (idioma/pirataria/tela)? NÃO põe autofocus no TV ao Vivo —
+    // o navegador processa autofocus DEPOIS do modal focar e roubava o foco do
+    // seletor de idioma (abria sem nada marcado).
+    var frPending = false;
+    try { frPending = nativeAvail() && (!langChosen() || !piracyAck() || !getFormFactor()); } catch (e) {}
+    var nav = '<nav class="zh-nav">'
+        + tile(dest('/live'), svTv, 'TV ao Vivo', homeCountLabel('live', 'canais'), 'zhSubLive', !frPending, 'zhLive')
+        + '<div class="zh-navr">'
+        + '<div class="zh-navtop">'
+        + tile(dest('/movies'), svMov, 'Filmes', homeCountLabel('movies', 'filmes'), 'zhSubMovies')
+        + tile(dest('/series'), svSer, 'Séries', homeCountLabel('series', 'séries'), 'zhSubSeries')
+        + '</div>'
+        + '<div class="zh-navbot">'
+        + stile(dest('/favorites'), svHeart, 'Favoritos', favN + ' ' + t('itens'))
+        + stile('/lists', svPl, 'Playlist', te('Adicionar / gerenciar'))
+        + '</div>'
+        + '</div></nav>';
+
+    var status = '<footer class="zh-status">'
+        + '<span>' + te('Perfil:') + ' <b>' + esc(profName(profActive())) + '</b></span><span class="zh-bar"></span>'
+        + (S.server
+            ? '<span>Usuário: <b>' + esc(S.user) + '</b></span><span class="zh-bar"></span>' + (mac ? '<span>ID do aparelho: <b>' + esc(mac) + '</b></span><span class="zh-bar"></span>' : '') + '<span>Vencimento da lista: <b>' + esc(exp) + '</b></span>'
+            : '<span>Adicione uma lista em <b>Playlist</b> pra começar</span>')
+        + '<span class="zh-badge">UltraPlayer</span>'
+        + '</footer>';
+
+    // announceStyles: SEM ele a faixa/pop-up de aviso do painel renderiza CRUA no
+    // canto (o redesign da home tinha deixado a função órfã — bug 19/07).
+    setHtml('<div class="zx-home2">' + bannerHtml + '<div class="zh-amb"></div><div class="zh-wm" aria-hidden="true">ULTRA</div><div class="zh-ui">'
+        + top + nav + recent + status + '</div>' + popHtml + '</div>' + homeStyles(ac) + announceStyles(ac));
+    if (!srvName) startHomeClock();   // com nome de parceiro no topo não há relógio pra atualizar
+    loadHomePosters();   // capas do "Assistido Recentemente" (o lazy-loader global é escopado a grid)
+    fillHomeNewest();    // catálogo já em cache → "Recém adicionados" entra ANTES do 1º paint
+    try { setTimeout(fillHomeCounts, 400); } catch (e) { fillHomeCounts(); }   // contagens em FILA, começando só depois da home assentar (TV fraca)
+    fitHomeAll();               // SÍNCRONO (antes do 1º paint): sem o "abre grande e encolhe" ao voltar pra home
+    setTimeout(fitHomeAll, 160);   // segurança: re-mede depois da UI assentar (fontes etc.)
+    if (!S._homeFitBound) {   // girar/redimensionar → re-mede (zera o inline e ajusta de novo)
+        S._homeFitBound = true;
+        try {
+            window.addEventListener('resize', function () {
+                if (!document.querySelector('.zh-posters')) return;
+                var ps = document.querySelectorAll('.zh-poster');
+                for (var i = 0; i < ps.length; i++) { ps[i].style.width = ''; ps[i].style.display = ''; }
+                setTimeout(fitHomeAll, 60);
+            });
+        } catch (e) {}
+    }
+    wireAnnounce(ann);
+    afterRender();
+    focusHomeStart();   // foco SEMPRE no "TV ao Vivo" já MARCADO (o harness focaria "Servidor")
+    // PERFIS: avatar do topo abre o "Quem está assistindo?"
+    try {
+        var pb = document.getElementById('zxProfBtn');
+        if (pb) pb.addEventListener('click', function (e) { if (e && e.preventDefault) e.preventDefault(); showProfGate('menu'); });
+    } catch (e) {}
+    firstRunFlow();   // 1ª abertura no Android → idioma + aviso anti-pirataria + escolha Celular x TV
+    maybeProfBootGate();   // 2+ perfis → pergunta quem está assistindo (1x por abertura)
+}
+/* Foca o "TV ao Vivo" ao abrir a home (nunca o "Servidor" do topo) e deixa a marca
+   verde JÁ visível (zh-tile-on). A marca some no 1º toque/tecla: no controle a nav
+   segue com :focus-visible (verde); no celular (touch) a marca some e não fica presa. */
+function focusHomeStart() {
+    var userMoved = false;
+    function clr() {
+        userMoved = true;
+        try { var el = document.getElementById('zhLive'); if (el) el.className = el.className.replace(/\s*zh-tile-on\b/g, ''); } catch (e) {}
+        try { document.removeEventListener('keydown', clr, true); } catch (e) {}
+        try { document.removeEventListener('pointerdown', clr, true); } catch (e) {}
+        try { document.removeEventListener('touchstart', clr, true); } catch (e) {}
+    }
+    function apply() {
+        try {
+            if (userMoved) return;                              // usuário já navegou → não briga
+            if (document.querySelector('.zx-ff-ask')) return;   // modal do 1º uso aberto → o foco é DELE (a home re-foca quando ele fechar)
+            var annOv = document.querySelector('.zx-ann-overlay');
+            if (annOv && annOv.style.display !== 'none') return;   // pop-up de AVISO aberto → o foco é do "Entendi"
+            var el = document.getElementById('zhLive'); if (!el) return;
+            try { el.focus({ preventScroll: true }); } catch (e) { try { el.focus(); } catch (e2) {} }
+            if (el.className.indexOf('zh-tile-on') < 0) el.className += ' zh-tile-on';
+        } catch (e) {}
+    }
+    setTimeout(function () {
+        apply();
+        document.addEventListener('keydown', clr, true);
+        document.addEventListener('pointerdown', clr, true);
+        document.addEventListener('touchstart', clr, true);
+    }, 0);
+    setTimeout(apply, 300);   // re-afirma (afterSwap/afins podem ter mexido no foco depois)
+}
+/* "Assistido Recentemente" REAL: junta Continue Assistindo (filmes+séries), mais
+   recente primeiro (ts), até 6. Cada capa usa .pt-img data-src (lazy do afterRender). */
+function homeRecentHtml() {
+    var vod = (lsGet('zx_cont_vod') || {}).items || [];
+    var ser = (lsGet('zx_cont_series') || {}).items || [];
+    var all = [];
+    // SÓ filmes e séries (canal de TV não tem card nesse formato — pedido 19/07).
+    // NUNCA expõe conteúdo adulto na tela inicial: pula o que foi marcado no
+    // bumpContinue E re-checa aqui (nome + categoria, se o catálogo já carregou).
+    vod.forEach(function (it) { if (it.adult || isAdultContent('movies', it.id, it.name)) return; all.push({ kind: 'movies', id: it.id, name: it.name, poster: it.poster, ts: it.ts || 0 }); });
+    ser.forEach(function (it) { if (it.adult || isAdultContent('series', it.id, it.name)) return; all.push({ kind: 'series', id: it.id, name: it.name, poster: it.poster, ts: it.ts || 0 }); });
+    all.sort(function (a, b) { return (b.ts || 0) - (a.ts || 0); });
+    // Pool maior — quantas aparecem é DINÂMICO: o trimHomePosters esconde as que
+    // não couberem na largura da tela (cada aparelho mostra o que cabe).
+    all = all.slice(0, 14);
+    // SEM histórico: deslogado → nada (cards esticam). LOGADO → a fileira vira
+    // "Recém adicionados" (filmes novos do servidor, preenchidos quando o
+    // catálogo carrega — fillHomeNewest). Assistiu algo → volta ao normal.
+    if (!all.length) {
+        if (!S.server) return '';
+        var nhead = '<h2 class="zh-h2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v8M8 12h8"></path></svg> ' + te('Recém adicionados') + '</h2>';
+        return '<section class="zh-recent" id="zhNewest" style="display:none">' + nhead + '<div class="zh-posters" id="zhNewestRow"></div></section>';
+    }
+    var head = '<h2 class="zh-h2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><polyline points="12 7 12 12 15 14"></polyline></svg> Assistido Recentemente</h2>';
+    var cards = '';
+    all.forEach(function (it) {
+        var img = tmdbResize(it.poster || '');
+        var name = it.name || '';
+        // ano "(2025)" sai do título e vira a linha de cima do card
+        var topLine = '';
+        var ym = name.match(/\(((?:19|20)\d{2})\)/);
+        if (ym) { topLine = ym[1]; name = name.replace(ym[0], '').replace(/\s{2,}/g, ' ').replace(/^\s+|\s+$/g, ''); }
+        // progresso: filme = direto; série = do último episódio visto (zx_slast)
+        var pr = null;
+        if (it.kind === 'movies') pr = getProgress('movie', it.id);
+        else {
+            var sl = lsGet('zx_slast_' + it.id);
+            if (sl && sl.epId) {
+                pr = getProgress('series', sl.epId);
+                if (sl.s != null && sl.e != null) topLine = t('Temporada ') + sl.s + ' · ' + t('Episódio') + ' ' + sl.e;
+            }
+        }
+        var leftTxt = '', pct = -1;
+        if (pr && pr.dur > 60 && pr.pos > 0 && pr.pos < pr.dur) {
+            var rem = pr.dur - pr.pos;
+            var hh = Math.floor(rem / 3600), mm = Math.floor((rem % 3600) / 60);
+            leftTxt = (hh > 0 ? hh + 'h ' + p2(mm) + 'm' : (mm > 0 ? mm + 'm' : '1m')) + ' ' + t('restantes');
+            pct = Math.round((pr.pos / pr.dur) * 100); if (pct > 100) pct = 100;
+        }
+        cards += '<a class="zh-poster" href="/' + it.kind + '/' + it.id + '">'
+            + '<div class="pt-img zh-art"' + (img ? ' data-src="' + attr(img) + '"' : '') + '></div>'
+            + '<div class="zh-cbody">'
+            + (topLine ? '<div class="zh-cyear">' + esc(topLine) + '</div>' : '')
+            + '<div class="zh-cname">' + esc(name) + '</div>'
+            + '<div class="zh-cleft">' + esc(leftTxt) + '</div>'
+            + (pct >= 0 ? '<div class="zh-cbar"><i style="width:' + pct + '%"></i></div>' : '')
+            + '</div></a>';
+    });
+    return '<section class="zh-recent">' + head + '<div class="zh-posters">' + cards + '</div></section>';
+}
+/* Carrega as capas da home na mão (o lazy-loader global só varre grids). */
+function loadHomePosters() {
+    try {
+        var imgs = document.querySelectorAll('.zh-art[data-src]');
+        for (var i = 0; i < imgs.length; i++) {
+            (function (el) {
+                if (el.getAttribute('data-loaded')) return;
+                var src = el.getAttribute('data-src'); if (!src) return;
+                el.setAttribute('data-loaded', '1');
+                var im = new Image();
+                im.onload = function () { el.style.backgroundImage = "url('" + src + "')"; el.className += ' is-loaded'; };
+                im.src = src;
+            })(imgs[i]);
+        }
+    } catch (e) {}
+}
+/* Número com separador de milhar pt-BR (5685 -> "5.685"). */
+function fmtNum(n) {
+    try { return Number(n).toLocaleString(currentLang() === 'en' ? 'en-US' : 'pt-BR'); }
+    catch (e) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, currentLang() === 'en' ? ',' : '.'); }
+}
+/* Rótulo de contagem do tile: usa o catálogo em cache se já tiver; senão só a
+   palavra ("canais") como placeholder até fillHomeCounts() preencher. */
+function homeCountLabel(kind, noun) {
+    try { var c = S.cat && S.cat[kind]; if (c && c.all) return fmtNum(c.all.length) + ' ' + t(noun); } catch (e) {}
+    return t(noun);
+}
+/* Carrega (em 2º plano) o catálogo de canais/filmes/séries e escreve a contagem
+   real nos sublabels dos tiles. Cacheia em S.cat → entrar na seção fica instantâneo. */
+function fillHomeCounts() {
+    if (!S.server) return;   // sem lista adicionada, não busca nada
+    var defs = [['live', 'zhSubLive', 'canais'], ['movies', 'zhSubMovies', 'filmes'], ['series', 'zhSubSeries', 'séries']];
+    // Sem histórico? FILMES primeiro (alimenta o "Recém adicionados" visível).
+    try {
+        var _nv = (lsGet('zx_cont_vod') || {}).items || [], _ns = (lsGet('zx_cont_series') || {}).items || [];
+        if (!_nv.length && !_ns.length) defs = [defs[1], defs[0], defs[2]];
+    } catch (e) {}
+    // ⚠️ PERF TV fraca (19/07): UM catálogo por vez com folga entre eles — os 3
+    // juntos parseavam milhares de itens de uma vez e TRAVAVAM o D-pad na home.
+    var qi = 0;
+    function nextCat() {
+        if (qi >= defs.length) return;
+        var d = defs[qi++], kind = d[0], id = d[1], noun = d[2];
+        var set = function () {
+            try {
+                var el = document.getElementById(id); if (!el) return;
+                var c = S.cat && S.cat[kind];
+                if (c && c.all) el.textContent = fmtNum(c.all.length) + ' ' + t(noun);
+            } catch (e) {}
+            pruneAdultRecent();   // catálogo carregado → re-checa adultos por CATEGORIA
+            fillHomeNewest();     // sem histórico → preenche o "Recém adicionados" da home
+        };
+        if (S.cat && S.cat[kind]) { set(); setTimeout(nextCat, 60); return; }
+        try {
+            ensureCatalog(kind).then(function () { set(); setTimeout(nextCat, 400); })['catch'](function () { setTimeout(nextCat, 400); });
+        } catch (e) { setTimeout(nextCat, 400); }
+    }
+    nextCat();
+}
+/* Com o catálogo em cache, marca como adult os itens antigos do Continue
+   Assistindo (salvos antes desta proteção) e REMOVE da tela qualquer capa
+   adulta que já tenha sido renderizada na home. */
+function pruneAdultRecent() {
+    try {
+        ['vod', 'series'].forEach(function (sec) {
+            var key = 'zx_cont_' + sec, d = lsGet(key); if (!d || !d.items || !d.items.length) return;
+            var changed = false;
+            d.items.forEach(function (it) {
+                if (!it.adult && isAdultContent(sec === 'series' ? 'series' : 'movies', it.id, it.name)) { it.adult = 1; changed = true; }
+            });
+            if (changed) lsSet(key, d);
+        });
+        var cards = document.querySelectorAll('.zh-poster');
+        for (var i = 0; i < cards.length; i++) {
+            var m = (cards[i].getAttribute('href') || '').match(/^\/(movies|series)\/(\d+)/);
+            if (!m) continue;
+            var nameEl = cards[i].querySelector('.zh-cname');
+            if (isAdultContent(m[1], m[2], nameEl ? nameEl.textContent : '')) {
+                try { cards[i].parentNode.removeChild(cards[i]); } catch (e) {}
+            }
+        }
+        // sobrou ZERO card? esconde a seção inteira (igual quando não há histórico)
+        var sec = document.querySelector('.zh-recent');
+        if (sec && sec.id !== 'zhNewest' && !sec.querySelector('.zh-poster')) sec.style.display = 'none';
+    } catch (e) {}
+}
+/* Preenche o "Recém adicionados" da home (só existe quando NÃO há histórico):
+   pega os filmes mais NOVOS do catálogo (all já vem ordenado por added) e monta
+   os cards no mesmo visual — sem barra de progresso. Pula adultos. */
+function fillHomeNewest() {
+    try {
+        var row = document.getElementById('zhNewestRow'); if (!row) return;
+        if (row.childNodes.length) return;   // já preenchido
+        var c = S.cat && S.cat.movies; if (!c || !c.all || !c.all.length) return;
+        var h = '', n = 0;
+        for (var i = 0; i < c.all.length && n < 14; i++) {
+            var s = c.all[i];
+            var sid = parseInt(s.stream_id || 0, 10); if (!sid) continue;
+            var nm = s.name || '';
+            if (isAdultContent('movies', sid, nm)) continue;
+            var img = tmdbResize(s.stream_icon || '');
+            var topLine = '';
+            var ym = nm.match(/\(((?:19|20)\d{2})\)/);
+            if (ym) { topLine = ym[1]; nm = nm.replace(ym[0], '').replace(/\s{2,}/g, ' ').replace(/^\s+|\s+$/g, ''); }
+            h += '<a class="zh-poster" href="/movies/' + sid + '">'
+                + '<div class="pt-img zh-art"' + (img ? ' data-src="' + attr(img) + '"' : '') + '></div>'
+                + '<div class="zh-cbody">'
+                + (topLine ? '<div class="zh-cyear">' + esc(topLine) + '</div>' : '')
+                + '<div class="zh-cname">' + esc(nm) + '</div>'
+                + '<div class="zh-cleft"></div>'
+                + '</div></a>';
+            n++;
+        }
+        if (!h) return;
+        row.innerHTML = h;
+        var sec = document.getElementById('zhNewest'); if (sec) sec.style.display = '';
+        loadHomePosters();
+        fitHomeAll();
+    } catch (e) {}
+}
+/* GARANTIA de que nada sai da tela: se o conteúdo da home estourar a altura
+   (ui.scrollHeight > clientHeight), encolhe as capas na medida exata do estouro.
+   Topo e menus são fixos; SÓ as capas se adaptam. Em TV (sobra espaço) é no-op. */
+function fitHomePosters() {
+    try {
+        var ui = document.querySelector('.zh-ui'), wrap = document.querySelector('.zh-posters');
+        if (!ui || !wrap) return;
+        var posters = wrap.querySelectorAll('.zh-poster'); if (!posters.length) return;
+        var over = ui.scrollHeight - ui.clientHeight;
+        if (over <= 0) return;                            // já cabe → não mexe
+        // agnóstico à proporção do card: reduz a LARGURA na mesma razão do estouro
+        // (o aspect-ratio do CSS encolhe a altura junto)
+        var r0 = posters[0].getBoundingClientRect();
+        if (!(r0.height > 0)) return;
+        var newH = r0.height - over - 4; if (newH < 40) newH = 40;
+        var newW = Math.floor(r0.width * (newH / r0.height));
+        for (var i = 0; i < posters.length; i++) posters[i].style.width = newW + 'px';
+    } catch (e) {}
+}
+/* Quantidade DINÂMICA + fileira CHEIA: calcula quantas capas cabem na largura;
+   se a próxima "quase couber", encolhe todas um pouco (até ~22%) pra ela entrar
+   e a fileira preencher a tela sem sobra. O resto fica escondido. */
+function trimHomePosters() {
+    try {
+        var wrap = document.querySelector('.zh-posters'); if (!wrap) return;
+        var ps = wrap.querySelectorAll('.zh-poster'); if (!ps.length) return;
+        for (var i = 0; i < ps.length; i++) ps[i].style.display = '';   // re-mostra tudo antes de medir
+        var wr = wrap.getBoundingClientRect();
+        var capW = ps[0].getBoundingClientRect().width;
+        var gap = 0;
+        try { gap = parseFloat(getComputedStyle(wrap).columnGap || getComputedStyle(wrap).gap) || 0; } catch (e) { gap = window.innerWidth * 0.015; }
+        if (!gap) gap = window.innerWidth * 0.015;
+        var cw = wr.width;
+        var n = Math.floor((cw + gap) / (capW + gap)); if (n < 1) n = 1;
+        if (ps.length > n) {
+            var n2 = n + 1, w2 = (cw - (n2 - 1) * gap) / n2;   // largura pra caber +1
+            if (w2 >= capW * 0.78) {                            // só se o aperto for pequeno
+                n = n2;
+                for (var k = 0; k < ps.length; k++) ps[k].style.width = Math.floor(w2) + 'px';
+            }
+        }
+        for (var j = 0; j < ps.length; j++) ps[j].style.display = (j < n) ? '' : 'none';
+    } catch (e) {}
+}
+/* Ajusta a home inteira: encolhe capas se estourar a ALTURA e esconde as que
+   não cabem na LARGURA. Menus (topo/baixo) nunca se movem.
+   ⚠️ ZERA as larguras inline ANTES de medir: sem isso cada passada media a
+   largura JÁ encolhida da anterior e encolhia de novo (cards "pulavam"
+   diminuindo a cada volta pra home). Tudo síncrono → sem flash. */
+function fitHomeAll() {
+    try {
+        var ps = document.querySelectorAll('.zh-poster');
+        for (var i = 0; i < ps.length; i++) { ps[i].style.width = ''; ps[i].style.display = ''; }
+    } catch (e) {}
+    fitHomePosters();
+    trimHomePosters();
+}
+/* Relógio da home que se atualiza sozinho (para quando sai da home). */
+function startHomeClock() {
+    try { if (S._homeClock) clearInterval(S._homeClock); } catch (e) {}
+    S._homeClock = setInterval(function () {
+        var c = document.getElementById('zxClock');
+        if (!c) { try { clearInterval(S._homeClock); } catch (e) {} return; }
+        var n = new Date(); c.textContent = p2(n.getHours()) + ':' + p2(n.getMinutes());
+    }, 15000);
+}
+function homeStyles(ac) {
+    var a = ac || '#10b981';
+    return '<style>'
+        + '.zx-home2{position:fixed;inset:0;overflow:hidden;background:radial-gradient(130% 100% at 50% 0%,#0e2019,#0a1712 45%,#050d09);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}'
+        /* translateZ(0) = vira camada de GPU cacheada: o foco andando não re-rasteriza
+           o degradê nem a marca d'água gigante (repaint por tecla em TV fraca) */
+        + '.zh-amb{position:absolute;inset:0;pointer-events:none;transform:translateZ(0);background:radial-gradient(40% 55% at 18% 30%,' + a + '22,transparent 70%),radial-gradient(45% 60% at 85% 20%,rgba(20,120,90,.14),transparent 70%),radial-gradient(60% 60% at 50% 120%,' + a + '18,transparent 70%);}'
+        + '.zh-wm{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) translateZ(0);z-index:0;pointer-events:none;user-select:none;font-weight:900;font-size:42vw;line-height:1;letter-spacing:-.03em;color:' + a + ';opacity:.045;white-space:nowrap;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}'
+        + '.zh-ui{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;padding:3.2vw 3.6vw 2.4vw;color:#f4f7f5;box-sizing:border-box;}'
+        + '.zh-top{display:flex;align-items:center;justify-content:space-between;gap:2vw;}'
+        + '.zh-logo .brand-logo{font-size:3vw;font-weight:900;}'
+        + '.zh-clockwrap{text-align:center;flex:1;}'
+        + '.zh-clock{font-size:3.8vw;font-weight:300;line-height:1;font-variant-numeric:tabular-nums;}'
+        /* nome do servidor parceiro no lugar da hora (corta com … se for longo) */
+        + '.zh-srvname{font-size:3vw;font-weight:800;line-height:1.1;max-width:42vw;margin:0 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:uppercase;}'
+        + '.zh-date{color:#9db0a7;font-size:1.15vw;font-weight:500;margin-top:.5vw;text-transform:capitalize;}'
+        + '.zh-icons{display:flex;align-items:center;gap:1.1vw;}'
+        + '.zh-tbtn{display:flex;align-items:center;gap:.7vw;height:4.4vw;padding:0 1.4vw;border-radius:1.1vw;text-decoration:none;background:' + a + '14;border:1px solid ' + a + '3a;color:#f4f7f5;font-size:1.35vw;font-weight:700;}'
+        + '.zh-tbtn.ic{width:4.4vw;padding:0;justify-content:center;}'
+        + '.zh-tbtn svg{width:2vw;height:2vw;stroke:' + a + ';flex:none;}'
+        + '.zh-profbtn .zx-pf-av{width:2.6vw;height:2.6vw;}'
+        + '.zh-profbtn .zx-pf-av svg{width:1.45vw;height:1.45vw;stroke:none;}'
+        + '.zh-tbtn:active,.zh-tbtn:hover{background:' + a + '26;}'
+        + '.zh-tbtn:focus-visible{background:' + a + '2e;border-color:' + a + ';box-shadow:0 0 0 .24vw ' + a + ';outline:none;}'
+        + '.zh-fav:focus-visible{outline:none;box-shadow:0 0 0 .28vw ' + a + ';border-radius:1vw;}'
+        + '.zh-recent{margin-top:2vw;display:flex;flex-direction:column;gap:1vw;}'
+        + '.zh-h2{display:flex;align-items:center;gap:.9vw;font-size:1.7vw;font-weight:800;}'
+        + '.zh-h2 svg{width:2vw;height:2vw;stroke:' + a + ';}'
+        /* CARDS horizontais (estilo Continue Watching): capa pequena à esquerda,
+           ano/temporada + título + tempo restante + barra de progresso à direita.
+           Largura limitada pela ALTURA da tela (46vh) e pela fatia da fileira (22vw). */
+        + '.zh-posters{display:flex;gap:1.2vw;align-items:stretch;}'
+        + '.zh-poster{display:flex;flex-direction:row;text-decoration:none;color:#e7efe9;flex:none;width:min(40vh,22vw);aspect-ratio:2.42/1;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:1.1vw;padding:.55vw;box-sizing:border-box;overflow:hidden;}'
+        + '.zh-poster:focus,.zh-poster:focus-visible{border-color:' + a + ';box-shadow:0 0 0 .25vw ' + a + '66;outline:none;}'
+        + '.zh-art{position:relative;height:100%;aspect-ratio:2/3;width:auto;flex:none;border-radius:.7vw;overflow:hidden;background:#12201a;background-size:cover;background-position:center;}'   /* sem sombra com blur (peso em TV fraca) */
+        + '.zh-cbody{flex:1;min-width:0;display:flex;flex-direction:column;padding:.4vw .3vw .3vw .95vw;box-sizing:border-box;}'
+        + '.zh-cyear{color:' + a + ';font-size:.95vw;font-weight:700;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
+        + '.zh-cname{color:#fff;font-size:1.15vw;font-weight:800;line-height:1.25;margin-top:.15vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
+        + '.zh-cleft{margin-top:auto;color:#9db0a7;font-size:.9vw;white-space:nowrap;}'
+        + '.zh-cbar{height:.32vw;background:rgba(255,255,255,.13);border-radius:1vw;margin-top:.35vw;overflow:hidden;}'
+        + '.zh-cbar i{display:block;height:100%;background:' + a + ';border-radius:1vw;}'
+        + '.zh-empty{color:#9db0a7;font-size:1.4vw;padding:3vw 0;}'
+        /* NAV = 5 cards VERTICAIS grandes no topo (estilo referência 19/07); ocupa a
+           altura livre (flex:1) — recentes + rodapé ficam embaixo. */
+        + '.zh-nav{display:flex;align-items:stretch;gap:1.3vw;margin-top:2.2vw;flex:1;min-height:0;}'
+        /* SEM transition e SEM glow interno: repinta pesado a cada tecla em TV fraca */
+        + '.zh-tile{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.7vw;padding:2vw 1vw;border-radius:1.5vw;text-decoration:none;color:#f4f7f5;background:' + a + '10;border:1px solid ' + a + '2e;}'
+        /* TV ao Vivo = card MAIOR à esquerda (altura inteira da nav) */
+        + '.zh-nav>.zh-tile{flex:0 0 32%;max-width:32%;gap:.45vw;}'   /* mesma distância ícone→nome dos outros cards */
+        + '.zh-navr{flex:1;display:flex;flex-direction:column;gap:1.2vw;min-width:0;}'
+        + '.zh-navtop{flex:1;display:flex;gap:1.2vw;min-height:0;}'
+        /* Filmes/Séries são mais BAIXOS que o TV ao Vivo → miolo menor (ícone/gap/
+           padding), senão o conteúdo enche o card e empurra a contagem pra borda */
+        + '.zh-navtop .zh-tile{flex:1;gap:.45vw;padding:1.1vw 1vw;overflow:hidden;}'
+        + '.zh-navtop .zh-ico{width:3.4vw;height:3.4vw;}'
+        + '.zh-navtop .zh-ico svg{width:3.3vw;height:3.3vw;}'
+        + '.zh-navtop .zh-tl{font-size:1.7vw;}'
+        + '.zh-navbot{display:flex;gap:1.2vw;}'
+        /* fileira baixa: Favoritos + Playlist (ícone e texto na horizontal) */
+        + '.zh-stile{flex:1;display:flex;align-items:center;justify-content:center;gap:.9vw;padding:1.25vw 1vw;border-radius:1.2vw;text-decoration:none;color:#f4f7f5;background:' + a + '10;border:1px solid ' + a + '2e;}'
+        + '.zh-sico{display:flex;align-items:center;justify-content:center;flex:none;}'
+        + '.zh-stile svg{width:2vw;height:2vw;stroke:' + a + ';}'
+        + '.zh-stile b{font-size:1.5vw;font-weight:800;}'
+        + '.zh-stx{display:flex;flex-direction:column;min-width:0;text-align:left;}'
+        + '.zh-ssub{display:block;color:#9db0a7;font-size:1.05vw;font-weight:600;margin-top:.2vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
+        + '.zh-stile:active,.zh-stile:hover{background:' + a + '26;border-color:' + a + '80;}'
+        + '.zh-stile:focus-visible{background:' + a + '2e;border-color:' + a + ';box-shadow:0 0 0 .28vw ' + a + ';outline:none;}'
+        + '.zh-tile:active,.zh-tile:hover{background:' + a + '26;border-color:' + a + '80;}'
+        + '.zh-tile:focus-visible,.zh-tile.zh-tile-on{background:' + a + '2e;border-color:' + a + ';box-shadow:0 0 0 .28vw ' + a + ';outline:none;}'
+        + '.zh-ico{width:4.4vw;height:4.4vw;display:flex;align-items:center;justify-content:center;flex:none;}'
+        + '.zh-ico svg{width:4.3vw;height:4.3vw;stroke:' + a + ';}'
+        + '.zh-tx{display:flex;flex-direction:column;min-width:0;align-items:center;text-align:center;max-width:100%;}'
+        + '.zh-tl{font-size:1.85vw;font-weight:800;line-height:1.12;}'
+        + '.zh-tsub{display:block;color:#9db0a7;font-size:1.15vw;font-weight:600;margin-top:.4vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}'
+        + '.zh-fav{display:flex;align-items:center;justify-content:center;width:4vw;text-decoration:none;}'
+        + '.zh-fav svg{width:2.3vw;height:2.3vw;stroke:' + a + ';fill:none;}'
+        + '.zh-fav:active{opacity:.55;}'
+        + '.zh-div{width:1px;align-self:center;height:58%;background:rgba(255,255,255,.09);}'
+        + '.zh-status{display:flex;align-items:center;gap:2.2vw;margin-top:1.6vw;padding:0 .5vw;color:#9db0a7;font-size:1.2vw;}'
+        + '.zh-status span{display:flex;gap:.6vw;}'
+        + '.zh-status b{color:#dbe7e0;font-weight:700;}'
+        + '.zh-bar{width:1px;height:1.4vw;background:rgba(255,255,255,.14);}'
+        + '.zh-badge{margin-left:auto;color:' + a + ';font-weight:800;text-transform:uppercase;letter-spacing:.06em;font-size:1vw;border:1px solid ' + a + '3a;border-radius:1vw;padding:.35vw .8vw;}'
+        + '</style>';
+}
+/* Aviso de vencimento (só na HOME). Usa license do resolve (zero rede extra).
+   Aparece quando NÃO é free e o acesso está perto do fim (<=7d) ou já venceu.
+   Dispensável por dia (data-ver muda no countdown → reaparece amanhã). Igual ao
+   renderPaywall, só EXIBE a URL de renovar (o WebView2 não abre link externo). */
+function licWarnHtml(lic, ac) {
+    // REMOVIDO (03/07, pedido do Leonardo): a faixa "Seu acesso termina em X dias"
+    // empurrava a home inteira pra baixo e não vale a pena — quem vence cai no
+    // renderPaywall (QR+MAC) de qualquer forma. wireAnnounce é null-safe (if lw).
+    return '';
+}
+function announceStyles(ac) {
+    // ⚠️ A faixa é NOTIFICAÇÃO → fica FLUTUANDO no topo (position:fixed), NÃO no
+    // fluxo. Antes empurrava o grupo centralizado da home pra baixo e o
+    // "Recarregar"/infos saíam da tela (pedido do Leonardo). Fixed = overlay,
+    // conteúdo NÃO se move. left/right + margin auto centra sem transform
+    // (seguro em TV velha). z abaixo do popup (99999).
+    return '<style>.zx-ann-banner{position:fixed;top:10px;left:12px;right:12px;z-index:500;display:flex;align-items:flex-start;gap:12px;max-width:1100px;margin:0 auto;background:rgba(12,20,16,0.97);border:1px solid ' + ac + '66;border-left:4px solid ' + ac + ';border-radius:12px;padding:12px 16px;box-sizing:border-box;box-shadow:0 8px 24px rgba(0,0,0,0.5);}'
+        + '.zx-ann-ico{font-size:20px;line-height:1.2;flex:0 0 auto;}.zx-ann-body{flex:1;min-width:0;}.zx-ann-title{font-weight:700;color:#fff;margin-bottom:2px;}.zx-ann-text{color:#cfe8df;font-size:15px;line-height:1.45;white-space:pre-line;}'
+        + '.zx-ann-x{flex:0 0 auto;background:transparent;border:0;color:#9fb4ac;font-size:18px;cursor:pointer;padding:2px 8px;border-radius:8px;line-height:1;}.zx-ann-x:hover,.zx-ann-x:focus{color:#fff;background:rgba(255,255,255,0.10);outline:none;}'
+        + '.zx-ann-overlay{position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.72);padding:24px;box-sizing:border-box;}'
+        + '.zx-ann-pop{background:#161616;border:1px solid ' + ac + '66;border-radius:16px;padding:26px 28px;max-width:520px;width:100%;text-align:center;box-shadow:0 16px 50px rgba(0,0,0,0.6);box-sizing:border-box;}'
+        + '.zx-ann-pop-ico{font-size:34px;margin-bottom:8px;}.zx-ann-pop-title{font-weight:700;color:#fff;font-size:20px;margin-bottom:8px;}.zx-ann-pop-text{color:#d6d6d6;font-size:16px;line-height:1.55;margin-bottom:20px;white-space:pre-line;}'
+        + '.zx-ann-pop-ok{background:' + ac + ';color:#04231a;font-weight:700;border:0;border-radius:10px;padding:12px 34px;font-size:16px;cursor:pointer;}.zx-ann-pop-ok:focus{outline:3px solid #fff;outline-offset:2px;}'
+        + '.zx-lic-warn{display:flex;align-items:center;gap:12px;max-width:1100px;margin:0 auto 6px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.4);border-left:4px solid #f59e0b;border-radius:12px;padding:11px 16px;box-sizing:border-box;}'
+        + '.zx-lic-warn.exp{background:rgba(239,68,68,0.12);border-color:rgba(239,68,68,0.4);border-left-color:#ef4444;}'
+        + '.zx-lic-ico{font-size:19px;line-height:1;flex:0 0 auto;}.zx-lic-body{flex:1;min-width:0;color:#e9dcc4;font-size:14.5px;line-height:1.4;}.zx-lic-warn.exp .zx-lic-body{color:#f3d2d2;}.zx-lic-body strong{color:#fff;}'
+        + '.zx-lic-x{flex:0 0 auto;background:transparent;border:0;color:#b6a98c;font-size:17px;cursor:pointer;padding:2px 8px;border-radius:8px;line-height:1;}.zx-lic-x:hover,.zx-lic-x:focus{color:#fff;background:rgba(255,255,255,0.10);outline:none;}</style>';
+}
+function wireAnnounce(ann) {
+    function dismissed(k, v) { try { return localStorage.getItem(k) === v; } catch (e) { return false; } }
+    function setD(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+    // Aviso de vencimento (independe do announce; pode aparecer sem ele)
+    var lw = $('zxLicWarn');
+    if (lw) {
+        var lv = lw.getAttribute('data-ver');
+        if (!dismissed('zx:licwarn', lv)) lw.style.display = 'flex';
+        var lx = $('zxLicWarnX'); if (lx) lx.addEventListener('click', function () { setD('zx:licwarn', lv); lw.style.display = 'none'; });
+    }
+    if (!ann) return;
+    var ban = $('zxAnnBanner');
+    if (ban) { var bv = ban.getAttribute('data-ver'); if (!dismissed('zx:annban', bv)) ban.style.display = 'flex'; var bx = $('zxAnnBannerX'); if (bx) bx.addEventListener('click', function () { setD('zx:annban', bv); ban.style.display = 'none'; }); }
+    var pop = $('zxAnnPopup');
+    if (pop) {
+        var pv = pop.getAttribute('data-ver'), ok = $('zxAnnPopupOk');
+        function closePop() {
+            pop.style.display = 'none'; setD('zx:annpop', pv);
+            try { document.body.classList.remove('tv-modal-open'); } catch (e) {}
+            focusHomeStart();   // devolve o foco pro TV ao Vivo ao fechar
+        }
+        if (!dismissed('zx:annpop', pv)) {
+            pop.style.display = 'flex';
+            try { document.body.classList.add('tv-modal-open'); } catch (e) {}   // PRENDE as setas no modal
+            if (ok) { ok.addEventListener('click', closePop); setTimeout(function () { try { ok.focus(); } catch (e) {} }, 60); setTimeout(function () { try { if (pop.style.display !== 'none' && !pop.contains(document.activeElement)) ok.focus(); } catch (e) {} }, 400); }
+            pop.addEventListener('click', function (ev) { if (ev.target === pop) closePop(); });
+        }
+    }
+}
+
+/* ---- HOME "Favoritos": TODOS os favoritos juntos (filmes + séries + canais) ----
+   Bug corrigido: o tile "Favoritos" da home ia pra /favorites = renderSection
+   ('movies',...) e mostrava SÓ favoritos de filme. Agora junta os 3 tipos numa
+   grade só; cada tile roteia certo (filme→detalhe, série→detalhe, canal→toca). */
+/* Padrão visual (degradê + marca d'água ULTRA + pill Voltar verde) pras telas
+   simples: FAVORITOS e LISTAS/Playlist. Injetado no setHtml de cada uma. */
+function flatStyles() {
+    var a = S.accent || '#10b981';
+    return '<style>'
+        // ⚠️ PERF TV fraca (19/07): favoritos/busca ROLAM — fundo CHAPADO, sem marca
+        // d'água fixa atrás do scroll (re-compunha a tela toda por quadro).
+        + '.search-screen{background:#0a1611;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}'
+        + '.gt-back{background:' + a + '14;border:1px solid ' + a + '3a;border-radius:12px;color:#f4f7f5;}'
+        + '.gt-back:focus{background:' + a + '2e;border-color:' + a + ';box-shadow:0 0 0 3px ' + a + '66;outline:none;}'
+        // tela de PESQUISA (filmes/séries): campo escuro + botão Buscar verde
+        + '.search-form .vkb-trigger,.search-form input.vkb-native{background:#0b1310;border-color:rgba(255,255,255,.12);border-radius:12px;color:#f4f7f5;}'
+        + '.search-form .vkb-trigger:focus,.search-form input.vkb-native:focus{border-color:' + a + ';box-shadow:0 0 0 3px ' + a + '33;outline:none;}'
+        + '.search-go{background:' + a + ';color:#04231a;font-weight:800;border-color:' + a + ';border-radius:12px;}'
+        + '.search-go:focus{outline:none;border-color:#fff;box-shadow:0 0 0 3px ' + a + '66;}'
+        // card "Sua lista" (Playlist adicionada) — vidro verde no lugar do cinza
+        + '.zx-list-card{background:' + a + '0d;border:1px solid ' + a + '24;border-radius:18px;}'
+        + '.zx-list-cap{color:#8fa39a;}'
+        + '.zx-list-user{color:#9db0a7;}'
+        + '.zx-list-swap{border-radius:12px;}'
+        + '.zx-list-swap:focus,.zx-list-swap.is-focus{outline:none;box-shadow:0 0 0 3px #fff;}'
+        + '</style>';
+}
+function favTile(it, kind) {
+    var name = it.name || '', img = tmdbResize(it.poster || it.logo || ''), href, extra = '';
+    if (kind === 'movies') href = '/movies/' + it.id;
+    else if (kind === 'series') href = '/series/' + it.id;
+    else { href = '/live/channel/' + it.id + '?name=' + encodeURIComponent(name) + '&logo=' + encodeURIComponent(it.logo || it.poster || ''); extra = ' style="background-size:contain"'; }
+    return '<a class="poster-tile-tv" href="' + href + '">'
+        + '<div class="pt-img"' + (img ? ' data-src="' + attr(img) + '"' : '') + extra + '>'
+        + '<div class="pt-fallback">' + esc((name || '').slice(0, 2)) + '</div></div>'
+        + '<div class="pt-name">' + esc(name) + '</div></a>';
+}
+function renderFavHome() {
+    var movies = localFavList('movie'), series = localFavList('series'), lives = localFavList('live');
+    var tiles = '', i;
+    for (i = 0; i < movies.length; i++) tiles += favTile(movies[i], 'movies');
+    for (i = 0; i < series.length; i++) tiles += favTile(series[i], 'series');
+    for (i = 0; i < lives.length; i++) tiles += favTile(lives[i], 'live');
+    // Layout full-width (igual à Busca): topo "← Voltar" + título, e a grade
+    // EMPILHADA. SEM menu de tipos (o usuário pediu). Nav por seta = tv.js
+    // (navGridByIndex em .poster-tile-tv); imagens via lazyGrid; Back = Esc/global.
+    var body = tiles
+        ? '<div class="poster-grid-tv" id="content-grid">' + tiles + '</div>'
+        : '<div style="color:#aaa;padding:50px 20px;text-align:center;">Você ainda não favoritou nada.<br>Abra um filme, série ou canal e toque em <strong>Favoritos</strong>.</div>';
+    setHtml('<div class="search-screen"><div class="search-topbar"><a href="/home" class="gt-back" autofocus>← Voltar</a><div class="search-title">Favoritos</div></div>'
+        + '<div class="search-body">' + body + '</div></div>' + flatStyles());
+    if (tiles) { fitPosterGrid($('content-grid')); lazyGrid($('content-grid')); }
+    afterRender();
+}
+
+/* ---- SEÇÃO (filmes/séries/canais) ---- */
+/* Tela "Sem conexão — Recarregar" (SÓ Android): mostrada quando um conteúdo
+   NUNCA carregado falha por falta de internet (em vez do vazio feio). O
+   "Recarregar" re-renderiza a tela ATUAL → como a falha NÃO é cacheada
+   (ensureCatalog/xtInfo), ao voltar a internet ele busca de novo e aparece. */
+function renderOfflineReload() {
+    var cur = ''; try { cur = (history.state && history.state.p) || ''; } catch (e) {}
+    setHtml('<div class="zx-offl-wrap"><div class="zx-offl-box">'
+        + '<div class="zx-offl-emoji">📡</div><div class="zx-offl-t">Sem conexão</div>'
+        + '<div class="zx-offl-d">Não deu pra carregar este conteúdo. Verifique a internet e recarregue.</div>'
+        + '<div class="zx-offl-btns"><button type="button" class="btn-tv is-primary" id="zxOfflReload" autofocus><span class="btn-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg></span>Recarregar</button>'
+        + '<a href="/home" class="btn-tv">← Início</a></div></div></div>'
+        + '<style>.zx-offl-wrap{position:fixed;inset:0;display:-webkit-box;display:flex;-webkit-box-align:center;align-items:center;-webkit-box-pack:center;justify-content:center;padding:24px;text-align:center}.zx-offl-box{max-width:460px}.zx-offl-emoji{font-size:54px;margin-bottom:14px}.zx-offl-t{font-size:24px;font-weight:800;color:#fff;margin-bottom:8px}.zx-offl-d{font-size:15px;color:#9fb3ab;margin-bottom:24px;line-height:1.45}.zx-offl-btns{display:-webkit-box;display:flex;gap:12px;-webkit-box-pack:center;justify-content:center}.zx-offl-box .btn-tv{display:-webkit-inline-box;display:inline-flex;-webkit-box-align:center;align-items:center;gap:8px}</style>');
+    var b = $('zxOfflReload'); if (b) b.addEventListener('click', function () { go(cur || '/home', true); });
+    afterRender();
+}
+function renderSection(kind, opts) {
+    opts = opts || {};
+    if (!S.server) return renderNoPlaylist();   // sem lista -> "Playlist não adicionada"
+    showLoading(true);
+    ensureCatalog(kind).then(function (cat) {
+        showLoading(false);
+        if (kind === 'live') return renderLiveSection(cat, opts);
+        renderVodSection(kind, cat, opts);
+    }).catch(function (err) {
+        showLoading(false);
+        if (err && err.zxOffline) return renderOfflineReload();   // Android offline: tela Recarregar
+        setHtml('<div style="padding:60px;text-align:center;color:#aaa">Não foi possível carregar. <a href="/home" style="color:#fff;text-decoration:underline">Voltar</a></div>');
+    });
+}
+
+function vodSidebar(kind, cat, selName) {
+    var searchHref = '/' + kind + '/search';
+    var contLabel = kind === 'series' ? 'Continue Assistindo' : 'Continue Assistindo';
+    var h = '<div class="cat-sidebar"><a href="/home" class="cat-pill cat-pill-back"><span>← Voltar</span></a>'
+        + '<a href="' + searchHref + '" class="cat-pill cat-pill-icon" autofocus><span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg> Pesquisar</span></a>'
+        + '<a href="/' + kind + '/continue" data-replace="1" class="cat-pill ' + (selName === 'Continue Assistindo' ? 'is-active' : '') + '"><span>' + contLabel + '</span><span class="cat-count"></span></a>'
+        + '<a href="/' + kind + '/favorites" data-replace="1" class="cat-pill ' + (selName === 'Favoritos' ? 'is-active' : '') + '"><span>Favoritos</span><span class="cat-count">' + (S.fav[kind === 'series' ? 'series' : 'movie'].length || '') + '</span></a>'
+        + '<a href="/' + kind + '/recent" data-replace="1" class="cat-pill ' + (selName === 'Recém adicionados' ? 'is-active' : '') + '"><span>Recém adicionados</span></a>';
+    for (var i = 0; i < cat.cats.length; i++) {
+        var c = cat.cats[i];
+        var active = (selName === c.category_name);
+        var lock = c.adult ? '<svg class="cat-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>' : '';
+        h += '<a href="/' + kind + '/category/' + c.category_id + '" class="cat-pill ' + (active ? 'is-active' : '') + '"><span>' + lock + esc(c.category_name) + '</span><span class="cat-count">' + (c.num || '') + '</span></a>';
+    }
+    return h + '</div>';
+}
+function firstNonAdult(cat) { for (var i = 0; i < cat.cats.length; i++) if (!cat.cats[i].adult) return cat.cats[i]; return cat.cats[0] || null; }
+
+function renderVodSection(kind, cat, opts) {
+    var selCat = null, selName = '', tiles = '', hasMore = false, virtual = opts.virtual || '';
+    var moreText = kind === 'series' ? 'Carregando mais séries…' : 'Carregando mais filmes…';
+    var emptyText = kind === 'series' ? 'Nenhuma série nessa categoria.' : 'Nenhum filme nessa categoria.';
+    // Voltar de um detalhe (history.back → /movies|/series SEM categoria): restaura a
+    // categoria (ou virtual 'v:favoritos' etc.) onde o usuário estava — IGUAL aos
+    // canais (S.liveBack). O clique na pill troca IN-PLACE (category_browser) e no
+    // Android o replaceState dele NÃO grava (file:// não deixa mexer na URL) → quem
+    // grava é o próprio category_browser via ZLocal.S.vodBack (switchCategory/Virtual).
+    if (!opts.catId && !virtual && S.vodBack && S.vodBack[kind]) {
+        var zvb = String(S.vodBack[kind]);
+        if (zvb.indexOf('v:') === 0) virtual = zvb.slice(2);
+        else opts.catId = zvb;
+    }
+    if (opts.catId) { S.vodBack = S.vodBack || {}; S.vodBack[kind] = String(opts.catId); }
+    // Voltar de um DETALHE → devolve a rolagem/foco de onde o usuário saiu
+    // (salvo no clique do tile). Consumido UMA vez; render novo limpa.
+    var backPos = (S.vodPos && S.vodPos.kind === kind) ? S.vodPos : null;
+    S.vodPos = null;
+    var startPage = 1;
+
+    function paint() {
+        setHtml('<div class="sidebar-screen">' + vodSidebar(kind, cat, selName)
+            + '<div class="sidebar-content" id="sidebar-content"><div class="sc-title" id="sc-title">' + esc(selName || (kind === 'series' ? 'Séries' : 'Filmes')) + '</div>'
+            + '<div id="grid-empty" style="color:#aaa;padding:40px;text-align:center;' + (tiles ? 'display:none;' : '') + '">' + emptyText + '</div>'
+            + '<div class="poster-grid-tv" id="content-grid">' + tiles + '</div>'
+            + '<div class="grid-loadmore" id="grid-loadmore" ' + (hasMore ? '' : 'style="display:none"') + '>' + moreText + '</div></div></div>' + liveStyles());
+        // ⚠️ Globais do category_browser DIRETO em JS — NÃO como <script> no
+        // innerHTML (script inserido por innerHTML NÃO executa → __catKind ficava
+        // undefined → KIND caía no default 'movies' → clicar categoria de
+        // série/canal não casava o rxCat e o <a> navegava nativo pra file:// =
+        // ERR_FILE_NOT_FOUND; e __catHasMore não chegava → paginação >100 morta).
+        global.__catKind = kind; global.__catId = (selCat || 0); global.__catPage = startPage;
+        global.__catHasMore = !!hasMore; global.__catMoreText = moreText;
+        runScript('assets/category_browser.js');
+        // contadores das categorias virtuais (continue) — lazy, com cache
+        var csec = kind === 'series' ? 'series' : 'vod';
+        continueList(csec).then(function (d) {
+            var n = (d && d.items) ? d.items.length : 0;
+            var pill = document.querySelector('.cat-sidebar a[href="/' + kind + '/continue"] .cat-count');
+            if (pill && n) pill.textContent = n;
+        });
+        afterRender();
+        // Voltou de um detalhe → devolve a rolagem (grade E sidebar) e foca o tile
+        // de onde saiu. Sem posição salva → só garante a categoria ATIVA visível na
+        // sidebar (senão a pill fica marcada lá embaixo mas a lista abre no topo).
+        var bp = backPos; backPos = null;
+        setTimeout(function () {
+            var sb = document.querySelector('.cat-sidebar');
+            if (bp) {
+                var scEl = document.getElementById('sidebar-content');
+                if (scEl) scEl.scrollTop = bp.top;
+                if (sb) sb.scrollTop = bp.side || 0;
+                try {
+                    var t = bp.href && document.querySelector('#content-grid a[href="' + bp.href + '"]');
+                    if (t && t.focus) t.focus();
+                } catch (e) {}
+                if (scEl) scEl.scrollTop = bp.top;          // re-assenta (o focus pode deslocar)
+                if (sb) sb.scrollTop = bp.side || 0;
+            } else if (sb) {
+                var ap = sb.querySelector('.cat-pill.is-active');
+                if (ap && sb.scrollHeight > sb.clientHeight) {
+                    var t2 = ap.offsetTop - sb.clientHeight / 2 + ap.offsetHeight / 2;
+                    if (t2 > 0) sb.scrollTop = t2;           // centraliza a pill ativa
+                }
+            }
+        }, 60);
+    }
+
+    if (virtual) {
+        selName = virtual === 'favorites' ? 'Favoritos' : virtual === 'continue' ? 'Continue Assistindo' : 'Recém adicionados';
+        if (virtual === 'recent') { tiles = posterTiles(cat.all.slice(0, 200), kind); paint(); return; }
+        // favorites/continue via /api/r (com cache p/ offline)
+        var k = kind === 'series' ? 'series' : 'movie';
+        var sec = kind === 'series' ? 'series' : 'vod';
+        // LOCAL: favoritos do aparelho; continue do aparelho.
+        var call = virtual === 'favorites' ? Promise.resolve({ ok: true, items: localFavList(k) }) : continueList(sec);
+        call.then(function (d) {
+            var items = (d && d.items) || [];
+            // mapeia {id,name,poster} → tile
+            var list = items.map(function (it) { var o = {}; o[kind === 'series' ? 'series_id' : 'stream_id'] = it.id; o.name = it.name; o[kind === 'series' ? 'cover' : 'stream_icon'] = it.poster; return o; });
+            tiles = posterTiles(list, kind); paint();
+        });
+        return;
+    }
+
+    var c = opts.catId ? findCat(cat, opts.catId) : firstNonAdult(cat);
+    if (c) {
+        selCat = c.category_id; selName = c.category_name;
+        var list = streamsForCat(kind, selCat);
+        // Voltando de um detalhe: re-renderiza a MESMA quantidade de tiles que já
+        // estava carregada (dados são locais, é barato) → a rolagem salva alcança
+        // o ponto onde o usuário estava; a paginação continua da página certa.
+        var initial = PAGE;
+        if (backPos && backPos.count > PAGE) initial = Math.min(list.length, backPos.count);
+        tiles = posterTiles(list.slice(0, initial), kind);
+        hasMore = list.length > initial;
+        startPage = Math.max(1, Math.ceil(initial / PAGE));
+    }
+    paint();
+}
+function findCat(cat, id) { for (var i = 0; i < cat.cats.length; i++) if (String(cat.cats[i].category_id) === String(id)) return cat.cats[i]; return null; }
+
+/* ---- SEÇÃO LIVE (lista + EPG + busca inline) ---- */
+/* Visual novo das seções TV AO VIVO + FILMES + SÉRIES (Android teste): mesmo
+   padrão da home — fundo em degradê + marca d'água ULTRA, pills "vidro" verde e
+   foco em ANEL verde (acabou o fundo branco estourado). Os seletores de canal/
+   EPG só casam na tela de canais; nas de VOD ficam inertes. O <style> vai no
+   setHtml de cada tela, então NÃO vaza pras outras plataformas. */
+function liveStyles() {
+    var a = S.accent || '#10b981';
+    return '<style>'
+        // ⚠️ PERF TV fraca (19/07): esta tela ROLA — fundo CHAPADO (degradê + marca
+        // d'água atrás de scroll re-compõem a tela toda por quadro) e SEM transition.
+        + '.sidebar-screen{background:#0a1611;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}'
+        // ---- sidebar de categorias ----
+        // ⚠️ SÓ cores/borda — tamanho/fonte/padding ficam com o tv.css (que tem as
+        // regras responsivas por tela; fixar aqui deixava as pills GROSSAS no celular).
+        + '.cat-sidebar .cat-pill{background:' + a + '0d;border-color:' + a + '24;border-radius:13px;color:#e7efe9;}'
+        // MODO TV (Android): sidebar/pills em vw = MESMA proporção em qualquer
+        // densidade. TVs enxergam 960/1280/1920 px CSS na mesma tela 1080p; em px
+        // fixo as categorias ficavam GIGANTES numa TV e pequenas na outra (19/07).
+        // pills mais LARGAS (pedido 19/07): sidebar larga (29vw) e altura/fonte
+        // normais — cresce pro LADO, não pra cima. Capas seguem 4 colunas (alvo
+        // é % da tela, a conta continua dando 4 com a sidebar larga).
+        + 'body.zx-ff-tv .cat-sidebar{width:29vw;padding:1.9vw 1vw 1.9vw 1.9vw;}'
+        + 'body.zx-ff-tv .sidebar-content{left:29vw;padding:1.9vw 2.5vw 2.2vw;}'
+        + 'body.zx-ff-tv .cat-sidebar .cat-pill{font-size:1.65vw;padding:1.4vw 4.6vw 1.4vw 1.7vw;margin-bottom:.8vw;border-radius:.95vw;}'
+        + 'body.zx-ff-tv .cat-sidebar .cat-pill .cat-count{font-size:1.35vw;right:1.6vw;margin-top:-.75vw;line-height:1.5vw;}'
+        + 'body.zx-ff-tv .cat-sidebar .cat-lock{width:1.1vw;height:1.1vw;}'
+        + 'body.zx-ff-tv .sidebar-content .sc-title{font-size:2.3vw;margin-bottom:1.8vw;}'
+        + '.cat-sidebar .cat-pill:hover{border-color:' + a + '80;}'
+        + '.cat-sidebar .cat-pill .cat-count{color:#8fa39a;}'
+        + '.cat-sidebar .cat-pill:focus{background:' + a + '2e;border-color:' + a + ';box-shadow:0 0 0 3px ' + a + '66;color:#fff;outline:none;}'
+        + '.cat-sidebar .cat-pill:focus .cat-count{color:#cfe8df;}'
+        + '.cat-sidebar .cat-pill.is-active{background:' + a + '26;border-color:' + a + '90;color:#fff;}'
+        + '.cat-sidebar .cat-pill.is-active .cat-count{color:#cfe8df;}'
+        + '.cat-sidebar .cat-pill-back{color:#cfe0d8;}'
+        // busca de canais (input nativo do Android) no mesmo vidro verde
+        + '.cat-sidebar input.vkb-native{background:' + a + '0d;border-color:' + a + '24;}'
+        + '.cat-sidebar input.vkb-native:focus{border-color:' + a + ';background:' + a + '14;}'
+        + '.sidebar-content .sc-title{font-weight:800;border-left:4px solid ' + a + ';}'
+        // ---- tiles de canal ----
+        + '.channel-tile-tv{background-color:' + a + '0d;background-image:none;border:1px solid ' + a + '22;border-radius:14px;box-shadow:none;}'
+        + '.channel-tile-tv:hover{border-color:' + a + '80;}'
+        + '.channel-tile-tv .ct-logo{background-color:#0d1a14;border-radius:10px;}'
+        + '.channel-tile-tv:focus{background:' + a + '2e;color:#fff;border-color:' + a + ';box-shadow:0 0 0 3px ' + a + '66;}'
+        + '.channel-tile-tv:focus .ct-num{color:#cfe8df;}'
+        + '.channel-tile-tv:focus .ct-name{color:#fff;}'
+        // ---- painel de EPG ----
+        + '.live-epg{background:rgba(255,255,255,.028);border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:18px 20px;box-sizing:border-box;}'
+        + '.live-epg .epg-item{border-top:1px solid rgba(255,255,255,.06);}'
+        + '.live-epg .epg-time{color:#8fa39a;}'
+        + '.live-epg .epg-sub{color:#8fa39a;}'
+        + '.grid-loadmore{color:#8fa39a;}'
+        + '</style>';
+}
+function renderLiveSection(cat, opts) {
+    var selCat = null, selName = '', tiles = '', virtual = opts.virtual || '';
+    // PC: voltando de um canal (history.back → /live SEM categoria) → restaura a
+    // categoria de onde saiu (setada no goPlay). Senão caía na 1ª (Casa do Patrão).
+    if (!nativeAvail() && !opts.catId && !virtual && S.liveBack) {   // PC + Samsung (Android toca direto, não navega)
+        var lb = S.liveBack; S.liveBack = null; var mm = lb.match(/\/live\/category\/(\d+)/);
+        if (mm) opts.catId = mm[1];
+        else if (lb.indexOf('/recent') >= 0) virtual = 'recent';
+        else if (lb.indexOf('/favorites') >= 0) virtual = 'favorites';
+    }
+    var favCount = S.fav.live.length || '';
+
+    function sidebar() {
+        var h = '<div class="cat-sidebar"><a href="/home" class="cat-pill cat-pill-back"><span>← Voltar</span></a>'
+            + '<div class="cat-pill cat-pill-icon vkb-trigger" id="live-search-trigger" role="button" tabindex="0" data-vkb-target="live-q" data-vkb-label="Buscar canal" data-vkb-placeholder="Buscar canal…"><span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg> Pesquisar</span></div>'
+            + '<input type="hidden" id="live-q" value="">'
+            + '<a href="/live/recent" data-replace="1" class="cat-pill ' + (selName === 'Canais Recentes' ? 'is-active' : '') + '"><span>Recentes</span></a>'
+            + '<a href="/live/favorites" data-replace="1" class="cat-pill ' + (selName === 'Canais Favoritos' ? 'is-active' : '') + '"><span>Favoritos</span><span class="cat-count">' + favCount + '</span></a>';
+        for (var i = 0; i < cat.cats.length; i++) {
+            var c = cat.cats[i]; var active = (selName === c.category_name);
+            var lock = c.adult ? '<svg class="cat-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>' : '';
+            h += '<a href="/live/category/' + c.category_id + '" class="cat-pill ' + (active ? 'is-active' : '') + '"><span>' + lock + esc(c.category_name) + '</span><span class="cat-count">' + (c.num || '') + '</span></a>';
+        }
+        return h + '</div>';
+    }
+    function paint() {
+        setHtml('<div class="sidebar-screen">' + sidebar()
+            + '<div class="sidebar-content" id="sidebar-content"><div class="sc-title" id="sc-title">' + esc(selName || 'TV ao vivo') + '</div>'
+            + '<div id="grid-empty" style="color:#aaa;padding:40px;text-align:center;' + (tiles ? 'display:none;' : '') + '">Selecione uma categoria para ver os canais.</div>'
+            + '<div class="live-split"><div class="channel-grid-tv" id="content-grid">' + tiles + '</div>'
+            + '<div class="live-epg" id="live-epg"><div class="epg-empty">Passe num canal para ver a programação.</div></div></div>'
+            + '<div class="grid-loadmore" id="grid-loadmore" style="display:none">Carregando…</div></div></div>' + liveStyles());
+        // Globais DIRETO em JS (script no innerHTML não executa — ver renderVodSection).
+        global.__catKind = 'live'; global.__catId = (selCat || 0); global.__catPage = 1;
+        global.__catHasMore = false; global.__catMoreText = 'Carregando…';
+        runScript('assets/category_browser.js');
+        wireLiveSearch();
+        wireLiveEpg();
+        loadChannelLogos();
+        afterRender();
+    }
+
+    if (virtual === 'favorites') {
+        selName = 'Canais Favoritos';
+        var fl = localFavList('live');   // LOCAL
+        tiles = channelTiles(fl.map(function (it) { return { stream_id: it.id, name: it.name, stream_icon: it.logo || it.poster, num: 0 }; }));
+        paint();
+        return;
+    }
+    if (virtual === 'recent') {
+        selName = 'Canais Recentes';
+        tiles = channelTiles(recentLiveList().map(function (it) { return { stream_id: it.id, name: it.name, stream_icon: it.logo, num: 0 }; }));   // LOCAL
+        paint();
+        return;
+    }
+    var c = opts.catId ? findCat(cat, opts.catId) : firstNonAdult(cat);
+    if (c) { selCat = c.category_id; selName = c.category_name; tiles = channelTiles(streamsForCat('live', selCat)); }
+    paint();
+}
+function wireLiveSearch() {
+    var liveQ = $('live-q');
+    function run() { var v = liveQ ? (liveQ.value || '') : ''; if (v.replace(/^\s+|\s+$/g, '').length >= 2) { if (global.__liveSearch) global.__liveSearch(v); } else { if (global.__liveSearchClear) global.__liveSearchClear(); } }
+    if (liveQ) { var dt = null; liveQ.addEventListener('input', function () { if (dt) clearTimeout(dt); dt = setTimeout(run, 130); }); }
+    var trig = $('live-search-trigger');
+    if (trig && global.HdxKeyboard) HdxKeyboard.bind(trig, { submitLabel: 'Buscar', onSubmit: run, onNext: run });
+}
+// Logos dos canais: carrega DIRETO (o lazy-loader do category_browser não pega
+// os .ct-logo de forma confiável aqui). Canais por categoria são poucos, então
+// carregar tudo é tranquilo. Guard __zl evita recarregar.
+function loadChannelLogos() {
+    var logos = document.querySelectorAll('#content-grid .ct-logo[data-logo]');
+    for (var i = 0; i < logos.length; i++) {
+        (function (el) {
+            if (el.__zl) return; el.__zl = 1;
+            var src = el.getAttribute('data-logo'); if (!src) return;
+            var im = new Image();
+            im.onload = function () { el.style.backgroundImage = "url('" + src + "')"; if (el.className.indexOf('is-loaded') < 0) el.className += ' is-loaded'; };
+            im.src = src;
+        })(logos[i]);
+    }
+}
+function wireLiveEpg() {
+    var content = $('content-grid'), panel = $('live-epg');
+    if (!content || !panel) return;
+    function closestCls(el, cls) { while (el && el.nodeType === 1 && el !== document.body) { if ((' ' + (el.className || '') + ' ').indexOf(' ' + cls + ' ') !== -1) return el; el = el.parentNode; } return null; }
+    var selSid = null, selName = '', selHref = '#';
+    function goPlay(href) {
+        if (!href || href === '#') return;
+        // PC + SAMSUNG: ao abrir um canal (vai pra página do player <video>/AVPlay),
+        // LEMBRA a categoria atual (pílula ativa) → ao fechar (history.back → /live)
+        // volta nela em vez de cair na 1ª (Casa do Patrão). No Android o canal toca
+        // DIRETO (sem navegar) então nem passa aqui.
+        try { if (!nativeAvail()) { var ap = document.querySelector('.cat-sidebar .cat-pill.is-active'); S.liveBack = ap ? ap.getAttribute('href') : null; } } catch (e) {}
+        showLoading(true); go(href);
+    }
+    // Sem botão "Assistir" no Android NEM Samsung (1 clique já abre; o EPG aparece no
+    // foco). PC mantém o botão (lá é 2 cliques + mouse).
+    function ensureSkeleton() { if (panel.querySelector('.epg-ch')) return; var av = (nativeAvail() || tizenAvail()) ? '' : '<button type="button" class="epg-play" id="epg-play">▶ Assistir</button>'; panel.innerHTML = '<div class="epg-ch" id="epg-ch"></div>' + av + '<div class="epg-body" id="epg-body"></div>'; }
+    function renderEpg(row) {
+        var sid = row.getAttribute('data-sid'); if (!sid) return;
+        selSid = sid; selName = row.getAttribute('data-name') || ''; selHref = row.getAttribute('data-href') || '#';
+        ensureSkeleton();
+        var chEl = $('epg-ch'), bodyEl = $('epg-body');
+        if (chEl) chEl.textContent = selName;
+        if (bodyEl) bodyEl.innerHTML = '<div class="epg-sub">Carregando programação…</div>';
+        if (global.Tv && Tv.get) Tv.get('/api/live/epg/' + encodeURIComponent(sid), function (data) {
+            if (selSid !== sid) return;
+            var body = $('epg-body'); if (!body) return;
+            var epg = (data && data.epg) || [];
+            if (!epg.length) { body.innerHTML = '<div class="epg-empty">Sem programação para este canal.</div>'; return; }
+            var h = '';
+            for (var i = 0; i < epg.length; i++) { var p = epg[i]; var t = esc(p.start || '') + (p.end ? (' - ' + esc(p.end)) : '') + (i === 0 ? ('  • ' + (currentLang() === 'en' ? 'NOW' : 'AGORA')) : ''); h += '<div class="epg-item' + (i === 0 ? ' is-now' : '') + '"><div class="epg-time">' + t + '</div><div class="epg-title">' + esc(p.title || '—') + '</div></div>'; }
+            body.innerHTML = h;
+        });
+    }
+    function preloadFirst() { var first = content.querySelector('.channel-tile-tv'); if (first) renderEpg(first); }
+    var t = null;
+    content.addEventListener('focusin', function (e) { var row = closestCls(e.target, 'channel-tile-tv'); if (!row) return; if (t) clearTimeout(t); t = setTimeout(function () { renderEpg(row); }, 220); });
+    content.addEventListener('mouseover', function (e) { var row = closestCls(e.target, 'channel-tile-tv'); if (!row || row.getAttribute('data-sid') === selSid) return; if (t) clearTimeout(t); t = setTimeout(function () { renderEpg(row); }, 220); });
+    var lastEl = null, lastT = 0;
+    content.addEventListener('click', function (e) {
+        if (closestCls(e.target, 'ct-fav')) return;
+        var row = closestCls(e.target, 'channel-tile-tv'); if (!row) return;
+        e.preventDefault(); e.stopPropagation();
+        var href = row.getAttribute('data-href') || '#';
+        // ANDROID: 1 clique abre (D-pad OU touch). O 'click' só dispara em toque,
+        // não em rolagem → seguro pra scroll. (Web/Samsung: mantém 2 cliques.)
+        // Toca DIRETO no nativo, SEM navegar (sem go()/history.back): o history.back
+        // do renderPlayerLive voltava pra /live e re-renderizava a 1ª categoria
+        // (CASA DO PATRAO), perdendo a categoria/canal atual — na TV lenta dava pra
+        // ver o "pulo". Agora o WebView fica parado no canal/categoria de onde saiu.
+        if (nativeAvail()) {
+            var nsid = row.getAttribute('data-sid'), nnm = row.getAttribute('data-name') || '', nlogo = row.getAttribute('data-logo') || '';
+            if (nsid) { trackRecent(nsid, nnm, nlogo, 0); playViaNative({ kind: 'live', url: streamUrl('live', nsid), title: nnm, resume: 0, zxKind: 'live', zxId: nsid, name: nnm, zap: liveZapList(nsid) }); return; }
+            goPlay(href); return;
+        }
+        // SAMSUNG: 1 clique (OK do controle) JÁ abre o canal — sem 2 cliques, sem botão
+        // "Assistir". O EPG já apareceu ao FOCAR (focusin). goPlay lembra a categoria
+        // (S.liveBack) → ao fechar volta nela, não na 1ª (Casa do Patrão).
+        if (tizenAvail()) { goPlay(href); return; }
+        var now = (new Date()).getTime();
+        if (row === lastEl && (now - lastT) < 650) { goPlay(href); return; }
+        lastEl = row; lastT = now; renderEpg(row);
+    }, true);
+    panel.addEventListener('click', function (e) { if (closestCls(e.target, 'epg-play')) goPlay(selHref); });
+    preloadFirst();
+    if (global.__liveEpgMo) { try { global.__liveEpgMo.disconnect(); } catch (e) {} }
+    if (global.MutationObserver) {
+        var mt = null;
+        global.__liveEpgMo = new MutationObserver(function () { selSid = null; panel.innerHTML = '<div class="epg-empty">Passe num canal para ver a programação.</div>'; if (mt) clearTimeout(mt); mt = setTimeout(function () { loadChannelLogos(); if (document.body && (' ' + document.body.className + ' ').indexOf(' vkb-open ') !== -1) return; preloadFirst(); }, 60); });
+        global.__liveEpgMo.observe(content, { childList: true });
+    }
+}
+
+/* ---- DETALHE: FILME ---- */
+/* Botões de play do DETALHE extraídos pra reuso: o render normal monta uma vez,
+   e no Android a nativeRefreshDetail() remonta SÓ esses botões na hora (sem rede)
+   quando o player nativo fecha. HTML idêntico ao de antes → web/TV inalteradas. */
+function moviePlayBtnsHtml(id, ext) {
+    var pr = getProgress('movie', id) || {};
+    var resumePos = (pr.pos && pr.pos > 30 && (!pr.dur || pr.pos < pr.dur - 30)) ? pr.pos : 0;
+    var playIco = '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+    if (resumePos) {
+        var rmin = Math.floor(resumePos / 60), rlbl = rmin > 0 ? (rmin + ' min') : (resumePos + 's');
+        return '<a class="btn-tv is-primary" href="/movies/' + enc(id) + '/play?t=' + enc(resumePos) + '" data-ext="' + attr(ext) + '" autofocus><span class="btn-icon">' + playIco + '</span>' + te('Continuar de ') + esc(rlbl) + '</a>'
+            + '<a class="btn-tv" href="/movies/' + enc(id) + '/play?restart=1" data-ext="' + attr(ext) + '"><span class="btn-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg></span>Recomeçar</a>';
+    }
+    return '<a class="btn-tv is-primary" href="/movies/' + enc(id) + '/play" data-ext="' + attr(ext) + '" autofocus><span class="btn-icon">' + playIco + '</span>Reproduzir</a>';
+}
+function seriesTopBtnHtml(id, epList) {
+    var firstEp = epList && epList[0]; if (!firstEp) return '';
+    var slast = lsGet('zx_slast_' + id);
+    var tEp = firstEp, tPos = 0, tLbl = 'Reproduzir', resumed = false;
+    if (slast && slast.epId) {
+        var lIdx = -1; for (var z = 0; z < epList.length; z++) { if (epList[z].id === parseInt(slast.epId, 10)) { lIdx = z; break; } }
+        if (lIdx >= 0) {
+            var lpr = getProgress('series', slast.epId);
+            var partial = lpr && lpr.pos > 5 && (!lpr.dur || lpr.pos < lpr.dur - 30);
+            if (partial) { tEp = epList[lIdx]; tPos = lpr.pos; tLbl = 'Continuar'; resumed = true; }
+            else if (lIdx + 1 < epList.length) { tEp = epList[lIdx + 1]; tPos = 0; tLbl = 'Próximo'; resumed = true; }
+            else { tEp = epList[lIdx]; tPos = 0; tLbl = 'Rever'; resumed = true; }
+        }
+    }
+    var pLbl = resumed ? (t(tLbl) + ' S' + tEp.s + 'E' + tEp.e) : tLbl;
+    return '<a class="btn-tv is-primary" href="/series/' + enc(id) + '/episode/' + enc(tEp.id) + '/play?ext=' + enc(tEp.ext) + (tPos > 5 ? '&t=' + enc(tPos) : '') + '" autofocus><span class="btn-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span>' + esc(pLbl) + '</a>';
+}
+/* Visual novo do DETALHE de filme/série (Android teste): mantém a arte de fundo,
+   mas tinge o overlay pro verde-escuro da casa, e troca botões/pills/badges pro
+   padrão vidro verde com foco em ANEL (nada de fundo branco). */
+function detailStyles() {
+    var a = S.accent || '#10b981';
+    return '<style>'
+        + '.detail-screen{background:radial-gradient(130% 100% at 50% 0%,#0e2019,#0a1712 45%,#050d09);}'
+        // overlay do hero: pretos viram verde-escuro da casa (arte continua aparecendo)
+        + '.detail-hero .dh-bg::after{background:linear-gradient(to right,rgba(7,16,12,.95) 0%,rgba(7,16,12,.55) 55%,rgba(7,16,12,.05) 100%),linear-gradient(to bottom,rgba(7,16,12,0) 30%,rgba(7,16,12,.85) 80%,rgba(7,16,12,1) 100%);}'
+        + '.detail-hero .dh-back{background:' + a + '14;border:1px solid ' + a + '3a;border-radius:12px;color:#f4f7f5;}'
+        + '.detail-hero .dh-back:focus{background:' + a + '2e;border-color:' + a + ';box-shadow:0 0 0 3px ' + a + '66;outline:none;}'
+        + '.detail-hero .dh-badge{background:' + a + '14;border:1px solid ' + a + '3a;border-radius:10px;}'
+        + '.detail-hero .dh-genre{color:#b7c5be;}'
+        // botões: primário = verde sólido; secundário = vidro verde; foco = anel
+        + '.btn-tv{background:' + a + '10;border:2px solid ' + a + '2e;border-radius:12px;color:#e7efe9;}'
+        + '.btn-tv:focus{background:' + a + '2e;color:#fff;border-color:' + a + ';box-shadow:0 0 0 3px ' + a + '66;outline:none;}'
+        + '.btn-tv.is-primary{background:' + a + ';color:#04231a;border-color:' + a + ';}'
+        + '.btn-tv.is-primary:focus{background:#0fcf93;border-color:#fff;box-shadow:0 0 0 3px ' + a + '66;color:#04231a;}'
+        // temporadas + episódios
+        + '.season-pill{background:' + a + '0d;border:1px solid ' + a + '24;border-radius:12px;color:#e7efe9;}'
+        + '.season-pill:focus{background:' + a + '2e;color:#fff;border-color:' + a + ';box-shadow:0 0 0 3px ' + a + '66;outline:none;}'
+        + '.season-pill.is-active{background:' + a + '26;color:#fff;border-color:' + a + '90;}'
+        + '.episode-tile .ep-img{background-color:#0d1a14;}'
+        + '.episode-tile:focus .ep-img{border-color:' + a + ';box-shadow:0 0 0 3px ' + a + '66;}'
+        /* chip "Ep N" SEMPRE visível no meio do tile (legível sobre qualquer capa) */
+        + '.ep-num-chip{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(5,13,9,.74);border:1px solid ' + a + '3a;color:#fff;font-weight:800;font-size:30px;line-height:1;padding:12px 26px;border-radius:14px;letter-spacing:.02em;pointer-events:none;white-space:nowrap;}'
+        + '</style>';
+}
+function renderDetailMovie(id) {
+    // Cache do DETALHE (Android, em memória, igual o catálogo): re-abrir um filme
+    // já visto fica instantâneo E funciona OFFLINE (antes buscava sempre → offline
+    // dava "Sem conexão" mesmo num filme aberto há segundos). Só guarda o sucesso.
+    var ck = 'movie:' + id, hit = (!tizenAvail() && S.detail) ? S.detail[ck] : null;
+    if (!hit) showLoading(true);
+    (hit ? Promise.resolve(hit) : xtInfo('get_vod_info', '&vod_id=' + enc(id))).then(function (d) {
+        showLoading(false);
+        if (!tizenAvail() && !d) return renderOfflineReload();   // offline: não dá pra abrir um filme nunca carregado
+        if (!tizenAvail() && d && !hit) { (S.detail || (S.detail = {}))[ck] = d; }
+        var info = (d && d.info) || {}, md = (d && d.movie_data) || {};
+        var name = info.name || md.name || 'Filme';
+        var plot = info.plot || info.description || '';
+        var cover = info.movie_image || info.cover_big || md.stream_icon || '';
+        var bg = '';
+        if (info.backdrop_path) bg = (info.backdrop_path[0] || info.backdrop_path); if (!bg) bg = cover;
+        if (bg) bg = tmdbResize(bg, 'w780');
+        var year = (info.releasedate || info.release_date || ''); year = year ? String(year).substr(0, 4) : '';
+        var rating = info.rating || '', genre = info.genre || '', duration = info.duration || '';
+        var ext = md.container_extension || 'mp4';
+        var isFav = inArr(S.fav.movie, id);
+        var badges = '';
+        if (year) badges += '<span class="dh-badge">' + esc(year) + '</span>';
+        if (duration) badges += '<span class="dh-badge"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> ' + esc(duration) + '</span>';
+        if (rating) badges += '<span class="dh-badge">★ ' + esc(rating) + '</span>';
+        if (genre) badges += '<span class="dh-genre">' + esc(genre) + '</span>';
+        // Retomar com BOTÃO (não calado): se há progresso, "Continuar de Xmin" +
+        // "Recomeçar"; sem progresso, "Reproduzir". (Helper reusado p/ refresh Android.)
+        var playBtns = moviePlayBtnsHtml(id, ext);
+        setHtml('<div class="detail-screen"><div class="detail-bg"' + (bg ? ' style="background-image:url(\'' + attr(bg) + '\')"' : '') + '></div>'
+            + '<div class="detail-hero"><a href="javascript:history.back()" class="dh-back">← Voltar</a>'
+            + '<div class="dh-content"><h1>' + esc(name) + '</h1><div class="dh-meta">' + badges + '</div><p class="dh-plot">' + esc(plot) + '</p>'
+            + '<div class="dh-buttons">'
+            + playBtns
+            + '<button type="button" class="btn-tv" id="btn-favorite" data-kind="movie" data-id="' + attr(id) + '" data-name="' + attr(name) + '" data-poster="' + attr(cover) + '"><span class="btn-icon" id="fav-icon">' + (isFav ? '♥' : '+') + '</span><span id="fav-text">' + (isFav ? 'Remover dos Favoritos' : 'Favoritos') + '</span></button>'
+            + '</div></div></div>'
+            + '<div class="dh-similar-lazy" data-cat="' + attr(info.category_id || md.category_id || '') + '"></div></div>' + detailStyles());
+        S.playExt = ext; S.playName = name; S.playPoster = cover; S.playSeries = null;
+        wireFavBtn();
+        loadSimilar('movies', id, info.category_id || md.category_id || '');
+        afterRender();
+    }).catch(function () { showLoading(false); });
+}
+
+/* ---- DETALHE: SÉRIE ---- */
+function renderDetailSeries(id) {
+    // Cache do DETALHE (Android, em memória) — re-abrir série já vista = instantâneo + offline.
+    var ck = 'series:' + id, hit = (!tizenAvail() && S.detail) ? S.detail[ck] : null;
+    if (!hit) showLoading(true);
+    (hit ? Promise.resolve(hit) : xtSeriesInfo(id)).then(function (d) {
+        showLoading(false);
+        if (!tizenAvail() && !d) return renderOfflineReload();   // offline: não dá pra abrir uma série nunca carregada
+        if (!tizenAvail() && d && !hit) { (S.detail || (S.detail = {}))[ck] = d; }
+        var info = (d && d.info) || {}, eps = (d && d.episodes) || {};
+        var name = info.name || 'Série', plot = info.plot || '', cover = info.cover || '';
+        var bg = cover; if (info.backdrop_path) bg = (info.backdrop_path[0] || info.backdrop_path) || cover; if (bg) bg = tmdbResize(bg, 'w780');
+        var year = (info.releaseDate || info.release_date || ''); year = year ? String(year).substr(0, 4) : '';
+        var rating = info.rating || '', genre = info.genre || '';
+        var isFav = inArr(S.fav.series, id);
+        var seasons = []; for (var k in eps) if (eps.hasOwnProperty(k)) seasons.push(k); seasons.sort(function (a, b) { return (+a) - (+b); });
+        var badges = '';
+        if (year) badges += '<span class="dh-badge">' + esc(year) + '</span>';
+        if (rating) badges += '<span class="dh-badge">★ ' + esc(rating) + '</span>';
+        if (genre) badges += '<span class="dh-genre">' + esc(genre) + '</span>';
+        var pills = '', rows = '', firstEp = null, epMap = {}, epList = [];
+        for (var i = 0; i < seasons.length; i++) {
+            var sn = seasons[i], active = i === 0;
+            pills += '<button type="button" class="season-pill ' + (active ? 'is-active' : '') + '" data-season="' + esc(sn) + '">' + te('Temporada ') + esc(sn) + '</button>';
+            var list = arr1(eps[sn]), eph = '';
+            for (var j = 0; j < list.length; j++) {
+                var ep = list[j], epId = ep.id || 0, epNum = ep.episode_num || (j + 1), epName = ep.title || (t('Episódio') + ' ' + epNum);
+                // sem capa do episódio → CAPA DA SÉRIE na MENOR qualidade que existe
+                // (w92 ≈ 2-5KB, borrada de propósito): o tile é minúsculo e pode ter
+                // centenas — imagem cheia só pesava (pedido 19/07)
+                var epImg = (ep.info && ep.info.movie_image) || tmdbResize(cover, 'w92') || '', epExt = ep.container_extension || 'mp4';
+                if (epId) { epMap[epId] = { s: sn, e: epNum, ext: epExt }; epList.push({ id: parseInt(epId, 10), ext: epExt, s: sn, e: epNum }); if (!firstEp) firstEp = { id: epId, s: sn, e: epNum, ext: epExt }; }
+                // marca de assistido: ✓ se concluiu (pos<=0 c/ entrada) ou barra de progresso se parou no meio
+                var epPr = getProgress('series', epId), epBadge = '';
+                if (epPr) { if (epPr.pos > 5 && epPr.dur && epPr.pos < epPr.dur - 30) { var ppct = Math.min(100, Math.round(epPr.pos / epPr.dur * 100)); epBadge = '<span class="ep-progress" style="width:' + ppct + '%"></span>'; } else { epBadge = '<span class="ep-watched">✓</span>'; } }
+                eph += '<a class="episode-tile' + (epPr ? ' is-watched' : '') + '" href="/series/' + enc(id) + '/episode/' + enc(epId) + '/play?ext=' + enc(epExt) + '" data-ext="' + attr(epExt) + '" data-title="' + attr(epName) + '">'
+                    + '<div class="ep-img"' + (epImg ? ' data-src="' + attr(epImg) + '"' : '') + '>' + epBadge + '<div class="ep-num-chip">Ep ' + esc(epNum) + '</div></div>'
+                    + '<div class="ep-label">S' + esc(sn) + ' E' + esc(epNum) + (epName ? ' — ' + esc(epName) : '') + '</div></a>';
+            }
+            rows += '<div class="episode-row season-row" data-season="' + esc(sn) + '"' + (active ? '' : ' style="display:none;"') + '>' + eph + '</div>';
+        }
+        var seasonsBlock = seasons.length ? ('<div class="detail-seasons"><h2>Temporadas</h2><div class="season-pills" id="season-pills">' + pills + '</div>' + rows + '</div>') : '';
+        // Botão Reproduzir/Continuar/Próximo (LOCAL) — decide pelo último ep assistido
+        // (zx_slast). Helper reusado na atualização ao vivo do Android.
+        var playBtn = seriesTopBtnHtml(id, epList);
+        setHtml('<div class="detail-screen" id="series-detail"><div class="detail-bg"' + (bg ? ' style="background-image:url(\'' + attr(bg) + '\')"' : '') + '></div>'
+            + '<div class="detail-hero"><a href="javascript:history.back()" class="dh-back">← Voltar</a>'
+            + '<div class="dh-content"><h1>' + esc(name) + '</h1><div class="dh-meta">' + badges + '</div><p class="dh-plot">' + esc(plot) + '</p>'
+            + '<div class="dh-buttons">' + playBtn + '<button type="button" class="btn-tv" id="btn-favorite" data-kind="series" data-id="' + attr(id) + '" data-name="' + attr(name) + '" data-poster="' + attr(cover) + '"><span class="btn-icon" id="fav-icon">' + (isFav ? '♥' : '+') + '</span><span id="fav-text">' + (isFav ? 'Remover dos Favoritos' : 'Favoritos') + '</span></button></div>'
+            + '</div></div>' + seasonsBlock + '</div>' + detailStyles());
+        // contexto da série p/ o "Continue Assistindo" do player de episódio
+        // (o continue de série usa o series_id + nome/capa da SÉRIE, não do ep).
+        S.playSeries = { id: parseInt(id, 10), name: name, poster: cover, list: epList };
+        wireFavBtn();
+        wireSeasons();
+        afterRender();
+    }).catch(function () { showLoading(false); });
+}
+function wireSeasons() {
+    var pills = document.querySelectorAll('#season-pills .season-pill'), rows = document.querySelectorAll('.season-row');
+    function loadRow(row) { if (!row) return; var imgs = row.querySelectorAll('.ep-img[data-src]'); for (var i = 0; i < imgs.length; i++) { (function (el) { if (el.getAttribute('data-loading')) return; var src = el.getAttribute('data-src'); if (!src) return; el.setAttribute('data-loading', '1'); var im = new Image(); im.onload = function () { el.style.backgroundImage = "url('" + src + "')"; el.className += ' is-loaded'; }; im.src = src; })(imgs[i]); } }
+    function setActive(el, on) { var c = (typeof el.className === 'string') ? el.className : ''; c = c.replace(/\s*\bis-active\b/g, ''); if (on) c += ' is-active'; el.className = c; }
+    function showSeason(sn) { sn = String(sn); for (var i = 0; i < pills.length; i++) setActive(pills[i], String(pills[i].getAttribute('data-season')) === sn); for (var j = 0; j < rows.length; j++) { var r = rows[j], rs = String(r.getAttribute('data-season')); r.style.display = (rs === sn) ? '' : 'none'; if (rs === sn) loadRow(r); } }
+    for (var r0 = 0; r0 < rows.length; r0++) if (rows[r0].style.display !== 'none') loadRow(rows[r0]);
+    for (var k = 0; k < pills.length; k++) (function (p) { p.addEventListener('click', function (e) { e.preventDefault(); showSeason(p.getAttribute('data-season')); }); })(pills[k]);
+}
+function wireFavBtn() {
+    var btn = $('btn-favorite'); if (!btn) return;
+    btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        var on = favToggle(btn.getAttribute('data-kind'), btn.getAttribute('data-id'), btn.getAttribute('data-name'), btn.getAttribute('data-poster'));
+        $('fav-icon').textContent = on ? '♥' : '+'; $('fav-text').textContent = on ? t('Remover dos Favoritos') : t('Favoritos');
+        updateFavCounts();   // se a sidebar estiver visível atrás, o contador já muda
+    });
+}
+// Contador "Favoritos" da sidebar SEM esperar re-render (favoritar canal pelo
+// coração acontece DENTRO da tela — nada navega/re-renderiza; era o "só salva
+// depois que sai e volta"). Atualiza a pill de cada seção com o S.fav atual.
+function updateFavCounts() {
+    try {
+        var as = document.querySelectorAll('.cat-sidebar a[href*="/favorites"]');
+        for (var i = 0; i < as.length; i++) {
+            var href = as[i].getAttribute('href') || '', n = S.fav.movie.length;
+            if (href.indexOf('/live/') === 0) n = S.fav.live.length;
+            else if (href.indexOf('/series/') === 0) n = S.fav.series.length;
+            var c = as[i].querySelector('.cat-count');
+            if (c) c.textContent = n || '';
+        }
+    } catch (e) {}
+}
+// tile do "Você também pode gostar" — markup IDÊNTICO ao web (_similar_row.php):
+// fileira HORIZONTAL rolante (.dh-similar > .dhs-row > .dhs-tile), NÃO a grade
+// do catálogo. data-replace=1: clicar um recomendado SUBSTITUI o detalhe atual
+// no histórico → Voltar cai na lista da categoria, sem subir de sugestão em
+// sugestão (o roteador honra o data-replace).
+function similarTile(s, kind) {
+    var sid, href, sName, sImg;
+    if (kind === 'movies') { sid = parseInt(s.stream_id || 0, 10); href = '/movies/' + sid; sName = s.name || ''; sImg = tmdbResize(s.stream_icon || ''); }
+    else { sid = parseInt(s.series_id || s.stream_id || 0, 10); href = '/series/' + sid; sName = s.name || ''; sImg = tmdbResize(s.cover || s.stream_icon || ''); }
+    if (!sid) return '';
+    return '<a class="dhs-tile" href="' + href + '" data-replace="1">'
+        + '<div class="dhs-img"' + (sImg ? ' data-src="' + attr(sImg) + '"' : '') + '>'
+        + (sImg ? '' : '<div class="dhs-fallback">' + esc((sName || '').slice(0, 2)) + '</div>') + '</div>'
+        + '<div class="dhs-name">' + esc(sName) + '</div></a>';
+}
+function loadSimilar(kind, id, catId) {
+    if (!catId) return;
+    var box = document.querySelector('.dh-similar-lazy'); if (!box) return;
+    ensureCatalog(kind).then(function () {
+        // "Você também pode gostar" VARIADO: ~9 da MESMA categoria (relevância) +
+        // o resto do CATÁLOGO INTEIRO (descoberta), tudo SEM nome repetido (o
+        // provider duplica, ex.: "Rio de Sangue" 2x), embaralhado, 12. Antes era
+        // só a categoria → quem navega filmes da mesma categoria via sempre o
+        // mesmo pool ("recomenda os mesmos o tempo todo"). Agora cada abertura
+        // mistura descobertas novas do acervo todo.
+        var cur = S.cat[kind] || { all: [], cats: [] }, seen = {};
+        // NUNCA recomendar conteúdo ADULTO (a descoberta vem do catálogo todo,
+        // que inclui categorias +18/xxx). Monta o set de category_id adultas.
+        var adultCats = {}, cats = cur.cats || [];
+        for (var c = 0; c < cats.length; c++) if (cats[c].adult) adultCats[String(cats[c].category_id)] = 1;
+        function isAdultStream(s) { return !!adultCats[String(s.category_id || '')] || isAdultName(s.name); }
+        function dedup(src) {
+            var o = [];
+            for (var i = 0; i < src.length; i++) {
+                var s = src[i], sid = String(s.stream_id || s.series_id || '');
+                if (sid === String(id)) continue;
+                if (isAdultStream(s)) continue;
+                var nk = String(s.name || '').toLowerCase().replace(/^\s+|\s+$/g, '');
+                if (!nk || seen[nk]) continue;
+                seen[nk] = 1; o.push(s);
+            }
+            return o;
+        }
+        function shuffle(a) { for (var k = a.length - 1; k > 0; k--) { var j = Math.floor(Math.random() * (k + 1)), t = a[k]; a[k] = a[j]; a[j] = t; } return a; }
+        var catPool = shuffle(dedup(streamsForCat(kind, catId)));   // mesma categoria
+        var allPool = shuffle(dedup(cur.all || []));                // catálogo todo (sem repetir o que já entrou)
+        var list = shuffle(catPool.slice(0, 9).concat(allPool).slice(0, 12));
+        if (!list.length) return;
+        var h = ''; for (var i = 0; i < list.length; i++) h += similarTile(list[i], kind);
+        var sec = document.createElement('div'); sec.className = 'dh-similar';
+        sec.innerHTML = '<div class="dhs-title">Você também pode gostar</div><div class="dhs-row">' + h + '</div>';
+        if (box.parentNode) box.parentNode.replaceChild(sec, box);
+        // lazy das capas (data-src → background, igual aos pôsteres da grade)
+        var imgs = sec.querySelectorAll('.dhs-img[data-src]');
+        for (var j = 0; j < imgs.length; j++) { (function (el) { var src = el.getAttribute('data-src'); var im = new Image(); im.onload = function () { el.style.backgroundImage = "url('" + src + "')"; el.className += ' is-loaded'; }; im.src = src; })(imgs[j]); }
+    });
+}
+
+/* ---- BUSCA (filmes/séries) ---- */
+function renderSearch(kind) {
+    var L = kind === 'series' ? { title: 'Pesquisar Séries', ph: 'Digite o nome da série…' } : { title: 'Pesquisar Filmes', ph: 'Digite o nome do filme…' };
+    setHtml('<div class="search-screen"><div class="search-topbar"><a href="/' + kind + '" class="gt-back">← Voltar</a><div class="search-title">' + esc(L.title) + '</div></div>'
+        + '<div class="search-body"><form class="search-form" id="search-form" onsubmit="return false">'
+        + '<button type="button" class="vkb-trigger search-trigger" id="search-trigger" data-vkb-target="search-input" data-vkb-label="Pesquisar" data-vkb-placeholder="' + attr(L.ph) + '" autofocus><span class="vkb-display vkb-empty">' + esc(L.ph) + '</span></button>'
+        + '<input type="hidden" id="search-input" value=""><button type="button" class="search-go" id="search-go">Buscar</button></form>'
+        + '<div class="search-results" id="search-results"><div style="color:#aaa;padding:30px;text-align:center;">Use o teclado para buscar.</div></div></div></div>' + flatStyles());
+    var inp = $('search-input'), results = $('search-results');
+    function run() {
+        var q = (inp.value || '').replace(/^\s+|\s+$/g, '');
+        if (q.length < 3) { results.innerHTML = '<div style="color:#aaa;padding:30px;text-align:center;">' + te('Digite pelo menos 3 letras.') + '</div>'; return; }
+        results.innerHTML = '<div style="color:#aaa;padding:30px;text-align:center;">' + te('Buscando…') + '</div>';
+        ensureCatalog(kind).then(function (cat) {
+            var nq = norm(q), out = [];
+            for (var i = 0; i < cat.all.length && out.length < 300; i++) { if (norm(cat.all[i].name).indexOf(nq) !== -1) out.push(cat.all[i]); }
+            if (!out.length) { results.innerHTML = '<div style="color:#aaa;padding:30px;text-align:center;">' + te('Nenhum resultado para') + ' "' + esc(q) + '".</div>'; return; }
+            var _rw = (currentLang() === 'en') ? (out.length === 1 ? 'result' : 'results') : ('resultado' + (out.length === 1 ? '' : 's'));
+            var _rf = (currentLang() === 'en') ? ' for "' : ' para "';
+            results.innerHTML = '<div style="color:#aaa;padding:6px 4px 16px;font-size:14px;">' + out.length + ' ' + _rw + _rf + esc(q) + '"</div><div class="poster-grid-tv" id="search-grid">' + posterTiles(out, kind) + '</div>';
+            fitPosterGrid($('search-grid'));
+            lazyGrid($('search-grid'));
+        });
+    }
+    if (global.HdxKeyboard) HdxKeyboard.bind($('search-trigger'), { submitLabel: 'Buscar', onSubmit: run });
+    $('search-go').addEventListener('click', function (e) { e.preventDefault(); run(); });
+    if (inp) { var dt = null; inp.addEventListener('input', function () { if (dt) clearTimeout(dt); dt = setTimeout(run, 200); }); }
+    afterRender();
+}
+function norm(s) { s = (s || '').toLowerCase(); return s.replace(/[áàâãä]/g, 'a').replace(/[éèêë]/g, 'e').replace(/[íìîï]/g, 'i').replace(/[óòôõö]/g, 'o').replace(/[úùûü]/g, 'u').replace(/ç/g, 'c'); }
+function lazyGrid(grid) {
+    if (!grid) return;
+    // ⚠️ O scroller da busca é o `.search-body` (overflow-y:auto), NÃO a window.
+    // Escutar 'scroll' só na window fazia o lazy disparar 1x (topo) e as capas
+    // de baixo NUNCA carregavam ao rolar. Achamos o ancestral que realmente rola
+    // e escutamos NELE (+ window, por garantia em TV que rola o documento).
+    var scroller = grid.parentNode;
+    while (scroller && scroller !== document.body && scroller !== document) {
+        var oy = ''; try { oy = getComputedStyle(scroller).overflowY; } catch (e) {}
+        if (oy === 'auto' || oy === 'scroll') break;
+        scroller = scroller.parentNode;
+    }
+    // Carrega do topo até o fim do que está visível (+600px). Já-carregados são
+    // pulados (string check). NÃO pulamos os "acima" (sem o `continue` antigo) →
+    // um scroll rápido que pula fileiras não deixa buraco sem capa: a fileira é
+    // carregada no run seguinte mesmo já tendo passado.
+    function run() { var bottom = (global.innerHeight || 800) + 600; var imgs = grid.getElementsByClassName('pt-img'); for (var i = 0; i < imgs.length; i++) { var img = imgs[i]; if (img.className.indexOf('is-loaded') !== -1) continue; var src = img.getAttribute('data-src'); if (!src) continue; var r = img.getBoundingClientRect(); if (r.top > bottom) break; img.style.backgroundImage = "url('" + src + "')"; img.className += ' is-loaded'; } }
+    var tm = null;
+    function onScroll() { if (tm) return; tm = setTimeout(function () { tm = null; run(); }, 100); }
+    try { if (scroller && scroller.addEventListener && scroller !== document.body && scroller !== document) scroller.addEventListener('scroll', onScroll); } catch (e) {}
+    try { global.addEventListener('scroll', onScroll); } catch (e) {}
+    setTimeout(run, 120);
+}
+
+/* ---- SETTINGS ---- */
+/* Redesign das Configurações (só Android teste): mesmo visual da home nova —
+   fundo em degradê + marca d'água ULTRA, itens "vidro" verde, foco SEMPRE anel
+   verde (nada de fundo branco) e "Sair da conta" NEUTRO com tom vermelho de
+   perigo (antes tinha borda verde permanente = parecia selecionado). */
+function settingsStyles() {
+    var a = S.accent || '#10b981';
+    return '<style>'
+        + '.settings-screen{background:radial-gradient(130% 100% at 50% 0%,#0e2019,#0a1712 45%,#050d09);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}'
+        + '.settings-screen::before{content:"ULTRA";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) translateZ(0);font-size:38vw;font-weight:900;letter-spacing:-.03em;color:' + a + ';opacity:.04;pointer-events:none;white-space:nowrap;z-index:0;}'
+        // ⚠️ NÃO usar .settings-screen>*{position:relative} — mataria o position:absolute
+        // do .settings-layout (menu+conteúdo) e a tela colapsa. Só o header precisa subir.
+        + '.settings-header{position:relative;z-index:1;}'
+        + '.settings-header h1{font-size:30px;letter-spacing:0;}'
+        + '.settings-header h1::after{width:46px;height:3px;margin-top:8px;}'
+        + '.settings-sub{color:#9db0a7;font-size:15px;}'
+        + '.settings-screen .settings-back{background:' + a + '14;border:1px solid ' + a + '3a;border-radius:12px;color:#f4f7f5;}'
+        + '.settings-screen .settings-back:focus{background:' + a + '2e;border-color:' + a + ';box-shadow:0 0 0 3px ' + a + '66;outline:none;}'
+        // ---- menu lateral ----
+        + '.settings-menu .sm-item{background:' + a + '0d;border:1px solid ' + a + '24;border-radius:13px;color:#e7efe9;}'
+        + '.settings-menu .sm-item:focus{background:' + a + '2e;border-color:' + a + ';box-shadow:0 0 0 3px ' + a + '66;color:#fff;outline:none;}'
+        + '.settings-menu .sm-item:focus .sm-ico{color:' + a + ';}'
+        + '.settings-menu .sm-item.is-active{background:' + a + '1f;border-color:' + a + '80;color:#fff;}'
+        // "Sair da conta": IGUAL aos outros (nada de borda verde), só o texto/ícone
+        // avermelhados pra indicar perigo; foco = anel vermelho.
+        + '.settings-menu .sm-logout{background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.22);color:#f2a7a7;margin-top:18px;}'
+        + '.settings-menu .sm-logout .sm-ico{color:#ef7070;}'
+        + '.settings-menu .sm-logout:focus{background:rgba(239,68,68,.18);border-color:#ef4444;box-shadow:0 0 0 3px rgba(239,68,68,.45);color:#fff;}'
+        + '.settings-menu .sm-logout:focus .sm-ico{color:#fff;}'
+        // ---- painel da direita ----
+        + '.settings-content{background:rgba(255,255,255,.028);border:1px solid rgba(255,255,255,.07);border-radius:18px;padding:22px 24px;}'
+        + '.settings-pane .pane-title{font-size:23px;}'
+        + '.settings-pane .pane-sub{color:#9db0a7;}'
+        + '.info-card{background:' + a + '0d;border:1px solid ' + a + '24;border-radius:13px;}'
+        + '.info-card .ic-label{color:#8fa39a;}'
+        + '.opt-btn{background:' + a + '0d;border:2px solid ' + a + '24;border-radius:13px;color:#e7efe9;}'
+        + '.opt-btn:focus{background:' + a + '2e;border-color:' + a + ';box-shadow:0 0 0 3px ' + a + '66;color:#fff;outline:none;}'
+        + '.opt-btn.is-active,.opt-btn.is-on{background:' + a + '26;border-color:' + a + ';color:#fff;}'
+        + '.action-btn{background:' + a + '0d;border:2px solid ' + a + '24;border-radius:13px;}'
+        + '.action-btn:focus{background:' + a + '2e;border-color:' + a + ';box-shadow:0 0 0 3px ' + a + '66;outline:none;}'
+        + '.action-btn:focus .ab-title{color:#fff;}'
+        + '.action-btn:focus .ab-sub{color:#cfe8df;}'
+        + '</style>';
+}
+function renderSettings() {
+    var info = S.info || {}; var lic = info.license || {};
+    var exp = 'Sem expiração'; if (info.exp_date) { var dt = new Date(info.exp_date * 1000); exp = p2(dt.getDate()) + '/' + p2(dt.getMonth() + 1) + '/' + dt.getFullYear(); }
+    var status = info.status || '';
+    // "Tela do app" (Celular x TV) — só no Android (UI empacotada com HdxNative)
+    var ffMenu = nativeAvail() ? '<a href="#screen" class="sm-item" data-pane="pane-screen"><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"></rect><line x1="12" y1="18" x2="12" y2="18"></line></svg></span><span class="sm-label">Tela do app</span></a>' : '';
+    var ffPane = nativeAvail() ? ('<div class="settings-pane" id="pane-screen" style="display:none;"><div class="pane-title">Tela do app</div><div class="pane-sub">Ajusta o tamanho dos <strong>posters e ícones</strong> pra sua tela. <strong>Celular</strong> deixa tudo menor (mais posters por linha).</div>'
+        + '<div class="pane-section"><div class="opt-row"><button type="button" class="opt-btn" data-ff-set="mobile">📱 Celular</button><button type="button" class="opt-btn" data-ff-set="tv">📺 TV / Caixa</button></div></div></div>') : '';
+    // Idioma / Language — troca PT/EN a qualquer momento (além da escolha do 1º uso).
+    var _cl = currentLang();
+    var langMenu = '<a href="#lang" class="sm-item" data-pane="pane-lang"><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20z"></path></svg></span><span class="sm-label">Idioma / Language</span></a>';
+    var langPane = '<div class="settings-pane" id="pane-lang" style="display:none;"><div class="pane-title">Idioma / Language</div><div class="pane-sub">' + te('Escolha o idioma do app.') + '</div>'
+        + '<div class="pane-section"><div class="opt-row">'
+        + '<button type="button" class="opt-btn' + (_cl === 'pt' ? ' is-on' : '') + '" data-lang-set="pt">🇧🇷 Português</button>'
+        + '<button type="button" class="opt-btn' + (_cl === 'en' ? ' is-on' : '') + '" data-lang-set="en">🇺🇸 English</button>'
+        + '</div></div></div>';
+    var pinCss = 'display:block;width:100%;box-sizing:border-box;margin-bottom:10px;padding:13px 16px;background:#0c0f0d;border:1.5px solid rgba(255,255,255,.16);border-radius:12px;color:#fff;font-size:18px;text-align:center;letter-spacing:6px;outline:none';
+    var parentalMenu = '<a href="#parental" class="sm-item" data-pane="pane-parental"><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></span><span class="sm-label">Controle parental</span></a>';
+    var parentalPane = '<div class="settings-pane" id="pane-parental" style="display:none;"><div class="pane-title">Controle parental</div>'
+        + '<div class="pane-sub">A senha bloqueia as categorias <strong>adultas (XXX)</strong>. Fica guardada <strong>só neste aparelho</strong> (nada no servidor). Padrão: <strong>1234</strong>.</div>'
+        + '<div class="pane-section" style="max-width:340px">'
+        + '<input type="password" id="zx-pin-cur" inputmode="numeric" maxlength="4" placeholder="Senha atual" style="' + pinCss + '">'
+        + '<input type="password" id="zx-pin-new" inputmode="numeric" maxlength="4" placeholder="Nova senha (4 dígitos)" style="' + pinCss + '">'
+        + '<input type="password" id="zx-pin-confirm" inputmode="numeric" maxlength="4" placeholder="Confirmar nova senha" style="' + pinCss + '">'
+        + '<div id="zx-pin-msg" style="min-height:18px;font-size:14px;margin:2px 0 12px;color:#ff8c95"></div>'
+        + '<button type="button" class="action-btn" id="zx-pin-save"><div class="ab-title">Salvar nova senha</div></button>'
+        + '</div></div>';
+    setHtml(settingsStyles() + '<div class="settings-screen"><a href="/home" class="settings-back">← Voltar</a>'
+        + '<div class="settings-header"><h1>Configurações</h1><div class="settings-sub">' + te('Personalize o seu ') + esc((S.branding && (S.branding.app_title)) || 'UltraPlayer') + '</div></div>'
+        + '<div class="settings-layout"><div class="settings-menu" id="settings-menu">'
+        + '<a href="#info" class="sm-item is-active" data-pane="pane-info" autofocus><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></span><span class="sm-label">Informação Geral</span></a>'
+        + '<a href="#player" class="sm-item" data-pane="pane-player"><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg></span><span class="sm-label">Player de Vídeo</span></a>'
+        + ffMenu + langMenu + parentalMenu
+        + '<a href="#clear" class="sm-item" data-pane="pane-clear"><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1.5 14a2 2 0 0 1-2 1.8H8.5a2 2 0 0 1-2-1.8L5 6"></path></svg></span><span class="sm-label">Limpar Cache</span></a>'
+        + '<button type="button" class="sm-item sm-logout" id="btn-logout"><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></span><span class="sm-label">Sair da conta</span></button>'
+        + '</div><div class="settings-content">'
+        + '<div class="settings-pane" id="pane-info"><div class="pane-title">Sua conta</div><div class="pane-sub">Informações da sua assinatura.</div><div class="info-cards">'
+        + '<div class="info-card"><div class="ic-label">Usuário</div><div class="ic-value ic-user">' + esc(S.user) + '</div></div>'
+        + '<div class="info-card"><div class="ic-label">Vencimento</div><div class="ic-value">' + esc(exp) + '</div></div>'
+        + (status ? '<div class="info-card"><div class="ic-label">Status</div><div class="ic-value">' + esc(status) + '</div></div>' : '')
+        + (lic.mac ? '<div class="info-card"><div class="ic-label">Mac</div><div class="ic-value">' + esc(lic.mac) + '</div></div>' : '')
+        + '<div class="info-card"><div class="ic-label">Plataforma</div><div class="ic-value">' + (platform() === 'android' ? 'Android' : platform() === 'tizen' ? 'Samsung' : 'Windows') + '</div></div></div></div>'
+        + '<div class="settings-pane" id="pane-player" style="display:none;"><div class="pane-title">Configurações do Player</div><div class="pane-sub">Vale só <strong>neste aparelho</strong>. <strong>Nativo</strong> é o padrão; <strong>HTML5</strong> oferece mais recursos.</div>'
+        + '<div class="pane-section"><div class="pane-section-title">Canais ao vivo</div><div class="opt-row"><button type="button" class="opt-btn" data-player-key="zx:player:live" data-player-value="native">Nativo</button><button type="button" class="opt-btn" data-player-key="zx:player:live" data-player-value="html5">HTML5</button></div></div>'
+        + '<div class="pane-section"><div class="pane-section-title">Filmes e séries (VOD)</div><div class="opt-row"><button type="button" class="opt-btn" data-player-key="zx:player:vod" data-player-value="native">Nativo</button><button type="button" class="opt-btn" data-player-key="zx:player:vod" data-player-value="html5">HTML5</button></div></div></div>'
+        + ffPane + langPane + parentalPane
+        + '<div class="settings-pane" id="pane-clear" style="display:none;"><div class="pane-title">Limpar Cache</div><div class="pane-sub">Use caso esteja tendo problemas com o app.</div><div class="pane-section"><button type="button" class="action-btn" id="btn-clear-cache"><div class="ab-title">Limpar cache local</div><div class="ab-sub">Remove dados temporários armazenados.</div></button></div></div>'
+        + '</div></div></div>');
+    wireSettings();
+    afterRender();
+}
+function wireSettings() {
+    var menu = $('settings-menu'), panes = document.querySelectorAll('.settings-pane');
+    function showPane(id) { for (var i = 0; i < panes.length; i++) panes[i].style.display = (panes[i].id === id) ? '' : 'none'; var items = menu.querySelectorAll('.sm-item'); for (var j = 0; j < items.length; j++) { if (items[j].getAttribute('data-pane') === id) { if (items[j].className.indexOf('is-active') === -1) items[j].className += ' is-active'; } else items[j].className = items[j].className.replace(/\bis-active\b/g, '').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, ''); } }
+    menu.addEventListener('focusin', function (e) { var t = e.target; while (t && t !== menu) { if (t.getAttribute && t.getAttribute('data-pane')) { showPane(t.getAttribute('data-pane')); return; } t = t.parentNode; } });
+    var anchors = menu.querySelectorAll('a.sm-item[data-pane]');
+    for (var i = 0; i < anchors.length; i++) (function (a) { a.addEventListener('click', function (e) { e.preventDefault(); showPane(a.getAttribute('data-pane')); }); })(anchors[i]);
+    function paint(key, val) { var els = document.querySelectorAll('[data-player-key="' + key + '"]'); for (var i = 0; i < els.length; i++) { var b = els[i], match = b.getAttribute('data-player-value') === val; if (match) { if (b.className.indexOf('is-active') === -1) b.className += ' is-active'; } else b.className = b.className.replace(/\bis-active\b/g, '').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, ''); } }
+    function cur(key) { var v = ''; try { v = (localStorage.getItem(key) || '').toLowerCase(); } catch (e) {} return v === 'html5' ? 'html5' : 'native'; }
+    var keys = ['zx:player:live', 'zx:player:vod']; for (var pk = 0; pk < keys.length; pk++) paint(keys[pk], cur(keys[pk]));
+    var btns = document.querySelectorAll('[data-player-key]');
+    for (var p = 0; p < btns.length; p++) (function (el) { el.addEventListener('click', function (e) { e.preventDefault(); var key = el.getAttribute('data-player-key'), val = el.getAttribute('data-player-value'); try { localStorage.setItem(key, val); } catch (err) {} paint(key, val); }); })(btns[p]);
+    // "Tela do app" (Celular x TV) — Android: pinta a opção atual + troca na hora
+    (function () {
+        var fb = document.querySelectorAll('[data-ff-set]'); if (!fb.length) return;
+        function ffPaint(val) { for (var i = 0; i < fb.length; i++) { var b = fb[i], m = b.getAttribute('data-ff-set') === val; if (m) { if (b.className.indexOf('is-active') === -1) b.className += ' is-active'; } else b.className = b.className.replace(/\bis-active\b/g, '').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, ''); } }
+        ffPaint(getFormFactor() === 'mobile' ? 'mobile' : 'tv');
+        for (var i = 0; i < fb.length; i++) (function (el) { el.addEventListener('click', function (e) { e.preventDefault(); var val = el.getAttribute('data-ff-set'); try { localStorage.setItem('zx:ff', val); } catch (err) {} applyFormFactor(); ffPaint(val); }); })(fb[i]);
+    })();
+    // Idioma / Language — troca na hora e re-renderiza as Configurações no novo idioma.
+    (function () {
+        var lb = document.querySelectorAll('[data-lang-set]'); if (!lb.length) return;
+        for (var i = 0; i < lb.length; i++) (function (el) {
+            el.addEventListener('click', function (e) {
+                e.preventDefault();
+                var val = el.getAttribute('data-lang-set');
+                if (val === currentLang()) return;
+                setLang(val); renderSettings();
+            });
+        })(lb[i]);
+    })();
+    var cc = $('btn-clear-cache'); if (cc) cc.addEventListener('click', function (e) { e.preventDefault(); try { if (global.HdxCache) HdxCache.bust(); } catch (err) {} S.cat = { movies: null, series: null, live: null }; var sub = cc.querySelector('.ab-sub'); if (sub) sub.textContent = t('✓ Cache local removido.'); });
+    var lo = $('btn-logout'); if (lo) lo.addEventListener('click', function (e) { e.preventDefault(); doLogout(); });
+    // Controle parental — troca o PIN adulto LOCAL (default 1234; nada vai pro servidor).
+    var pinSave = $('zx-pin-save');
+    if (pinSave) pinSave.addEventListener('click', function (e) {
+        e.preventDefault();
+        var g = function (id) { var el = $(id); return el ? (el.value || '').trim() : ''; };
+        var cur = g('zx-pin-cur'), nw = g('zx-pin-new'), cf = g('zx-pin-confirm');
+        var msg = $('zx-pin-msg');
+        function show(t, ok) { if (msg) { msg.textContent = t; msg.style.color = ok ? '#10b981' : '#ff8c95'; } }
+        if (cur !== getAdultPin()) return show(t('Senha atual incorreta.'), false);
+        if (!/^\d{4}$/.test(nw)) return show(t('A nova senha deve ter 4 dígitos.'), false);
+        if (nw !== cf) return show(t('As senhas não coincidem.'), false);
+        lsSet('zx_adultpin', nw);
+        if ($('zx-pin-cur')) $('zx-pin-cur').value = '';
+        if ($('zx-pin-new')) $('zx-pin-new').value = '';
+        if ($('zx-pin-confirm')) $('zx-pin-confirm').value = '';
+        show(t('✓ Senha alterada com sucesso.'), true);
+    });
+    // D-pad → a partir do MENU entra no painel pelo PRIMEIRO controle. A navegação
+    // espacial escolhia o mais próximo geometricamente — no Controle parental caía
+    // no 3º campo ("Confirmar nova senha") em vez do 1º ("Senha atual"). Listener
+    // ÚNICO no document (guard) — só age com foco num item do menu de configurações.
+    if (!document.__zxSetPaneNav) {
+        document.__zxSetPaneNav = true;
+        document.addEventListener('keydown', function (e) {
+            if (e.key !== 'ArrowRight' && e.keyCode !== 39) return;
+            var mn = $('settings-menu'); if (!mn) return;
+            var t = e.target; if (!mn.contains(t)) return;
+            var pid = null;
+            while (t && t !== mn) { if (t.getAttribute && t.getAttribute('data-pane')) { pid = t.getAttribute('data-pane'); break; } t = t.parentNode; }
+            if (!pid) return;
+            var pane = document.getElementById(pid); if (!pane) return;
+            var first = pane.querySelector('input, button, a[href], [tabindex]');
+            if (!first) return;
+            e.preventDefault(); e.stopImmediatePropagation();
+            try { first.focus(); } catch (err) {}
+        }, true);
+    }
+}
+
+/* ---- PLAYER ---- */
+function playerShell(kind, title, vod) {
+    var seek = (kind === 'vod') ? '<div class="osd-seekbar"><div class="osd-times"><span class="osd-time-current" id="osd-time-current">0:00</span><span class="osd-time-total" id="osd-time-total">0:00</span></div><div class="osd-progress"><div class="osd-progress-fill" id="osd-progress-fill"></div></div></div>' : '';
+    return '<div class="player-screen"><video id="hls-player" autoplay playsinline></video>'
+        + '<div class="player-loading" id="player-loading"><div class="spinner"></div><p>Carregando…</p></div>'
+        + '<div class="player-error" id="player-error" style="display:none;"><h2>Não foi possível carregar</h2><p>Pressione voltar e tente novamente.</p></div>'
+        + '<div class="player-osd" id="player-osd"><div class="osd-title">' + esc(title) + '</div>' + seek + '<div class="osd-time" data-clock="time">—:—</div></div>'
+        + '<div class="player-volume" id="player-volume"><div class="pv-label">VOLUME</div><div class="pv-bar"><div class="pv-fill" id="pv-fill"></div></div><div class="pv-pct" id="pv-pct">100%</div></div></div>';
+}
+
+/* ===== AVPlay (Samsung Tizen) — player OFICIAL via ADAPTER no <video> =====
+   Com a UI EMPACOTADA num .wgt Tizen, window.webapis.avplay existe (≠ pagina
+   remota, onde nao existe). Em vez de carregar o stream no <video>, tocamos no
+   AVPlay (decode de hardware, MPEG-TS cru, melhor compat em Tizen antigo) e
+   fazemos o <video> #hls-player ESPELHAR o AVPlay (Object.defineProperty na
+   instancia): currentTime/duration/paused/volume/muted + play/pause passam a
+   dirigir o AVPlay, e os listeners do AVPlay disparam os eventos do <video>
+   (timeupdate/durationchange/playing/loadedmetadata/ended). Assim o OSD/seek/
+   teclas (player_touch.js + tv.js) funcionam SEM MUDANCA pra tudo (canais,
+   filmes, series). O video vai num plano de hardware ATRAS da pagina -> area
+   transparente. Qualquer erro -> fallback pro <video> (caminho provado). */
+function tizenAvail() { try { return !!(global.webapis && webapis.avplay && webapis.avplay.open); } catch (e) { return false; } }
+
+function startAvplay(video, url, kind, hideLoading, showError, fallback, resumeAt) {
+    var av; try { av = webapis.avplay; } catch (e) { return false; }
+    if (!av || !av.open) return false;
+    try {
+        var st = { t: 0, d: 0, paused: false, vol: 1, muted: false, ready: false, dead: false, resumeAt: (resumeAt > 5 ? resumeAt : 0), resumeTries: 0 };
+        function fire(n) { try { video.dispatchEvent(new Event(n)); } catch (e) { try { var ev = document.createEvent('Event'); ev.initEvent(n, false, false); video.dispatchEvent(ev); } catch (e2) {} } }
+
+        // o video do AVPlay e um PLANO de hardware ATRAS da pagina -> transparencia
+        var scr = document.querySelector('.player-screen');
+        try { document.documentElement.style.background = 'transparent'; document.body.style.background = 'transparent'; if (scr) scr.style.background = 'transparent'; video.style.background = 'transparent'; } catch (e) {}
+
+        // <object> sink do AVPlay (full-screen; o OSD fica por cima via z-index)
+        var obj = document.getElementById('av-player-obj');
+        if (!obj) { obj = document.createElement('object'); obj.type = 'application/avplayer'; obj.id = 'av-player-obj'; obj.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;'; if (scr) scr.insertBefore(obj, scr.firstChild); }
+
+        // ADAPTER: o <video> reflete/dirige o AVPlay
+        function def(p, g, s) { try { Object.defineProperty(video, p, { configurable: true, get: g, set: s || function () {} }); } catch (e) {} }
+        def('currentTime', function () { return st.t; }, function (v) { v = Number(v) || 0; st.t = v; try { av.seekTo(Math.max(0, Math.round(v * 1000))); } catch (e) {} fire('seeking'); });
+        def('duration', function () { return st.d || (kind === 'live' ? Infinity : 0); });
+        def('paused', function () { return st.paused; });
+        def('muted', function () { return st.muted; }, function (v) { st.muted = !!v; });
+        def('volume', function () { return st.vol; }, function (v) { st.vol = Math.max(0, Math.min(1, Number(v) || 0)); });
+        video.play = function () { try { av.play(); } catch (e) {} st.paused = false; fire('play'); return { then: function (f) { try { if (f) f(); } catch (e) {} return this; }, catch: function () { return this; } }; };
+        video.pause = function () { try { av.pause(); } catch (e) {} st.paused = true; fire('pause'); };
+        video.load = function () {};
+
+        function cleanup() {
+            if (st.dead) return; st.dead = true;
+            try { av.stop(); } catch (e) {} try { av.close(); } catch (e) {}
+            try { document.documentElement.style.background = ''; document.body.style.background = ''; if (scr) scr.style.background = ''; } catch (e) {}
+            try { if (obj && obj.parentNode) obj.parentNode.removeChild(obj); } catch (e) {}
+        }
+        S._avCleanup = cleanup;
+
+        function toFallback() {
+            cleanup();
+            ['currentTime', 'duration', 'paused', 'muted', 'volume'].forEach(function (p) { try { delete video[p]; } catch (e) {} });
+            try { delete video.play; } catch (e) {} try { delete video.pause; } catch (e) {} try { delete video.load; } catch (e) {}
+            S._avCleanup = null;
+            try { fallback(); } catch (e) { try { showError(); } catch (e2) {} }
+        }
+
+        av.setListener({
+            onbufferingstart: function () {},
+            onbufferingcomplete: function () { hideLoading(); if (!st.ready) { st.ready = true; try { st.d = (av.getDuration() || 0) / 1000; } catch (e) {} fire('loadedmetadata'); fire('durationchange'); } fire('playing'); },
+            oncurrentplaytime: function (ms) {
+                st.t = (ms || 0) / 1000;
+                // RESUME robusto: no AVPlay o seek inicial às vezes não "pega" (cai antes
+                // do play). Enquanto o player estiver perto do início, re-tenta; para
+                // quando chega (ou após algumas tentativas) → fim do "não voltava onde parou".
+                if (st.resumeAt) {
+                    if (st.t >= st.resumeAt - 6 || st.resumeTries >= 6) { st.resumeAt = 0; }
+                    else { st.resumeTries++; try { av.seekTo(Math.round(st.resumeAt * 1000)); } catch (e) {} }
+                }
+                if (!st.d) { try { st.d = (av.getDuration() || 0) / 1000; } catch (e) {} if (st.d) fire('durationchange'); }
+                fire('timeupdate');
+            },
+            onstreamcompleted: function () { fire('ended'); },
+            onerror: function () { toFallback(); }
+        });
+
+        av.open(url);
+        // UA da marca no stream Samsung: o IPTV identifica como UltraPlayer.
+        // Tem que vir DEPOIS do open() e ANTES do prepareAsync().
+        try { av.setStreamingProperty('USER_AGENT', 'UltraPlayer/2.7'); } catch (e) {}
+        try { av.setDisplayRect(0, 0, 1920, 1080); } catch (e) {}
+        try { av.setDisplayMethod('PLAYER_DISPLAY_MODE_FULL_SCREEN'); } catch (e) {}
+        av.prepareAsync(function () {
+            try { st.d = (av.getDuration() || 0) / 1000; } catch (e) {}
+            try { av.play(); } catch (e) {}
+            // RESUME: seek NATIVO logo APÓS o play (estado PLAYING). Antes o seek vinha do
+            // loadedmetadata e podia cair ANTES do play (corrida c/ onbufferingcomplete) →
+            // o seekTo era ignorado e "não voltava onde parou". (oncurrentplaytime re-tenta
+            // se este não pegar.)
+            if (st.resumeAt) { try { av.seekTo(Math.round(st.resumeAt * 1000)); st.t = st.resumeAt; } catch (e) {} }
+            st.paused = false; hideLoading();
+            if (!st.ready) { st.ready = true; fire('loadedmetadata'); fire('durationchange'); }
+            fire('playing');
+        }, function () { toFallback(); });
+        return true;
+    } catch (e) { return false; }
+}
+
+// OSD na TV (#player-osd) ao apertar QUALQUER tecla (D-pad). O player_touch.js so
+// reage a toque/mouse (na TV fica inativo de proposito), entao o feedback visual
+// (nome + relogio + seekbar) vem DAQUI — igual o showOsd das views de player do
+// servidor. O tv.js cuida das ACOES (seek/pausa/volume); isto e so o visual.
+// Handler global UNICO (acha o #player-osd atual) -> nao acumula por player.
+function isTvUi() { try { return !!(global.__TV || (document.body && document.body.className.indexOf('ui-tv') >= 0)); } catch (e) { return false; } }
+var __osdHideT = null;
+function tvShowOsd() {
+    var o = document.getElementById('player-osd'); if (!o) return;
+    o.className = 'player-osd is-visible';
+    clearTimeout(__osdHideT);
+    __osdHideT = setTimeout(function () { try { var v = document.getElementById('hls-player'); if (!v || !v.paused) o.className = 'player-osd'; } catch (e) { o.className = 'player-osd'; } }, 4000);
+}
+try { document.addEventListener('keydown', function () { if (isTvUi()) tvShowOsd(); }, true); } catch (e) {}
+
+function startVideo(url, kind, onProgress, resumeAt) {
+    var video = $('hls-player'), loading = $('player-loading'), errorBox = $('player-error');
+    function hideLoading() { if (loading) loading.style.display = 'none'; }
+    function showError() { hideLoading(); if (errorBox) errorBox.style.display = 'block'; }
+    var isHls = /\.m3u8(\?|$)/i.test(url);
+    var canNativeHls = !!video.canPlayType('application/vnd.apple.mpegurl');
+    function tryPlay() { var p = video.play(); if (p && p.catch) p.catch(function () { try { video.muted = true; } catch (e) {} video.play().then(function () { setTimeout(function () { try { video.muted = false; } catch (e) {} }, 120); }).catch(showError); }); }
+    function playNative(onErr) { video.src = url; video.addEventListener('loadedmetadata', tryPlay); video.addEventListener('error', onErr || showError); }
+    function playHls() { if (!(global.Hls && Hls.isSupported())) return false; try { video.removeAttribute('src'); video.load(); } catch (e) {} var hls = new Hls({ enableWorker: false, lowLatencyMode: false }); hls.loadSource(url); hls.attachMedia(video); hls.on(Hls.Events.MANIFEST_PARSED, tryPlay); hls.on(Hls.Events.ERROR, function (_, d) { if (d.fatal) showError(); }); return true; }
+    function htmlPlay() { if (isHls && !canNativeHls) { if (!playHls()) playNative(); } else { playNative(function () { if (isHls && playHls()) return; showError(); }); } }
+    // Motor por APARELHO (Configuracoes): 'native' (padrao) ou 'html5'. Em 'html5'
+    // o usuario forcou o <video>/hls.js -> NAO usa AVPlay nem ExoPlayer.
+    var eng = 'native'; try { var sv = (localStorage.getItem('zx:player:' + (kind === 'live' ? 'live' : 'vod')) || '').toLowerCase(); if (sv === 'html5' || sv === 'native') eng = sv; } catch (e) {}
+    // Tizen (UI empacotada) + Nativo: AVPlay oficial. html5 ou PC/Android/web: <video>/hls.js.
+    var usedAv = (eng !== 'html5' && tizenAvail() && startAvplay(video, url, kind, hideLoading, showError, htmlPlay, resumeAt));
+    if (!usedAv) htmlPlay();
+    video.addEventListener('playing', hideLoading);
+    if (isTvUi()) { video.addEventListener('playing', tvShowOsd); video.addEventListener('pause', tvShowOsd); }   // OSD na TV ao iniciar/pausar
+    // RESUME: retoma de onde parou (continue assistir local). Faz 1x quando há
+    // metadata/duração e a posição cabe no vídeo.
+    // RESUME do <video> (HTML5/PC). No AVPlay (Samsung) o resume é NATIVO dentro do
+    // startAvplay (seek após o play + re-tentativa no oncurrentplaytime) — não usa este.
+    if (!usedAv && resumeAt && resumeAt > 5) {
+        var seeked = false;
+        function doSeek() { if (seeked) return; var dur = video.duration; if (!isFinite(dur) || dur <= 0) return; if (resumeAt < dur - 2) { try { video.currentTime = resumeAt; } catch (e) {} } seeked = true; }
+        video.addEventListener('loadedmetadata', doSeek);
+        video.addEventListener('canplay', doSeek);
+    }
+    if (onProgress) {
+        var last = 0; video.addEventListener('timeupdate', function () { var now = Date.now(); if (now - last > 10000 && video.currentTime > 5) { last = now; onProgress(false); } });
+        video.addEventListener('pause', function () { if (video.currentTime > 5) onProgress(false); });
+        video.addEventListener('ended', function () { onProgress(true); });
+    }
+    // seekbar VOD (no OSD do tv.js)
+    if (kind === 'vod') {
+        var fill = $('osd-progress-fill'), cur = $('osd-time-current'), tot = $('osd-time-total');
+        function fmt(s) { s = Math.max(0, Math.floor(s || 0)); var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60; function pp(n) { return n < 10 ? '0' + n : '' + n; } return h > 0 ? (h + ':' + pp(m) + ':' + pp(x)) : (m + ':' + pp(x)); }
+        function upd() { var dur = video.duration; if (!isFinite(dur) || dur <= 0) return; var c = video.currentTime || 0; if (cur) cur.textContent = fmt(c); if (tot) tot.textContent = fmt(dur); if (fill) fill.style.width = ((c / dur) * 100) + '%'; }
+        var lu = 0; video.addEventListener('timeupdate', function () { var n = Date.now(); if (n - lu > 500) { lu = n; upd(); } });
+        video.addEventListener('loadedmetadata', upd); video.addEventListener('seeking', upd); video.addEventListener('seeked', upd);
+        global.HdxSeekPreview = function (t) { var dur = video.duration; if (!isFinite(dur) || dur <= 0) return; if (cur) cur.textContent = fmt(t); if (fill) fill.style.width = ((t / dur) * 100) + '%'; };
+    }
+}
+function bootPlayerScripts(kind) { global.__playerKind = (kind === 'live') ? 'live' : 'vod'; runScript('assets/player_touch.js'); }
+
+/* ===== PLAYER NATIVO (Android híbrido) =====
+   Se o app expõe window.HdxNative (casca Android com ExoPlayer), o vídeo toca
+   no motor NATIVO (.ts/MKV/HEVC/AC3/multi-áudio/hardware) em vez do <video> do
+   WebView. Progresso/continue/recentes seguem LOCAIS (igual Roku/PC): o player
+   nativo devolve a posição via window.__zxNativeDone ao fechar. No PC/web não
+   existe HdxNative → cai no player HTML normal (nada muda). */
+function nativeAvail() { try { return !!(global.HdxNative && global.HdxNative.play); } catch (e) { return false; } }
+/* ZAPPING (canais ao vivo): monta a lista da tela atual (ordem visível, direto dos
+   tiles) pro player nativo trocar de canal com ↑/↓ do controle. Janela de ±150 em
+   volta do canal atual (payload leve pro Intent). null se não der (toca normal). */
+function liveZapList(sid) {
+    try {
+        var tiles = document.querySelectorAll('.channel-tile-tv');
+        if (!tiles.length) return null;
+        var arr = [], idx = -1;
+        for (var i = 0; i < tiles.length; i++) {
+            var s = parseInt(tiles[i].getAttribute('data-sid') || 0, 10);
+            if (!s) continue;
+            if (String(s) === String(sid)) idx = arr.length;
+            arr.push({ i: s, t: tiles[i].getAttribute('data-name') || (t('Canal') + ' ' + s), u: streamUrl('live', s) });
+        }
+        if (idx < 0 || arr.length < 2) return null;
+        var lo = Math.max(0, idx - 150), hi = Math.min(arr.length, idx + 151);
+        return { list: arr.slice(lo, hi), index: idx - lo };
+    } catch (e) { return null; }
+}
+// Chamado pela casca ao FECHAR o player se o cliente zapeou: marca o canal FINAL
+// nos "Recentes" (o trackRecent do canal original já rodou na abertura).
+global.__zxZapTrack = function (id) {
+    try {
+        id = parseInt(id, 10); if (!id) return;
+        var all = (S.cat.live && S.cat.live.all) || [];
+        for (var i = 0; i < all.length; i++) {
+            if (parseInt(all[i].stream_id, 10) === id) { trackRecent(id, all[i].name || 'Canal', all[i].stream_icon || '', 0); return; }
+        }
+    } catch (e) {}
+};
+function playViaNative(opts) {
+    S.nativePlaying = opts;                       // contexto p/ salvar local ao voltar
+    try {
+        global.HdxNative.play(JSON.stringify({
+            kind: opts.kind, url: opts.url, title: opts.title || opts.name || '',
+            resume: opts.resume || 0, id: String(opts.zxId || ''),
+            has_next: !!(opts.nextEp),  // série com próximo ep → ExoPlayer mostra "Próximo"
+            zap: opts.zap ? opts.zap.list : undefined,        // canais ↑/↓ (zapping)
+            zap_index: opts.zap ? opts.zap.index : undefined
+        }));
+    } catch (e) {}
+}
+/* ANDROID: o player nativo fica POR CIMA do WebView, então a tela de detalhe
+   atrás dele não recarrega — os marcadores ficavam velhos até sair e voltar.
+   Aqui atualizamos NA HORA, SEM rede: ✓/barra do episódio assistido + botão do
+   topo (série) ou "Continuar de X" (filme). As queries só acham algo se o
+   detalhe certo estiver aberto → seguro (no-op caso contrário). SÓ Android
+   (este caminho só roda via HdxNative); web/TV já re-renderizam ao navegar. */
+function nativeRefreshDetail(p) {
+    try {
+        if (p.zxKind === 'series') {
+            var epId = parseInt(p.zxId, 10), ps = S.playSeries || {};
+            var tile = document.querySelector('.episode-tile[href*="/episode/' + epId + '/play"]');
+            if (tile) {
+                if ((' ' + tile.className + ' ').indexOf(' is-watched ') < 0) tile.className += ' is-watched';
+                var img = tile.querySelector('.ep-img');
+                if (img) {
+                    var old = img.querySelector('.ep-watched,.ep-progress'); if (old) old.parentNode.removeChild(old);
+                    var pr = getProgress('series', epId), sp = document.createElement('span');
+                    if (pr && pr.pos > 5 && pr.dur && pr.pos < pr.dur - 30) { sp.className = 'ep-progress'; sp.style.width = Math.min(100, Math.round(pr.pos / pr.dur * 100)) + '%'; }
+                    else { sp.className = 'ep-watched'; sp.textContent = '✓'; }
+                    img.insertBefore(sp, img.firstChild);
+                }
+            }
+            if (ps.list && ps.list.length) {
+                var sbtn = document.querySelector('#series-detail .dh-buttons .btn-tv.is-primary');
+                if (sbtn) { var t1 = document.createElement('div'); t1.innerHTML = seriesTopBtnHtml(ps.id || epId, ps.list); if (t1.firstChild) sbtn.parentNode.replaceChild(t1.firstChild, sbtn); }
+            }
+        } else if (p.zxKind === 'movie') {
+            var box = document.querySelector('.detail-screen .dh-buttons');
+            var pb = box && box.querySelector('a.btn-tv[href*="/movies/' + p.zxId + '/play"]');
+            if (box && pb) {
+                var ext = pb.getAttribute('data-ext') || S.playExt || 'mp4', fav = box.querySelector('#btn-favorite');
+                var olds = box.querySelectorAll('a.btn-tv'); for (var i = 0; i < olds.length; i++) olds[i].parentNode.removeChild(olds[i]);
+                var t2 = document.createElement('div'); t2.innerHTML = moviePlayBtnsHtml(p.zxId, ext);
+                while (t2.firstChild) box.insertBefore(t2.firstChild, fav);
+            }
+        }
+    } catch (e) {}
+}
+// chamado pela casca Android quando o ExoPlayer fecha (pos/dur em segundos)
+global.__zxNativeDone = function (pos, dur, ended) {
+    var p = S.nativePlaying; if (!p) return;
+    pos = parseInt(pos, 10) || 0; dur = parseInt(dur, 10) || 0; ended = (ended === true || ended === 1 || ended === '1');
+    try {
+        var fin = ended || (dur > 30 && pos >= dur * 0.9);   // CONCLUÍDO = assistiu >=90% (antes ~dur-20 marcava cedo demais)
+        // "Abriu e voltou": o ExoPlayer ainda não sabia a duração (dur=0) OU viu
+        // pouquíssimo → NÃO marca como assistido/continuar (o episódio virava ✓ à
+        // toa + botão "Próximo"). Espelha a trava `if(pos<5)return` do caminho web.
+        if (!fin && (dur <= 0 || pos < 15)) { S.nativePlaying = null; return; }
+        if (p.zxKind === 'movie') {
+            saveProgress('movie', p.zxId, fin ? 0 : pos, dur, p.name, p.poster);
+            bumpContinue('vod', p.zxId, p.name, p.poster, fin);
+            nativeRefreshDetail(p);             // atualiza "Continuar de X" no detalhe aberto (sem rede)
+        } else if (p.zxKind === 'series') {
+            saveProgress('series', p.zxId, fin ? 0 : pos, dur, p.name, '');
+            // último ep assistido → botão do topo retoma/pula certo; guarda s/e pro card da home
+            var _sl = { epId: parseInt(p.zxId, 10), ext: p.ext || '' };
+            try { var _ls = (p.series && p.series.list) || []; for (var _li = 0; _li < _ls.length; _li++) { if (parseInt(_ls[_li].id, 10) === _sl.epId) { _sl.s = _ls[_li].s; _sl.e = _ls[_li].e; break; } } } catch (e2) {}
+            lsSet('zx_slast_' + (p.seriesId || p.zxId), _sl);
+            bumpContinue('series', p.seriesId || p.zxId, (p.series && p.series.name) || p.name, (p.series && p.series.poster) || '', false);
+            if (ended && p.nextEp) {                // auto-avança o episódio (delegando de novo pro nativo)
+                S.nativePlaying = null;
+                // PUSH (NÃO replace): no caminho NATIVO o renderPlayerEpisode faz seu
+                // PRÓPRIO history.back() (volta pro detalhe). A entrada atual AQUI já é
+                // o DETALHE /series/X (o play anterior deu back). Com REPLACE, trocava
+                // /series/X pelo /play-Y2 → o history.back() do renderPlayer caía na
+                // SELEÇÃO de séries (o bug). Com PUSH: empilha /play-Y2 → renderPlayer
+                // dá back → fica em /series/X → Voltar do player = detalhe da série. ✓
+                go('/series/' + enc(p.seriesId) + '/episode/' + enc(p.nextEp.id) + '/play?ext=' + enc(p.nextEp.ext || 'mp4'));
+                return;
+            }
+            nativeRefreshDetail(p);             // marca o episódio assistido + botão do topo na hora (sem rede)
+        }
+    } catch (e) {}
+    S.nativePlaying = null;
+};
+
+function renderPlayerLive(sid, query) {
+    var qs = parseQuery(query); var name = qs.name || t('Canal');
+    if (nativeAvail()) {
+        trackRecent(sid, name, qs.logo || '', 0);
+        playViaNative({ kind: 'live', url: streamUrl('live', sid), title: name, resume: 0, zxKind: 'live', zxId: sid, name: name, zap: liveZapList(sid) });
+        history.back(); return;                   // volta pro grid; ExoPlayer abre por cima
+    }
+    setHtml(playerShell('live', name));
+    showLoading(false);
+    startVideo(streamUrl('live', sid), 'live', null);
+    trackRecent(sid, name, qs.logo || '', 0);
+    bootPlayerScripts('live'); afterRender();
+}
+function renderPlayerMovie(id, query) {
+    var qs = parseQuery(query);
+    var name = S.playName || t('Filme'), ext = S.playExt || 'mp4', poster = S.playPoster || '';
+    var resumeAt = qs.restart ? 0 : (parseInt(qs.t || '0', 10) || ((getProgress('movie', id) || {}).pos || 0));
+    if (nativeAvail()) {
+        playViaNative({ kind: 'vod', url: streamUrl('movie', id, ext), title: name, resume: resumeAt, zxKind: 'movie', zxId: id, name: name, poster: poster });
+        history.back(); return;                   // volta pro detalhe; ExoPlayer abre por cima
+    }
+    setHtml(playerShell('vod', name, true));
+    showLoading(false);
+    function save(done) {
+        var v = $('hls-player'); if (!v) return;
+        var pos = Math.floor(v.currentTime || 0), dur = Math.floor(v.duration || 0);
+        if (!done && pos < 5) return;                              // muito no início → não conta
+        var fin = done || (dur > 30 && pos >= dur - 20);           // acabou → tira do "continue"
+        saveProgress('movie', id, fin ? 0 : pos, dur, name, poster);
+        bumpContinue('vod', id, name, poster, fin);               // "Continue Assistindo" na hora
+    }
+    startVideo(streamUrl('movie', id, ext), 'vod', save, resumeAt);
+    S.leavePlayer = function () { save(false); };                 // salva ao SAIR do player (render() chama)
+    bootPlayerScripts('vod'); afterRender();
+}
+function renderPlayerEpisode(seriesId, epId, query) {
+    var qs = parseQuery(query);
+    var ext = qs.ext || S.playExt || 'mp4', ps = S.playSeries || {};
+    var resumeAt = qs.restart ? 0 : (parseInt(qs.t || '0', 10) || ((getProgress('series', epId) || {}).pos || 0));
+    // próximo episódio (da lista guardada no detalhe) — pro botão + auto-avanço
+    var list = ps.list || [], curIdx = -1, curEp = null;
+    for (var li = 0; li < list.length; li++) { if (parseInt(list[li].id, 10) === parseInt(epId, 10)) { curIdx = li; curEp = list[li]; break; } }
+    var nextEp = (curIdx >= 0 && curIdx + 1 < list.length) ? list[curIdx + 1] : null;
+    // TÍTULO do player = SÉRIE + S/E (NÃO o S.playName, que ficava do filme/conteúdo
+    // anterior porque o detalhe da série não o reseta → título velho no player).
+    var name = ps.name || t('Episódio');
+    if (curEp && (curEp.s != null) && (curEp.e != null)) name = (ps.name || t('Série')) + ' · S' + curEp.s + 'E' + curEp.e;
+    if (nativeAvail()) {
+        playViaNative({ kind: 'vod', url: streamUrl('series', epId, ext), title: name, resume: resumeAt,
+            zxKind: 'series', zxId: epId, name: name, ext: ext, seriesId: ps.id || seriesId, series: ps, nextEp: nextEp });
+        history.back(); return;                   // volta pro detalhe; ExoPlayer abre por cima (auto-next via __zxNativeDone)
+    }
+    setHtml(playerShell('vod', name, true));
+    showLoading(false);
+    function save(done) {
+        var v = $('hls-player'); if (!v) return;
+        var pos = Math.floor(v.currentTime || 0), dur = Math.floor(v.duration || 0);
+        if (!done && pos < 5) return;
+        var fin = done || (dur > 30 && pos >= dur - 20);
+        saveProgress('series', epId, fin ? 0 : pos, dur, name, '');
+        try { lsSet('zx_slast_' + (ps.id || seriesId), { epId: parseInt(epId, 10), ext: ext, s: curEp ? curEp.s : null, e: curEp ? curEp.e : null }); } catch (e) {}
+        bumpContinue('series', ps.id || seriesId, ps.name || name, ps.poster || '', false);
+    }
+    startVideo(streamUrl('series', epId, ext), 'vod', save, resumeAt);
+    S.leavePlayer = function () { save(false); };
+    // "Concluir" o episódio = marcar assistido SEM depender do currentTime (na
+    // Samsung/AVPlay o currentTime no fim/transição oscila). Usado ao ir pro próximo.
+    function markWatched() { save(true); }
+    // PRÓXIMO EPISÓDIO: botão no canto quando falta ~1min + auto-avanço no fim.
+    wireNextEpisode(seriesId, nextEp, markWatched);
+    bootPlayerScripts('vod'); afterRender();
+}
+function goNextEpisode(seriesId, nextEp, markWatched) {
+    if (!nextEp) return;
+    try { var p = document.getElementById('next-ep-prompt'); if (p && p.parentNode) p.parentNode.removeChild(p); } catch (e) {}
+    // Ir pro próximo = o episódio ATUAL foi assistido → marca AGORA (fin, sem
+    // depender do currentTime) e LIMPA o S.leavePlayer pra o save da navegação NÃO
+    // sobrescrever com um currentTime instável (Samsung/AVPlay) — era a causa do
+    // "às vezes não marca / marca o episódio errado / oscila".
+    try { if (markWatched) markWatched(); } catch (e) {}
+    S.leavePlayer = null;
+    // REPLACE (nao push): troca a entrada do ep atual pela do proximo -> o "Voltar"
+    // sai pra serie, em vez de reabrir o episodio anterior (bug do auto-avanco).
+    go('/series/' + enc(seriesId) + '/episode/' + enc(nextEp.id) + '/play?ext=' + enc(nextEp.ext || 'mp4'), true);
+}
+function wireNextEpisode(seriesId, nextEp, markWatched) {
+    if (!nextEp) return;
+    var v = $('hls-player'); if (!v) return;
+    var shown = false;
+    function showPrompt() {
+        if (shown || document.getElementById('next-ep-prompt')) { shown = true; return; }
+        shown = true;
+        var box = document.createElement('div'); box.id = 'next-ep-prompt';
+        box.innerHTML = '<button type="button" class="next-ep-btn" id="next-ep-btn"><span class="next-ep-cap">' + te('Próximo episódio') + '</span><span class="next-ep-lbl">S' + esc(nextEp.s) + ' E' + esc(nextEp.e) + ' ▸</span></button>';
+        (document.querySelector('.player-screen') || document.body).appendChild(box);
+        var b = document.getElementById('next-ep-btn');
+        if (b) { b.addEventListener('click', function (ev) { ev.preventDefault(); goNextEpisode(seriesId, nextEp, markWatched); }); setTimeout(function () { try { b.focus(); } catch (e) {} }, 40); }
+    }
+    function hidePrompt() { shown = false; var p = document.getElementById('next-ep-prompt'); if (p && p.parentNode) p.parentNode.removeChild(p); }
+    v.addEventListener('timeupdate', function () {
+        var dur = v.duration, ct = v.currentTime; if (!isFinite(dur) || dur <= 0) return;
+        var rem = dur - ct;
+        if (rem <= 60 && rem > 2) showPrompt();
+        else if (rem > 65 && shown) hidePrompt();   // voltou (seek) → esconde
+    });
+    v.addEventListener('ended', function () { goNextEpisode(seriesId, nextEp, markWatched); });   // auto-avança
+}
+function parseQuery(q) { var o = {}; if (!q) return o; var ps = q.split('&'); for (var i = 0; i < ps.length; i++) { var kv = ps[i].split('='); o[decodeURIComponent(kv[0] || '')] = decodeURIComponent((kv[1] || '').replace(/\+/g, ' ')); } return o; }
+
+/* episode/movie play precisam do ext — guardo do detalhe; se vier direto sem
+   passar pelo detalhe, busco o ext na hora */
+// (capturado em S.playExt/S.playName ao abrir o detalhe; suficiente no fluxo normal)
+
+/* ---- PIN adulto — LOCAL no aparelho (igual favoritos/continue/recentes; NADA no
+   servidor). Padrão "1234". Trocável em Configurações → Controle parental. ---- */
+function getAdultPin() { var v = lsGet('zx_adultpin'); return (v != null && /^\d{4,6}$/.test(String(v))) ? String(v) : '1234'; }
+function promptPin(targetPath) {
+    var ov = document.createElement('div'); ov.className = 'zx-ann-overlay';
+    // Estilo INLINE: o CSS do .zx-ann-overlay só é injetado quando há um AVISO ativo;
+    // sem aviso o overlay do PIN caía como position:static e ficava INVISÍVEL (a tela
+    // "bugava" ao abrir conteúdo adulto). Auto-estilizado = sempre funciona.
+    ov.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:100000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.82);padding:20px;box-sizing:border-box';
+    ov.innerHTML = '<div style="background:#161616;border:1px solid rgba(16,185,129,.45);border-radius:16px;padding:24px 26px;max-width:360px;width:100%;text-align:center;box-shadow:0 16px 50px rgba(0,0,0,.6);box-sizing:border-box">'
+        + '<div style="font-weight:700;color:#fff;font-size:20px;margin-bottom:6px">Conteúdo adulto</div>'
+        + '<div style="color:#d6d6d6;font-size:15px;margin-bottom:16px">Digite o PIN para continuar.</div>'
+        + '<input type="password" id="zx-pin" inputmode="numeric" maxlength="6" style="width:200px;text-align:center;letter-spacing:8px;font-size:26px;background:#0c0f0d;border:1.5px solid rgba(255,255,255,.16);border-radius:12px;padding:12px;color:#fff;margin-bottom:10px;outline:none">'
+        + '<div id="zx-pin-err" style="color:#ff8c95;height:18px;margin-bottom:8px;font-size:14px"></div>'
+        + '<div><button type="button" id="zx-pin-ok" style="background:#10b981;color:#04231a;font-weight:700;border:0;border-radius:10px;padding:12px 26px;font-size:16px;cursor:pointer;margin:0 4px">Desbloquear</button>'
+        + '<button type="button" id="zx-pin-cancel" style="background:#333;color:#fff;font-weight:700;border:0;border-radius:10px;padding:12px 26px;font-size:16px;cursor:pointer;margin:0 4px">Cancelar</button></div></div>';
+    document.body.appendChild(ov);
+    translateTree(ov);   // modal fora do setHtml → traduz aqui (EN)
+    var inp = $('zx-pin'); setTimeout(function () { try { inp.focus(); } catch (e) {} }, 60);
+    // TRAVA DE FOCO: fechar o teclado do sistema devolvia o foco pra PÁGINA DE TRÁS
+    // (o modal ficava aberto mas as setas navegavam atrás dele). Enquanto o PIN
+    // estiver aberto, qualquer foco FORA do modal volta pro campo do PIN.
+    function trapFocus(e) {
+        if (!ov.parentNode) return;
+        if (ov.contains(e.target)) return;
+        setTimeout(function () { try { inp.focus(); } catch (err) {} }, 0);
+    }
+    document.addEventListener('focusin', trapFocus, true);
+    function close() {
+        document.removeEventListener('focusin', trapFocus, true);
+        S.pinClose = null;
+        if (ov.parentNode) ov.parentNode.removeChild(ov);
+    }
+    S.pinClose = close;   // Voltar do Android fecha o modal (em vez de navegar atrás)
+    function submit() {
+        var pin = (inp.value || '').trim(); if (!pin) return;
+        // Verificação LOCAL (a senha fica só no aparelho — nada vai pro servidor).
+        if (pin === getAdultPin()) { S.adultOk = true; close(); go(targetPath); }
+        else { $('zx-pin-err').textContent = t('Senha incorreta.'); inp.value = ''; try { inp.focus(); } catch (e) {} }
+    }
+    $('zx-pin-cancel').addEventListener('click', close);
+    $('zx-pin-ok').addEventListener('click', submit);
+    // Enter / OK do teclado (IME do sistema, físico ou controle) envia — na TV o
+    // botão "Desbloquear" pode ficar atrás do teclado numérico, então o Enter resolve.
+    inp.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.keyCode === 13) { e.preventDefault(); submit(); } });
+}
+
+/* ---- reload / logout ---- */
+// Recarregar: antes só dava go('/home') → parecia que "jogava pra cima" sem
+// fazer nada. Agora limpa cache (catálogo) e RECARREGA o app de verdade (volta
+// pro IPTV buscar tudo fresco) — feedback visível (splash) e conteúdo novo.
+function doReload() {
+    try { if (global.HdxCache) HdxCache.bust(); } catch (e) {}
+    S.cat = { movies: null, series: null, live: null };   // catálogo re-buscado FRESCO do IPTV no próximo browse
+    showLoading(true);
+    // ⚠️ NÃO usa location.reload(): o WebView2 do app BLOQUEIA recarregar file://
+    // (ver hdx_player.py) → era no-op, por isso "não atualizava". Refresh SOFT:
+    // re-busca o resolve (licença/vencimento/branding/aviso/DNS) e re-renderiza.
+    api('resolve', '', 9000).then(function (d) {
+        showLoading(false);
+        if (d && d.error === 'license') { if (applyPush(d)) return; renderPaywall(d); return; }
+        if (d && d.ok && d.dns && d.dns.base) { applyResolve(d, false); saveSnap(d); flushQueue(); }
+        go('/home', true); flashReloaded();
+    }).catch(function () { showLoading(false); go('/home', true); flashReloaded(); });
+}
+// feedback visível do Recarregar (o conteúdo da home muda pouco; sem isto parecia
+// que "nada acontecia"). Troca o rótulo do botão por ~1.6s.
+function flashReloaded() {
+    setTimeout(function () {
+        var b = document.querySelector('.home-reload span') || document.querySelector('.home-reload');
+        if (!b) return;
+        var old = b.textContent;
+        b.textContent = '✓ Atualizado';
+        setTimeout(function () { try { b.textContent = old || 'Recarregar'; } catch (e) {} }, 1600);
+    }, 40);
+}
+function doLogout() {
+    try { localStorage.removeItem('zx_direct_mode'); localStorage.removeItem('zx_mac'); } catch (e) {}
+    S.directAuth = false;
+    clearCreds();
+    try {
+        var kill = [];
+        for (var li = 0; li < localStorage.length; li++) {
+            var lk = localStorage.key(li);
+            if (!lk) continue;
+            var base = lk.replace(/^p\d+_/, '');
+            if (base === 'zx_snap' || profIsPersonalKey(base)) kill.push(lk);   // TODOS os perfis
+        }
+        kill.forEach(function (k) { localStorage.removeItem(k); });
+    } catch (e) {}
+    S.server = ''; S.info = null; S.blocked = false;
+    S.fav = { live: [], movie: [], series: [] }; S.favDirty = { live: [], movie: [], series: [] }; S.favMeta = {};
+    S.cat = { movies: null, series: null, live: null };
+    // Sair da conta cai na tela de LISTAS (Adicionar lista COM a barra de topo
+    // "← Voltar | Listas") — igual ao fluxo do Trocar lista. Antes ia pro /login
+    // pelado (formulário sem menu no topo), destoando do resto (pedido do Leonardo).
+    if (S.directAuth || directModeStored()) { renderMacActivation(); } else { go('/lists', true); }
+}
+
+/* ============================================================
+ * BOOT
+ * ============================================================ */
+// Re-verificação em segundo plano: vencimento/licença/branding/aviso + migração
+// de DNS. Roda quando a VPS está alcançável; se não, segue no snapshot (offline).
+function refresh(snap) {
+    var oldAnnVer = (S.branding && S.branding.announce && S.branding.announce.ver) || '';
+    api('resolve', '', 9000).then(function (d) {
+        if (!d) return;                                  // VPS fora → segue offline
+        if (d.error === 'license') { if (applyPush(d)) return; renderPaywall(d); return; }   // venceu/bloqueado (push pendente aplica antes)
+        if (!d.ok || !d.dns || !d.dns.base) return;
+        var dnsChanged = snap && snap.d && snap.d.dns && (snap.d.dns.base !== d.dns.base);
+        applyResolve(d, false);                          // reconcilia favoritos + atualiza dns/licença/branding/aviso
+        saveSnap(d);
+        flushQueue();
+        if (dnsChanged) {                                // migração de DNS em massa → recarrega catálogo do novo servidor
+            S.cat = { movies: null, series: null, live: null };
+            try { if (global.HdxCache) HdxCache.bust(); } catch (e) {}
+        }
+        if (S.blocked) { stopPwPoll(); S.blocked = false; go('/home', true); return; }   // estava em paywall/offline e renovou → volta
+        // Abriu do snapshot (aviso velho) e chegou um AVISO NOVO (versão diferente)
+        // → re-renderiza a home pra ele aparecer AO ABRIR, sem precisar Recarregar.
+        var newAnnVer = (S.branding && S.branding.announce && S.branding.announce.ver) || '';
+        if (newAnnVer !== oldAnnVer && document.querySelector('.home-screen')) renderHome();
+    });
+}
+
+function renderPaywall(d) {
+    S.blocked = true;
+    d = d || {}; var lic = d.license || {};
+    var mac = d.mac || lic.mac || '';
+    // Texto mostra SÓ até /renovar (sem ?mac=... — ninguém digita URL-encoded);
+    // o MAC já aparece por extenso logo abaixo e o QR leva o link completo.
+    var pay = (d.pay_url || lic.pay_url || 'https://renciaapp.manus.space/renovar').replace(/^https?:\/\//, '').replace(/\?.*$/, '');
+    var qr = d.qr_url || lic.qr_url || '';
+    // Wrapper com scroll próprio + miolo com margin:auto: se couber, fica centrado;
+    // se NÃO couber, rola a partir do TOPO. Em tela BAIXA (celular deitado — no
+    // ui-tv o .brand-logo é 128px, tamanho de TV!) a media query compacta
+    // logo/título/QR pra caber TUDO sem rolar. Escopado no #zx-pw: não muda
+    // home/login. scrollTop=0 no fim: o autofocus do botão rolava e cortava o topo.
+    setHtml('<style>'
+        // FOCO VISÍVEL no D-pad: o :focus dos botões só existia dentro de
+        // .tv-login-card — aqui no paywall as setas moviam o foco às CEGAS e o
+        // OK caía no botão errado (ia pro login sem querer).
+        + '#zx-pw button:focus{outline:3px solid #fff;outline-offset:3px;box-shadow:0 0 0 6px rgba(16,185,129,.35)}'
+        + '#zx-pw .home-logo{margin-bottom:12px}'
+        + '@media (max-height:760px){'
+        + '#zx-pw .home-logo{margin-bottom:6px}'
+        + '#zx-pw .home-logo .brand-logo{font-size:54px}'
+        + '#zx-pw .home-logo img{height:60px}'
+        + '#zx-pw h1{font-size:21px !important;margin:0 0 4px !important}'
+        + '#zx-pw .zx-pw-sub{font-size:14px !important}'
+        + '#zx-pw .zx-pw-qr{width:132px !important;height:132px !important;margin:8px 0 !important}'
+        + '#zx-pw .zx-pw-line{font-size:14px !important;margin:2px 0 !important}'
+        + '#zx-pw .zx-pw-btns{margin-top:8px !important}'
+        + '}</style>'
+        + '<div id="zx-pw" style="height:100vh;overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;box-sizing:border-box;padding:16px">'
+        + '<div style="margin:auto;display:flex;align-items:center;flex-direction:column;text-align:center;max-width:560px;width:100%">'
+        + '<div class="home-logo">' + brandLogoHtml() + '</div>'
+        + '<h1 style="font-size:26px;margin:0 0 8px">Período de uso expirado</h1>'
+        + '<p class="zx-pw-sub" style="color:#9aa6a0;max-width:520px;font-size:16px;line-height:1.4;margin:0 0 4px">Renove para continuar assistindo.</p>'
+        + (qr ? '<img class="zx-pw-qr" src="' + attr(qr) + '" style="width:170px;height:170px;background:#fff;border-radius:12px;margin:14px 0">' : '')
+        + (mac ? '<p class="zx-pw-line" style="color:#cdd5d1;margin:4px 0">Aparelho: <strong>' + esc(mac) + '</strong></p>' : '')
+        + '<p class="zx-pw-line" style="color:#cdd5d1;margin:4px 0;word-break:break-all">Renove em <strong>' + esc(pay) + '</strong></p>'
+        + '<div class="zx-pw-btns" style="display:flex;gap:12px;margin-top:14px;flex-wrap:wrap;justify-content:center">'
+        + '<button type="button" class="tv-submit" id="zx-pw-paid" style="width:auto;padding:12px 36px">Já paguei</button>'
+        + '<button type="button" id="zx-pw-out" style="width:auto;padding:12px 28px;background:transparent;border:1px solid #ffffff33;color:#cdd5d1;border-radius:12px;cursor:pointer;font-size:16px">Sair</button>'
+        + '</div></div></div>');
+    var b = $('zx-pw-out'); if (b) b.addEventListener('click', doLogout);
+    var jp = $('zx-pw-paid'); if (jp) jp.addEventListener('click', function () { pwRecheck(jp); });
+    stopPwPoll();
+    S.pwPoll = setInterval(function () { pwRecheck(null); }, 8000);   // destrava SOZINHO quando o pagamento cair
+    afterRender();
+    // Foco inicial DETERMINÍSTICO no "Já paguei" (senão fica onde o afterRender
+    // deixou) + volta o scroll pro topo (o focus rolava e cortava o logo no celular).
+    setTimeout(function () {
+        try { var jp2 = $('zx-pw-paid'); if (jp2) jp2.focus({ preventScroll: true }); } catch (e) { try { if (jp2) jp2.focus(); } catch (e2) {} }
+        var w = $('zx-pw'); if (w) w.scrollTop = 0;
+    }, 50);
+}
+function stopPwPoll() { if (S.pwPoll) { try { clearInterval(S.pwPoll); } catch (e) {} S.pwPoll = null; } }
+// Re-checa a licença no paywall: pagou -> /resolve volta ok -> volta pra home.
+function pwRecheck(btn) {
+    if (!S.blocked) { stopPwPoll(); return; }
+    if (btn) btn.textContent = t('Verificando…');
+    api('resolve', '', 12000).then(function (d) {
+        if (d && d.ok && d.error !== 'license') {
+            stopPwPoll(); S.blocked = false; applyResolve(d, false); saveSnap(d); go('/home', true);
+        } else if (d && d.error === 'license' && applyPush(d)) {
+            // chegou lista nova ENQUANTO no paywall (ex: vendedor enviou DNS grátis
+            // pro MAC) → aplica na hora; o applyPush re-resolve e decide (desbloqueia
+            // ou re-mostra o paywall se a lista nova também estiver vencida)
+        } else if (btn) { btn.textContent = t('Ainda não consta'); setTimeout(function () { if ($('zx-pw-paid')) $('zx-pw-paid').textContent = t('Já paguei'); }, 2500); }
+    }).catch(function () { if (btn) btn.textContent = t('Já paguei'); });
+}
+function renderOfflineFirst() {
+    S.blocked = true;
+    setHtml('<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:40px">'
+        + '<div class="home-logo" style="margin-bottom:18px">' + brandLogoHtml() + '</div>'
+        + '<h1 style="font-size:26px;margin:0 0 10px">Sem conexão</h1>'
+        + '<p style="color:#9aa6a0;max-width:480px">Não foi possível falar com o painel para o primeiro acesso. Verifique sua internet e tente de novo.</p>'
+        + '<button type="button" class="tv-submit" id="zx-retry" style="width:auto;padding:14px 40px;margin-top:14px">Tentar de novo</button></div>');
+    var b = $('zx-retry'); if (b) b.addEventListener('click', boot);
+    afterRender();
+}
+
+/* ===== FORMATO DA TELA (Celular x TV/Caixa) — SÓ Android (UI empacotada) =====
+   O catálogo é desenhado pra TV; num celular RETRATO os posters ficam grandes
+   (3 colunas largas). O usuário escolhe na 1ª abertura: "Celular" usa um alvo
+   de poster MENOR (→ ~4 colunas, posters menores) e encolhe a home; "TV/Caixa"
+   mantém o padrão. Fica em localStorage 'zx:ff'. SÓ aparece no Android
+   (nativeAvail); PC/Samsung nunca setam zx:ff → padrão TV 100% intacto. */
+function getFormFactor() { try { var v = localStorage.getItem('zx:ff'); return (v === 'mobile' || v === 'tv') ? v : ''; } catch (e) { return ''; } }
+function applyFormFactor() {
+    var mob = getFormFactor() === 'mobile';
+    // TV: alvo PROPORCIONAL à tela (16.4% da largura ≈ 210px numa tela de 1280
+    // CSS px). TVs Android têm DENSIDADES diferentes → o WebView enxerga 960/
+    // 1280/1920 px CSS na mesma tela 1080p; com alvo FIXO em px dava 3 colunas
+    // numa TV e 4 na outra. Proporcional = SEMPRE ~4 colunas. Celular mantém 100.
+    var tvTarget = 210;
+    try { tvTarget = Math.max(140, Math.round(window.innerWidth * 0.164)); } catch (e) {}
+    global.__ZX_TILE_TARGET = mob ? 100 : tvTarget;
+    try {
+        var b = document.body;
+        if (b) {
+            var cl = (' ' + b.className + ' ').replace(' zx-ff-mobile ', ' ').replace(' zx-ff-tv ', ' ').replace(/^\s+|\s+$/g, '');
+            b.className = cl + (cl ? ' ' : '') + (mob ? 'zx-ff-mobile' : 'zx-ff-tv');
+        }
+    } catch (e) {}
+    var st = $('zx-ff-css');
+    if (!st) { st = document.createElement('style'); st.id = 'zx-ff-css'; (document.head || document.documentElement).appendChild(st); st.textContent = ffMobileCss(); }
+    // re-ajusta grids visíveis + nav do catálogo na hora
+    try { var g = $('content-grid') || $('search-grid'); if (g) fitPosterGrid(g); } catch (e) {}
+    try { if (global.__zxReindexGrid) global.__zxReindexGrid(); } catch (e) {}
+}
+/* CSS só do modo Celular (escopo body.zx-ff-mobile → nunca toca TV/PC/Samsung).
+   Encolhe os ícones da home, rótulos e logo — "tudo menor". */
+function ffMobileCss() {
+    return 'body.zx-ff-mobile .tile-icon svg{width:42px;height:42px}'
+        + 'body.zx-ff-mobile .home-tile{padding:14px 6px}'
+        + 'body.zx-ff-mobile .home-tile span{font-size:12px}'
+        + 'body.zx-ff-mobile .home-logo{transform:scale(.72);transform-origin:center}'
+        + 'body.zx-ff-mobile .poster-tile-tv .pt-title,body.zx-ff-mobile .poster-tile-tv .pt-name{font-size:12px;line-height:1.2}'
+        + 'body.zx-ff-mobile .channel-tile-tv .ch-name{font-size:13px}'
+        // DETALHE de filme/série (telas internas) — encolhe hero, sinopse e botões
+        + 'body.zx-ff-mobile .detail-hero .dh-content{padding:46px 16px 12px;max-width:100%}'
+        + 'body.zx-ff-mobile .detail-hero h1{font-size:22px;margin-bottom:8px}'
+        + 'body.zx-ff-mobile .detail-hero .dh-meta{margin-bottom:10px}'
+        + 'body.zx-ff-mobile .detail-hero .dh-badge{font-size:12px;padding:3px 9px}'
+        + 'body.zx-ff-mobile .detail-hero .dh-genre{font-size:12px}'
+        + 'body.zx-ff-mobile .detail-hero .dh-plot{font-size:12px;line-height:1.4;margin-bottom:16px;max-width:100%}'
+        + 'body.zx-ff-mobile .detail-hero .dh-back{font-size:12px;padding:5px 11px}'
+        + 'body.zx-ff-mobile .detail-hero .dh-buttons{max-width:300px}'
+        + 'body.zx-ff-mobile .btn-tv{padding:10px 16px;font-size:13px;border-width:2px}'
+        + 'body.zx-ff-mobile .btn-tv .btn-icon svg{width:16px;height:16px}'
+        // TEMPORADAS + EPISÓDIOS (só série) — episódio era clamp 180-280px (gigante)
+        + 'body.zx-ff-mobile .detail-seasons{padding:16px 16px 34px}'
+        + 'body.zx-ff-mobile .detail-seasons h2{font-size:18px;margin-bottom:12px}'
+        + 'body.zx-ff-mobile .season-pill{font-size:13px;padding:8px 16px;margin-right:8px}'
+        + 'body.zx-ff-mobile .episode-tile{width:132px;margin-right:10px}'
+        + 'body.zx-ff-mobile .episode-tile .ep-label{font-size:11px;margin-top:6px}'
+        + 'body.zx-ff-mobile .episode-tile .ep-img .ep-fallback{font-size:20px}';
+}
+function injectFfAskCss() {
+    if ($('zx-ffa-css')) return;
+    var st = document.createElement('style'); st.id = 'zx-ffa-css';
+    st.textContent = '.zx-ff-ask{position:fixed;inset:0;z-index:9000;background:rgba(6,10,9,.96);display:-webkit-box;display:flex;-webkit-box-align:center;align-items:center;-webkit-box-pack:center;justify-content:center;padding:20px}'
+        + '.zx-ffa-card{max-width:560px;width:100%;text-align:center}'
+        + '.zx-ffa-logo{margin-bottom:14px;display:-webkit-box;display:flex;-webkit-box-pack:center;justify-content:center}'
+        + '.zx-ffa-logo img,.zx-ffa-logo svg{max-height:54px}'
+        + '.zx-ffa-title{font-size:22px;font-weight:800;color:#fff;margin-bottom:6px}'
+        + '.zx-ffa-sub{font-size:14px;color:#9fb3ab;margin-bottom:22px}'
+        + '.zx-ffa-opts{display:-webkit-box;display:flex;gap:14px;-webkit-box-pack:center;justify-content:center}'
+        + '.zx-ffa-opt{-webkit-box-flex:1;flex:1;max-width:230px;background:#11201b;border:2px solid #1f3a30;border-radius:16px;padding:22px 14px;cursor:pointer;color:#fff;outline:none;-webkit-tap-highlight-color:transparent}'
+        + '.zx-ffa-opt:focus,.zx-ffa-opt:hover{border-color:#10b981;background:#15291f;box-shadow:0 0 0 3px rgba(16,185,129,.55)}'
+        + '.zx-ffa-emoji{font-size:42px;line-height:1;margin-bottom:10px}'
+        + '.zx-ffa-opt-t{font-size:17px;font-weight:700;margin-bottom:4px}'
+        + '.zx-ffa-opt-d{font-size:12px;color:#9fb3ab}'
+        + '.zx-ffa-note{margin-top:18px;font-size:12px;color:#6f827b}';
+    (document.head || document.documentElement).appendChild(st);
+}
+/* ===== AVISO ANTI-PIRATARIA (1ª abertura, Android) — em INGLÊS, pros revisores =====
+   Mostra UMA vez na 1ª abertura, ANTES de escolher Celular x TV. Reforça que o app é
+   só um player (o usuário traz a própria lista) e que pirataria é crime. Persiste em
+   'zx:piracy_ack'. SÓ Android (nativeAvail) — não toca web/Samsung/LG/PC. */
+function piracyAck() { try { return localStorage.getItem('zx:piracy_ack') === '1'; } catch (e) { return false; } }
+function injectPiracyCss() {
+    injectFfAskCss();                       // reusa o overlay base (.zx-ff-ask/.zx-ffa-card/logo/title)
+    if ($('zx-pir-css')) return;
+    var st = document.createElement('style'); st.id = 'zx-pir-css';
+    st.textContent = '.zx-pir-card{max-width:520px}'
+        + '.zx-pir-body{text-align:left;font-size:14px;line-height:1.55;color:#c7d4cd;margin:14px 0 22px;max-height:50vh;overflow:auto}'
+        + '.zx-pir-body p{margin:0 0 12px}'
+        + '.zx-pir-body strong{color:#fff}'
+        + '.zx-pir-ok{display:block;width:100%;background:#10b981;border:none;border-radius:14px;padding:16px;font-size:16px;font-weight:800;color:#04130d;cursor:pointer;outline:none;-webkit-tap-highlight-color:transparent}'
+        + '.zx-pir-ok:focus,.zx-pir-ok:hover{background:#0fcf93;box-shadow:0 0 0 3px rgba(16,185,129,.4)}';
+    (document.head || document.documentElement).appendChild(st);
+}
+function showPiracyNotice() {
+    if ($('zx-pir-ask')) return;            // já está na tela
+    injectPiracyCss();
+    var ov = document.createElement('div'); ov.id = 'zx-pir-ask'; ov.className = 'zx-ff-ask tv-modal';
+    try { document.body.classList.add('tv-modal-open'); } catch (e) {}   // PRENDE o foco no modal (setas não escapam pro fundo)
+    ov.innerHTML = '<div class="zx-ffa-card zx-pir-card"><div class="zx-ffa-logo">' + brandLogoHtml() + '</div>'
+        + '<div class="zx-ffa-title">' + te('Bem-vindo ao UltraPlayer') + '</div>'
+        + '<div class="zx-pir-body">'
+        + '<p>' + t('<strong>O UltraPlayer é apenas um reprodutor de mídia.</strong> Ele não fornece, hospeda, vende nem inclui canais, filmes, séries ou mídia de qualquer tipo.') + '</p>'
+        + '<p>' + t('Para assistir, você adiciona <strong>a sua própria lista</strong> de um provedor que você já tem. Você é o único responsável pelas listas e fontes que adicionar.') + '</p>'
+        + '<p>' + t('<strong>Pirataria é crime.</strong> Não use o UltraPlayer para acessar conteúdo que você não está autorizado a ver.') + '</p>'
+        + '</div>'
+        + '<button type="button" class="zx-pir-ok" id="zxPirOk" data-modal-ok>' + te('Entendi e concordo') + '</button></div>';
+    document.body.appendChild(ov);
+    var ok = $('zxPirOk');
+    ok.addEventListener('click', function () {
+        try { localStorage.setItem('zx:piracy_ack', '1'); } catch (e) {}
+        try { document.body.classList.remove('tv-modal-open'); } catch (e) {}
+        try { ov.parentNode.removeChild(ov); } catch (e) {}
+        maybeAskFormFactor();               // só então pergunta Celular x TV (re-arma o tv-modal-open)
+        // Se a escolha de tela NÃO abriu (já escolhida), ninguém re-renderiza a home → devolve o foco aqui.
+        if (!document.querySelector('.zx-ff-ask') && document.querySelector('.zx-home2')) focusHomeStart();
+    });
+    try { ok.focus(); } catch (e) {}
+}
+/* Orquestra a 1ª abertura no Android: 1º IDIOMA, depois aviso anti-pirataria
+   (já no idioma escolhido), depois Celular x TV. */
+function firstRunFlow() {
+    if (!nativeAvail()) return;             // SÓ Android (igual maybeAskFormFactor)
+    if (maybeAskLanguage()) return;         // 1º → escolher PT/EN (mostra e espera)
+    if (!piracyAck()) { showPiracyNotice(); return; }   // 2º → aviso (no idioma escolhido)
+    maybeAskFormFactor();                   // 3º → Celular x TV
+    if (!getFormFactor()) return;           // esperando a escolha
+    maybeProfIntro();                       // 4º → apresenta os PERFIS (1x)
+}
+/* Seletor de idioma na 1ª abertura (Android). Bilíngue (o usuário ainda não
+   escolheu). Retorna true se MOSTROU o seletor (o fluxo espera a escolha). */
+function maybeAskLanguage() {
+    if (!nativeAvail()) return false;       // SÓ Android
+    if (langChosen()) return false;         // já escolheu
+    if ($('zx-lang-ask')) return true;      // já está na tela
+    injectFfAskCss();
+    var ov = document.createElement('div'); ov.id = 'zx-lang-ask'; ov.className = 'zx-ff-ask tv-modal';
+    try { document.body.classList.add('tv-modal-open'); } catch (e) {}
+    ov.innerHTML = '<div class="zx-ffa-card"><div class="zx-ffa-logo">' + brandLogoHtml() + '</div>'
+        + '<div class="zx-ffa-title">Idioma / Language</div>'
+        + '<div class="zx-ffa-sub">Escolha o idioma do app · Choose the app language</div>'
+        + '<div class="zx-ffa-opts">'
+        + '<button type="button" class="zx-ffa-opt" data-lang="pt"><div class="zx-ffa-emoji">🇧🇷</div><div class="zx-ffa-opt-t">Português</div><div class="zx-ffa-opt-d">Brasil</div></button>'
+        + '<button type="button" class="zx-ffa-opt" data-lang="en"><div class="zx-ffa-emoji">🇺🇸</div><div class="zx-ffa-opt-t">English</div><div class="zx-ffa-opt-d">United States</div></button>'
+        + '</div></div>';
+    document.body.appendChild(ov);
+    var btns = ov.querySelectorAll('.zx-ffa-opt');
+    for (var i = 0; i < btns.length; i++) (function (b) {
+        b.addEventListener('click', function () {
+            setLang(b.getAttribute('data-lang'));
+            try { document.body.classList.remove('tv-modal-open'); } catch (e) {}
+            try { ov.parentNode.removeChild(ov); } catch (e) {}
+            if (document.querySelector('.zx-home2') || document.querySelector('.home-screen')) renderHome();   // re-renderiza no idioma escolhido
+            firstRunFlow();                 // segue o fluxo (pirataria → Celular/TV)
+        });
+    })(btns[i]);
+    // Foco inicial SEMPRE no Português (pedido do Leonardo) — público principal é BR.
+    // Re-afirma em 60/300/700ms: na ABERTURA o navegador processa autofocus e
+    // afins DEPOIS do modal focar, e roubava a marcação (abria sem nada focado).
+    (function (b) {
+        if (!b) return;
+        function f() { try { if (!ov.parentNode) return; if (ov.contains(document.activeElement)) return; b.focus(); } catch (e) {} }
+        try { b.focus(); } catch (e) {}
+        setTimeout(f, 60); setTimeout(f, 300); setTimeout(f, 700);
+    })(btns[0]);
+    return true;
+}
+/* Mostra o seletor na 1ª abertura (Android, sem escolha salva). Não dispensável
+   sem escolher (precisa de uma das opções). Pré-foca pela detecção TV do nativo. */
+function maybeAskFormFactor() {
+    if (!nativeAvail()) return;            // SÓ Android
+    if (getFormFactor()) return;           // já escolheu
+    if ($('zx-ff-ask')) return;            // já está na tela
+    injectFfAskCss();
+    var ov = document.createElement('div'); ov.id = 'zx-ff-ask'; ov.className = 'zx-ff-ask tv-modal';
+    try { document.body.classList.add('tv-modal-open'); } catch (e) {}   // PRENDE o foco no modal
+    ov.innerHTML = '<div class="zx-ffa-card"><div class="zx-ffa-logo">' + brandLogoHtml() + '</div>'
+        + '<div class="zx-ffa-title">' + te('Como você vai usar o UltraPlayer?') + '</div>'
+        + '<div class="zx-ffa-sub">' + te('Ajusta o tamanho dos posters e ícones pra sua tela.') + '</div>'
+        + '<div class="zx-ffa-opts">'
+        + '<button type="button" class="zx-ffa-opt" data-ff="mobile"><div class="zx-ffa-emoji">📱</div><div class="zx-ffa-opt-t">' + te('Celular') + '</div><div class="zx-ffa-opt-d">' + te('Posters menores, mais por linha') + '</div></button>'
+        + '<button type="button" class="zx-ffa-opt" data-ff="tv"><div class="zx-ffa-emoji">📺</div><div class="zx-ffa-opt-t">' + te('TV / Caixa') + '</div><div class="zx-ffa-opt-d">' + te('Posters maiores (tela grande)') + '</div></button>'
+        + '</div><div class="zx-ffa-note">' + te('Dá pra trocar depois em Configurações.') + '</div></div>';
+    document.body.appendChild(ov);
+    var btns = ov.querySelectorAll('.zx-ffa-opt');
+    for (var i = 0; i < btns.length; i++) (function (b) {
+        b.addEventListener('click', function () {
+            try { localStorage.setItem('zx:ff', b.getAttribute('data-ff')); } catch (e) {}
+            try { document.body.classList.remove('tv-modal-open'); } catch (e) {}
+            try { ov.parentNode.removeChild(ov); } catch (e) {}
+            applyFormFactor();
+            // Re-renderiza a home (nova .zx-home2 OU antiga .home-screen): reflete o
+            // encolhimento E devolve o foco pro "TV ao Vivo" (focusHomeStart).
+            if (document.querySelector('.zx-home2') || document.querySelector('.home-screen')) renderHome();
+        });
+    })(btns[i]);
+    var prefTv = false; try { prefTv = !!(global.HdxNative && global.HdxNative.isTv && global.HdxNative.isTv()); } catch (e) {}
+    (function (b) { if (!b) return; try { b.focus(); } catch (e) {} setTimeout(function () { try { b.focus(); } catch (e) {} }, 40); })(prefTv ? btns[1] : btns[0]);
+}
+
+/* ============================================================
+   PERFIS LOCAIS (máx 4) — mesmo desenho do iOS/Roku.
+   Dados por PESSOA (favoritos/continuar/progresso/recentes) ganham um
+   prefixo por perfil dentro do lsGet/lsSet (profKey). O perfil 1 usa
+   prefixo "" de propósito: herda o que o aparelho JÁ tinha (migração
+   invisível). Lista/idioma/licença continuam globais.
+   ============================================================ */
+function profAll() {
+    var a = null;
+    try { a = JSON.parse(localStorage.getItem('zx_profiles') || 'null'); } catch (e) {}
+    if (!a || !a.length) {
+        a = [{ n: '', a: 0, ns: '' }];   // sem nome: profName() resolve no idioma ATUAL
+        profSave(a);
+    }
+    return a;
+}
+function profSave(a) { try { localStorage.setItem('zx_profiles', JSON.stringify(a)); } catch (e) {} }
+function profActiveIdx() {
+    var i = 0;
+    try { i = parseInt(localStorage.getItem('zx_prof_active') || '0', 10) || 0; } catch (e) {}
+    var n = profAll().length;
+    if (i < 0 || i >= n) i = 0;
+    return i;
+}
+function profActive() { return profAll()[profActiveIdx()]; }
+function profName(p) { return (p && p.n) ? p.n : (currentLang() === 'en' ? 'Profile 1' : 'Perfil 1'); }
+function profSetActive(i) {
+    try { localStorage.setItem('zx_prof_active', String(i)); } catch (e) {}
+    S.profNs = profActive().ns;
+}
+function profCreate(name, av) {
+    var a = profAll();
+    if (a.length >= 4) return false;
+    var seq = 2;
+    try { seq = parseInt(localStorage.getItem('zx_prof_seq') || '2', 10) || 2; localStorage.setItem('zx_prof_seq', String(seq + 1)); } catch (e) {}
+    a.push({ n: name, a: av, ns: 'p' + seq + '_' });
+    profSave(a);
+    return true;
+}
+function profUpdate(i, name, av) { var a = profAll(); if (i < 0 || i >= a.length) return; a[i].n = name; a[i].a = av; profSave(a); }
+function profDelete(i) {
+    var a = profAll();
+    if (a.length <= 1 || i < 0 || i >= a.length) return;
+    var actNs = profActive().ns;
+    profWipeNs(a[i].ns);
+    a.splice(i, 1);
+    profSave(a);
+    var ni = 0;
+    for (var j = 0; j < a.length; j++) if (a[j].ns === actNs) ni = j;
+    profSetActive(ni);
+}
+// nome-BASE (sem prefixo) é dado por pessoa?
+function profIsPersonalKey(k) {
+    return k === 'zx_fav' || k === 'zx_favdirty' || k === 'zx_favmeta' || k === 'zx_pending'
+        || k === 'zx_recent_live' || k.indexOf('zx_cont_') === 0 || k.indexOf('zx_prog:') === 0
+        || k.indexOf('zx_slast_') === 0 || k.indexOf('zx_favlist_') === 0;
+}
+function profKey(k) {
+    if (!S.profNs) return k;
+    if (profIsPersonalKey(k)) return S.profNs + k;
+    return k;
+}
+function profWipeNs(ns) {
+    try {
+        var kill = [], i, k;
+        for (i = 0; i < localStorage.length; i++) {
+            k = localStorage.key(i);
+            if (!k) continue;
+            if (ns === '') { if (profIsPersonalKey(k)) kill.push(k); }
+            else if (k.indexOf(ns) === 0 && profIsPersonalKey(k.slice(ns.length))) kill.push(k);
+        }
+        for (i = 0; i < kill.length; i++) localStorage.removeItem(kill[i]);
+    } catch (e) {}
+}
+// troca de perfil EM USO: re-aponta o storage e recarrega os espelhos
+function profApplyData() {
+    S.profNs = profActive().ns;
+    S.fav = { live: [], movie: [], series: [] };
+    S.favDirty = { live: [], movie: [], series: [] };
+    S.favMeta = {};
+    loadFav();
+    try { if (typeof updateFavCounts === 'function') updateFavCounts(); } catch (e) {}
+}
+/* Encaixa o card do modal NA TELA: mede e aplica scale() — todo o conteúdo
+   visível em QUALQUER tamanho de tela, sem rolagem (pedido do Leonardo). */
+function profFitCard(ov) {
+    try {
+        var card = ov.querySelector('.zx-ffa-card');
+        if (!card) return;
+        card.style.webkitTransform = '';
+        card.style.transform = '';
+        var r = card.getBoundingClientRect();
+        if (!r.height) return;
+        var f = Math.min(1, (window.innerHeight - 20) / r.height, (window.innerWidth - 20) / r.width);
+        if (f < 1) {
+            card.style.webkitTransformOrigin = '50% 50%';
+            card.style.transformOrigin = '50% 50%';
+            card.style.webkitTransform = 'scale(' + f + ')';
+            card.style.transform = 'scale(' + f + ')';
+        }
+    } catch (e) {}
+}
+function profBindFit(ov) {
+    profFitCard(ov);
+    try {
+        var h = function () { if (ov.parentNode) profFitCard(ov); else window.removeEventListener('resize', h); };
+        window.addEventListener('resize', h);
+    } catch (e) {}
+}
+function profIntroSeen() { try { return localStorage.getItem('zx_prof_intro') === '1'; } catch (e) { return false; } }
+function profIntroMark() { try { localStorage.setItem('zx_prof_intro', '1'); } catch (e) {} }
+
+/* ---- 12 avatares: círculo degradê + glifo SVG branco (zero assets) ---- */
+var PROF_AVS = [
+    ['#10b981', '#056b4f', '<circle cx="12" cy="7.6" r="3.8" fill="#fff"></circle><path d="M4.5 20.5c0-4.1 3.4-7.4 7.5-7.4s7.5 3.3 7.5 7.4z" fill="#fff"></path>'],
+    ['#fabf24', '#e6730d', '<path d="M12 2.6l2.8 5.8 6.4.9-4.6 4.4 1.1 6.3-5.7-3-5.7 3 1.1-6.3L2.8 9.3l6.4-.9z" fill="#fff"></path>'],
+    ['#f5596b', '#b81c47', '<path d="M12 21L4 13.4a4.8 4.8 0 0 1 0-6.9 4.9 4.9 0 0 1 7 0l1 1 1-1a4.9 4.9 0 0 1 7 0 4.8 4.8 0 0 1 0 6.9z" fill="#fff"></path>'],
+    ['#59a6fa', '#1f52cc', '<path d="M13.5 2L6 13.5h4.5L9.5 22 17 10.5h-4.5z" fill="#fff"></path>'],
+    ['#a870fa', '#6129bf', '<path d="M8 5v14l11-7z" fill="#fff"></path>'],
+    ['#fc9e38', '#d94d17', '<path d="M3.5 17L2.5 7l4.6 3.4L12 4.5l4.9 5.9L21.5 7l-1 10z" fill="#fff"></path><rect x="3.5" y="18.2" width="17" height="2.4" rx="1.1" fill="#fff"></rect>'],
+    ['#40ccd9', '#0d738c', '<path d="M12 2.8L21 12l-9 9.2L3 12z" fill="#fff"></path>'],
+    ['#f066cc', '#9e1f8c', '<path d="M9 16V4l10-2v11.5" fill="none" stroke="#fff" stroke-width="2.2"></path><circle cx="6.4" cy="16.6" r="2.9" fill="#fff"></circle><circle cx="16.4" cy="14.1" r="2.9" fill="#fff"></circle>'],
+    ['#b88c61', '#734d2e', '<circle cx="7" cy="9" r="2.1" fill="#fff"></circle><circle cx="12" cy="7.3" r="2.1" fill="#fff"></circle><circle cx="17" cy="9" r="2.1" fill="#fff"></circle><ellipse cx="12" cy="15.8" rx="4.7" ry="3.9" fill="#fff"></ellipse>'],
+    ['#6bd45c', '#1a8040', '<circle cx="12" cy="6.4" r="3" fill="#fff"></circle><circle cx="6.6" cy="10.4" r="3" fill="#fff"></circle><circle cx="8.7" cy="16.8" r="3" fill="#fff"></circle><circle cx="15.3" cy="16.8" r="3" fill="#fff"></circle><circle cx="17.4" cy="10.4" r="3" fill="#fff"></circle><circle cx="12" cy="11.8" r="2.6" fill="#fff"></circle>'],
+    ['#facc59', '#cc801a', '<circle cx="12" cy="12" r="8.6" fill="none" stroke="#fff" stroke-width="2.2"></circle><circle cx="9" cy="10" r="1.35" fill="#fff"></circle><circle cx="15" cy="10" r="1.35" fill="#fff"></circle><path d="M8.2 14.2a4.8 4.8 0 0 0 7.6 0" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"></path>'],
+    ['#6b7280', '#2c3440', '<text x="12" y="17.2" text-anchor="middle" font-size="15" font-weight="900" font-family="Arial Black,Arial,sans-serif" fill="#fff">Z</text>']
+];
+function profAvatarHtml(i, size) {
+    var d = PROF_AVS[(i >= 0 && i < PROF_AVS.length) ? i : 0];
+    var s = Math.round(size * 0.54);
+    return '<span class="zx-pf-av" style="width:' + size + 'px;height:' + size + 'px;'
+        + 'background:-webkit-linear-gradient(top,' + d[0] + ',' + d[1] + ');'
+        + 'background:linear-gradient(180deg,' + d[0] + ',' + d[1] + ')">'
+        + '<svg viewBox="0 0 24 24" style="width:' + s + 'px;height:' + s + 'px" aria-hidden="true">' + d[2] + '</svg></span>';
+}
+/* CSS das telas de perfil — TV-SAFE de propósito: sem gap/inset/clamp/aspect-ratio
+   (WebView antigo, caso TV HQ). inline-block + margens no lugar de gap. */
+function injectProfCss() {
+    if ($('zx-prof-css')) return;
+    var st = document.createElement('style'); st.id = 'zx-prof-css';
+    st.textContent =
+        '.zx-pf-av{display:-webkit-inline-box;display:inline-flex;-webkit-box-align:center;align-items:center;-webkit-box-pack:center;justify-content:center;border-radius:50%;vertical-align:middle}'
+        + '.zx-pf-av svg{display:block}'
+        + '.zx-pf-cards{text-align:center;margin:6px 0 2px}'
+        + '.zx-pf-card{display:inline-block;vertical-align:top;background:none;border:0;outline:none;cursor:pointer;margin:6px 12px;padding:6px;color:#fff;-webkit-tap-highlight-color:transparent}'
+        + '.zx-pf-card .zx-pf-av{border:4px solid transparent;box-sizing:content-box}'
+        + '.zx-pf-card:focus .zx-pf-av,.zx-pf-card:hover .zx-pf-av{border-color:#10b981;box-shadow:0 0 0 3px rgba(16,185,129,.45)}'
+        + '.zx-pf-avwrap{position:relative;display:inline-block}'
+        + '.zx-pf-badge{position:absolute;right:0;bottom:2px;width:26px;height:26px;border-radius:50%;background:#10b981;border:3px solid #0a0f0d;display:-webkit-box;display:flex;-webkit-box-align:center;align-items:center;-webkit-box-pack:center;justify-content:center;box-sizing:content-box}'
+        + '.zx-pf-badge svg{width:15px;height:15px;display:block}'
+        + '.zx-pf-name{display:block;margin-top:8px;font-size:15px;font-weight:700;color:#e7efe9;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'
+        + '.zx-pf-name.zx-pf-act{color:#10b981}'
+        + '.zx-pf-plus{width:76px;height:76px;border-radius:50%;background:#11201b;border:2px solid #2a4438;display:-webkit-inline-box;display:inline-flex;-webkit-box-align:center;align-items:center;-webkit-box-pack:center;justify-content:center;color:#9fb3ab;font-size:34px;font-weight:300;box-sizing:border-box}'
+        + '.zx-pf-card:focus .zx-pf-plus,.zx-pf-card:hover .zx-pf-plus{border-color:#10b981;box-shadow:0 0 0 3px rgba(16,185,129,.45)}'
+        + '.zx-pf-pill{display:inline-block;background:#11201b;border:2px solid #1f3a30;border-radius:999px;color:#cfe0d8;padding:10px 26px;margin-top:16px;cursor:pointer;outline:none;font-size:14px;font-weight:700;-webkit-tap-highlight-color:transparent}'
+        + '.zx-pf-pill:focus,.zx-pf-pill:hover{border-color:#10b981;color:#fff;box-shadow:0 0 0 3px rgba(16,185,129,.45)}'
+        + '.zx-pf-input{display:block;width:86%;margin:0 auto 6px;box-sizing:border-box;padding:13px 16px;background:rgba(20,20,20,.85);border:2px solid #1f3a30;border-radius:12px;color:#f5f5f1;font-size:17px;text-align:center;outline:none}'
+        + '.zx-pf-input:focus{border-color:#10b981}'
+        + '.zx-pf-grid{text-align:center;margin:8px 0 2px}'
+        + '.zx-pf-gbtn{display:inline-block;background:none;border:0;outline:none;cursor:pointer;margin:5px;padding:3px;-webkit-tap-highlight-color:transparent}'
+        + '.zx-pf-gbtn .zx-pf-av{border:3px solid transparent;box-sizing:content-box}'
+        + '.zx-pf-gbtn:focus .zx-pf-av,.zx-pf-gbtn:hover .zx-pf-av{border-color:#10b981}'
+        + '.zx-pf-gbtn.zx-pf-sel .zx-pf-av{border-color:#fff}'
+        + '.zx-pf-actions{text-align:center;margin-top:14px}'
+        + '.zx-pf-save{display:inline-block;background:#10b981;color:#04231a;border:0;border-radius:12px;padding:13px 40px;font-size:16px;font-weight:800;cursor:pointer;outline:none;margin:0 8px;-webkit-tap-highlight-color:transparent}'
+        + '.zx-pf-save:focus,.zx-pf-save:hover{box-shadow:0 0 0 3px #fff}'
+        + '.zx-pf-del{display:inline-block;background:none;border:2px solid #3a2026;color:#ff8c95;border-radius:12px;padding:11px 22px;font-size:14px;font-weight:700;cursor:pointer;outline:none;margin:0 8px;-webkit-tap-highlight-color:transparent}'
+        + '.zx-pf-del:focus,.zx-pf-del:hover{border-color:#ff8c95;box-shadow:0 0 0 3px rgba(255,140,149,.35)}'
+        + '.zx-pf-fan{text-align:center;margin-bottom:10px}'
+        + '.zx-pf-fan .zx-pf-av{margin:0 -7px;border:3px solid #060a09}'
+        + '.zx-pf-blt{display:block;text-align:left;color:#e7efe9;font-size:14px;margin:7px auto;max-width:420px}'
+        + '.zx-pf-blt b{color:#10b981;margin-right:8px}'
+        + '#zx-prof-gate,#zx-prof-ed,#zx-prof-intro{overflow:hidden}';
+    document.head.appendChild(st);
+}
+/* ---- "Quem está assistindo?" (boot com 2+ perfis / botão do avatar) ---- */
+function showProfGate(reason) {
+    if ($('zx-prof-gate')) return;
+    injectFfAskCss(); injectProfCss();
+    var edit = false;
+    var ov = document.createElement('div'); ov.id = 'zx-prof-gate'; ov.className = 'zx-ff-ask tv-modal';
+    try { document.body.classList.add('tv-modal-open'); } catch (e) {}
+    document.body.appendChild(ov);
+    function close(refresh) {
+        try { document.body.classList.remove('tv-modal-open'); } catch (e) {}
+        try { ov.parentNode.removeChild(ov); } catch (e) {}
+        if (refresh) go('/home', true);
+        else if (document.querySelector('.zx-home2')) focusHomeStart();
+    }
+    function paint() {
+        var a = profAll(), act = profActiveIdx(), h, i;
+        h = '<div class="zx-ffa-card"><div class="zx-ffa-logo">' + brandLogoHtml() + '</div>'
+            + '<div class="zx-ffa-title">' + te(edit ? 'Escolha um perfil para editar' : 'Quem está assistindo?') + '</div>'
+            + '<div class="zx-pf-cards">';
+        for (i = 0; i < a.length; i++) {
+            h += '<button type="button" class="zx-pf-card" data-i="' + i + '">'
+                + '<span class="zx-pf-avwrap">' + profAvatarHtml(a[i].a, 84)
+                + (i === act ? '<span class="zx-pf-badge"><svg viewBox="0 0 24 24"><path d="M4.5 12.5l5 5L19.5 7.5" fill="none" stroke="#04231a" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>' : '')
+                + '</span>'
+                + '<span class="zx-pf-name' + (i === act ? ' zx-pf-act' : '') + '">' + esc(profName(a[i])) + '</span></button>';
+        }
+        if (a.length < 4) {
+            h += '<button type="button" class="zx-pf-card" data-i="novo"><span class="zx-pf-plus">+</span>'
+                + '<span class="zx-pf-name" style="color:#9fb3ab">' + te('Novo perfil') + '</span></button>';
+        }
+        h += '</div><div><button type="button" class="zx-pf-pill" id="zxPfEdit">' + te(edit ? 'Concluído' : 'Editar perfis') + '</button></div></div>';
+        ov.innerHTML = h;
+        var cards = ov.querySelectorAll('.zx-pf-card');
+        for (i = 0; i < cards.length; i++) (function (b) {
+            b.addEventListener('click', function () {
+                var di = b.getAttribute('data-i');
+                if (di === 'novo') { showProfEditor(-1, function () { paint(); }); return; }
+                var idx = parseInt(di, 10);
+                if (edit) { showProfEditor(idx, function () { paint(); }); return; }
+                profSetActive(idx);
+                profApplyData();
+                close(true);
+            });
+        })(cards[i]);
+        var ed = $('zxPfEdit');
+        if (ed) ed.addEventListener('click', function () { edit = !edit; paint(); try { ov.querySelector('.zx-pf-card').focus(); } catch (e) {} });
+        (function (b) {
+            if (!b) return;
+            function f() { try { if (!ov.parentNode) return; if (ov.contains(document.activeElement)) return; b.focus(); } catch (e) {} }
+            try { b.focus(); } catch (e) {}
+            setTimeout(f, 60); setTimeout(f, 300);
+        })(cards[0]);
+        profBindFit(ov);
+    }
+    // Voltar fecha o gate quando aberto pelo avatar (no boot fica — igual iOS o X)
+    ov.addEventListener('keydown', function (e) {
+        var k = e.key || '';
+        if (k === 'Escape' || k === 'GoBack' || e.keyCode === 27 || e.keyCode === 10009 || e.keyCode === 461) {
+            e.preventDefault(); e.stopPropagation(); close(false);
+        }
+    }, true);
+    paint();
+}
+/* ---- Editor: nome + grade de avatares + apagar (nunca o último) ---- */
+function showProfEditor(idx, onDone) {
+    if ($('zx-prof-ed')) return;
+    injectFfAskCss(); injectProfCss();
+    var a = profAll();
+    var nome = (idx >= 0) ? a[idx].n : '';
+    var av = (idx >= 0) ? a[idx].a : (a.length % PROF_AVS.length);
+    var armDel = false;
+    var ov = document.createElement('div'); ov.id = 'zx-prof-ed'; ov.className = 'zx-ff-ask tv-modal';
+    document.body.appendChild(ov);
+    function close() {
+        try { ov.parentNode.removeChild(ov); } catch (e) {}
+        if (onDone) onDone();
+    }
+    function paint() {
+        var canDel = (idx >= 0 && profAll().length > 1);
+        var h = '<div class="zx-ffa-card"><div class="zx-ffa-title">' + te(idx < 0 ? 'Novo perfil' : 'Editar perfil') + '</div>'
+            + '<div class="zx-pf-prev" id="zxPfPrev" style="text-align:center;margin:4px 0 10px">' + profAvatarHtml(av, 74) + '</div>'
+            + '<input type="text" class="zx-pf-input" id="zxPfName" maxlength="16" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="' + te('Nome do perfil') + '">'
+            + '<div class="zx-ffa-sub" style="margin:8px 0 0">' + te('Escolha um avatar') + '</div>'
+            + '<div class="zx-pf-grid">';
+        for (var i = 0; i < PROF_AVS.length; i++) {
+            h += '<button type="button" class="zx-pf-gbtn' + (i === av ? ' zx-pf-sel' : '') + '" data-av="' + i + '">' + profAvatarHtml(i, 52) + '</button>';
+        }
+        h += '</div><div class="zx-pf-actions">'
+            + '<button type="button" class="zx-pf-save" id="zxPfSave">' + te('Salvar') + '</button>'
+            + (canDel ? '<button type="button" class="zx-pf-del" id="zxPfDel">' + te('Apagar perfil') + '</button>' : '')
+            + '</div></div>';
+        ov.innerHTML = h;
+        var inp = $('zxPfName');
+        if (inp) inp.value = nome;
+        // escolher avatar: troca classes + preview EM-PLACE (o rebuild matava o
+        // <input> — perdia o foco e "não dava mais pra digitar")
+        var gb = ov.querySelectorAll('.zx-pf-gbtn');
+        for (var g = 0; g < gb.length; g++) (function (b) {
+            b.addEventListener('click', function () {
+                av = parseInt(b.getAttribute('data-av'), 10) || 0;
+                for (var j = 0; j < gb.length; j++) gb[j].className = 'zx-pf-gbtn' + (gb[j] === b ? ' zx-pf-sel' : '');
+                var pv = $('zxPfPrev');
+                if (pv) pv.innerHTML = profAvatarHtml(av, 74);
+                if (armDel) { armDel = false; var d0 = $('zxPfDel'); if (d0) d0.innerHTML = te('Apagar perfil'); }
+            });
+        })(gb[g]);
+        var sv = $('zxPfSave');
+        if (sv) sv.addEventListener('click', function () {
+            var n = (inp ? inp.value : nome).replace(/^\s+|\s+$/g, '');
+            if (!n) { try { inp.focus(); } catch (e) {} return; }
+            if (n.length > 16) n = n.slice(0, 16);
+            if (idx >= 0) {
+                profUpdate(idx, n, av);
+                profApplyData();                       // pode ter editado o ativo
+            } else {
+                profCreate(n, av);
+                profSetActive(profAll().length - 1);   // criar já entra no novo
+                profApplyData();
+            }
+            close();
+        });
+        var dl = $('zxPfDel');
+        if (dl) dl.addEventListener('click', function () {
+            if (!armDel) { armDel = true; dl.innerHTML = te('Aperte de novo para apagar'); return; }
+            profDelete(idx);
+            profApplyData();
+            close();
+        });
+        (function (b) { if (!b) return; try { b.focus(); } catch (e) {} setTimeout(function () { try { if (ov.parentNode && !ov.contains(document.activeElement)) b.focus(); } catch (e) {} }, 60); })(inp);
+        profBindFit(ov);
+    }
+    ov.addEventListener('keydown', function (e) {
+        var k = e.key || '';
+        if (k === 'Escape' || k === 'GoBack' || e.keyCode === 27 || e.keyCode === 10009 || e.keyCode === 461) {
+            e.preventDefault(); e.stopPropagation(); close();
+        }
+    }, true);
+    paint();
+}
+/* ---- Apresentação (1x): "Conheça os Perfis" ---- */
+function maybeProfIntro() {
+    if (profIntroSeen()) return;
+    if (profAll().length >= 2) { profIntroMark(); return; }   // já conhece
+    if ($('zx-prof-intro')) return;
+    injectFfAskCss(); injectProfCss();
+    var ov = document.createElement('div'); ov.id = 'zx-prof-intro'; ov.className = 'zx-ff-ask tv-modal';
+    try { document.body.classList.add('tv-modal-open'); } catch (e) {}
+    ov.innerHTML = '<div class="zx-ffa-card">'
+        + '<div class="zx-pf-fan">' + profAvatarHtml(1, 44) + profAvatarHtml(4, 54) + profAvatarHtml(0, 68) + profAvatarHtml(5, 54) + profAvatarHtml(3, 44) + '</div>'
+        + '<div class="zx-ffa-title">' + te('Conheça os Perfis') + '</div>'
+        + '<div class="zx-ffa-sub">' + te('Agora cada pessoa da casa pode ter seu próprio espaço no app.') + '</div>'
+        + '<div style="margin:10px 0 4px">'
+        + '<span class="zx-pf-blt"><b>•</b>' + te('Até 4 perfis neste aparelho') + '</span>'
+        + '<span class="zx-pf-blt"><b>•</b>' + te('Cada um com seus favoritos e seu Continuar Assistindo') + '</span>'
+        + '<span class="zx-pf-blt"><b>•</b>' + te('Troque quando quiser no seu avatar, no alto da tela inicial') + '</span>'
+        + '</div><div class="zx-pf-actions">'
+        + '<button type="button" class="zx-pf-save" id="zxPfGo">' + te('Personalizar meu perfil') + '</button></div>'
+        + '<div style="text-align:center"><button type="button" class="zx-pf-pill" id="zxPfSkip">' + te('Agora não') + '</button></div></div>';
+    document.body.appendChild(ov);
+    function done() {
+        profIntroMark();
+        try { document.body.classList.remove('tv-modal-open'); } catch (e) {}
+        try { ov.parentNode.removeChild(ov); } catch (e) {}
+        if (document.querySelector('.zx-home2')) go('/home', true);   // rodapé/avatar com o nome novo
+    }
+    var g = $('zxPfGo');
+    if (g) g.addEventListener('click', function () {
+        showProfEditor(0, function () { done(); });
+    });
+    var sk = $('zxPfSkip');
+    if (sk) sk.addEventListener('click', done);
+    profBindFit(ov);
+    (function (b) { if (!b) return; try { b.focus(); } catch (e) {} setTimeout(function () { try { if (ov.parentNode && !ov.contains(document.activeElement)) b.focus(); } catch (e) {} }, 60); })(g);
+}
+/* Gate na ABERTURA (1x por sessão) quando há 2+ perfis — depois da 1ª
+   configuração (idioma/pirataria/tela) estar completa. */
+function maybeProfBootGate() {
+    if (S._profGateShown) return;
+    if (profAll().length < 2) return;
+    S._profGateShown = true;
+    showProfGate('boot');
+}
+
+/* CSS exclusivo do app ANDROID (nativeAvail) — NÃO toca web/Samsung/LG/PC.
+   (1) não selecionar texto ao pressionar/segurar (o "marcar texto" que aparecia
+   no touch/D-pad) — exceto nos campos de digitar. (2) a busca de canais virou
+   <input> nativo (teclado do sistema) → estiliza como pílula (era branco sem estilo). */
+function injectAndroidCss() {
+    // ESTILO DA BUSCA — PC + Android (não Samsung): a busca de canais vira <input>
+    // nativo nesses (teclado físico/IME) → estiliza como pílula, senão fica uma
+    // CAIXA BRANCA sem estilo. (No Samsung/LG é vkb, não tem esse <input>.)
+    if (!tizenAvail() && !$('zx-srch-css')) {
+        var ss = document.createElement('style'); ss.id = 'zx-srch-css';
+        ss.textContent =
+            '.cat-sidebar input.vkb-native{display:block;width:100%;box-sizing:border-box;margin-bottom:10px;'
+            + 'padding:18px 18px;background:rgba(20,20,20,0.85);border:2px solid transparent;border-radius:12px;'
+            + 'color:#f5f5f1;font-size:18px;outline:none}'
+            + '.cat-sidebar input.vkb-native:focus{border-color:#10b981;background:rgba(20,20,20,0.95)}'
+            + 'body.zx-ff-mobile .cat-sidebar input.vkb-native{font-size:13px;padding:10px 12px}';
+        (document.head || document.documentElement).appendChild(ss);
+    }
+    // SÓ Android (touch): não selecionar texto ao pressionar/segurar (exceto campos).
+    if (nativeAvail() && !$('zx-android-css')) {
+        var st = document.createElement('style'); st.id = 'zx-android-css';
+        st.textContent =
+            'body{-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;user-select:none;-webkit-touch-callout:none}'
+            + 'input,textarea,[contenteditable]{-webkit-user-select:text;user-select:text}';
+        (document.head || document.documentElement).appendChild(st);
+    }
+}
+
+function boot() {
+    S.directAuth = !!directModeStored();
+    S.did = getDid();
+    try { S.profNs = profActive().ns; } catch (e) { S.profNs = ''; }   // PERFIS: antes de qualquer leitura
+    patchHistory();
+    installShim();
+    installRouter();
+    loadCss();
+    applyFormFactor();   // aplica a escolha salva (alvo de poster + classe) ANTES de renderizar
+    injectAndroidCss();  // CSS só-Android (não-seleção de texto + estilo da busca)
+    loadFav();   // favoritos persistidos → UI correta na hora, mesmo offline
+    startBackgroundSync();   // cedo e SEMPRE: o timer/foco só agem depois de logado
+                             // (bgRefresh checa S.code/S.server). Se ficasse no fim
+                             // do boot, um login novo (sem creds salvas → renderLogin
+                             // + return) nunca ligava o sync.
+    var c = loadCreds();
+    if (!(c && c.code && c.user && c.pass)) { renderMacActivation(); return; }
+    S.code = c.code; S.user = c.user; S.pass = c.pass;
+
+    var snap = loadSnap();
+    if (snap && snapAgeDays(snap) <= snapMaxDays(snap)) {
+        // ABRE NA HORA com o snapshot — funciona mesmo com a VPS fora.
+        applyResolve(snap.d, true);
+        go('/home', true);
+        refresh(snap);                               // re-verifica em segundo plano
+    } else {
+        // 1º acesso (ou >30 dias sem verificar) → precisa da VPS p/ DNS+licença.
+        showLoading(true);
+        api('resolve', '', 12000).then(function (d) {
+            showLoading(false);
+            if (d && d.error === 'license') { if (applyPush(d)) return; renderPaywall(d); return; }
+            if (d && d.ok && d.dns && d.dns.base) { applyResolve(d, false); saveSnap(d); go('/home', true); }
+            else if (snap) { applyResolve(snap.d, true); go('/home', true); }   // tinha snapshot velho mas sem net: deixa usar
+            else { renderOfflineFirst(); }
+        });
+    }
+    // branding standalone (atualiza se o resolve não trouxe) — silencioso
+    api('branding').then(function (b) { if (b && b.ok) applyBranding(b); });
+}
+
+/* ============================================================
+ * SYNC EM SEGUNDO PLANO — re-verifica a VPS DE TEMPOS EM TEMPOS, não só no
+ * boot. É o que faz uma TROCA DE DNS (migração em massa de uma operadora), um
+ * VENCIMENTO de licença ou um AVISO novo chegarem mesmo com o app aberto por
+ * horas/dias. Barato no servidor (o resolve não busca catálogo: ~KB por
+ * device). Roda a cada 6h + quando a janela volta ao foco (trava de 15min pra
+ * não repetir à toa). NÃO depende da VPS estar no ar: se cair, o bgRefresh
+ * apenas não muda nada (o app segue no snapshot) e tenta de novo no próximo
+ * ciclo. ⚠️ Esta é a peça de ENTREGA da futura função "migrar DNS" do painel.
+ * ============================================================ */
+function bgRefresh() {
+    if (!S.code || !S.server) return;                 // só depois de logado
+    var now = Date.now();
+    if (now - (S._lastSync || 0) < 60000) return;     // no mínimo 1min entre execuções
+    S._lastSync = now;
+    try { refresh(loadSnap()); } catch (e) {}
+}
+function startBackgroundSync() {
+    if (S._bgSync) return; S._bgSync = true;
+    // Só o timer de 6h (+ a checagem que já roda no boot). SEM re-checar ao
+    // voltar o foco pra janela (a pedido do usuário) → trocar de janela e
+    // voltar NÃO dispara mais nada na VPS.
+    try { setInterval(bgRefresh, 6 * 60 * 60 * 1000); } catch (e) {}   // a cada 6h
+}
+if (document.readyState === 'complete' || document.readyState === 'interactive') setTimeout(boot, 0);
+else document.addEventListener('DOMContentLoaded', boot);
+
+global.ZLocal = { go: go, S: S, boot: boot, refresh: refresh, renderPaywall: renderPaywall };
+})(window);
