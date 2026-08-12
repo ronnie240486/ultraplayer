@@ -172,6 +172,49 @@ public final class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void fetchText(String url, String requestId) {
+            final String target = url == null ? "" : url;
+            final String id = requestId == null ? "" : requestId;
+            new Thread(() -> {
+                boolean ok = false;
+                String body = "";
+                java.net.HttpURLConnection connection = null;
+                try {
+                    java.net.URL parsed = new java.net.URL(target);
+                    java.net.URLConnection raw = parsed.openConnection();
+                    if (!(raw instanceof java.net.HttpURLConnection)) throw new java.io.IOException("unsupported_protocol");
+                    connection = (java.net.HttpURLConnection) raw;
+                    connection.setInstanceFollowRedirects(true);
+                    connection.setConnectTimeout(12000);
+                    connection.setReadTimeout(20000);
+                    connection.setRequestProperty("User-Agent", "UltraPlayer/1.3");
+                    connection.setRequestProperty("Accept", "application/vnd.apple.mpegurl,text/plain,*/*");
+                    int status = connection.getResponseCode();
+                    java.io.InputStream stream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
+                    if (stream == null) throw new java.io.IOException("empty_response");
+                    java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+                    byte[] buffer = new byte[8192];
+                    int read; long total = 0;
+                    while ((read = stream.read(buffer)) != -1 && total < 12L * 1024L * 1024L) { out.write(buffer, 0, read); total += read; }
+                    stream.close();
+                    body = out.toString("UTF-8");
+                    ok = status >= 200 && status < 300 && body.indexOf("#EXTINF") >= 0;
+                } catch (Throwable ignored) {
+                    ok = false;
+                } finally {
+                    if (connection != null) connection.disconnect();
+                }
+                final boolean result = ok;
+                final String resultBody = body;
+                runOnUiThread(() -> {
+                    if (webView == null) return;
+                    String script = "try{window.__zxPlaylistResult(" + JSONObject.quote(id) + "," + result + "," + JSONObject.quote(resultBody) + ")}catch(e){}";
+                    webView.evaluateJavascript(script, null);
+                });
+            }, "UltraPlayer-M3U").start();
+        }
+
+        @JavascriptInterface
         public void play(String payload) {
             runOnUiThread(() -> {
                 try {

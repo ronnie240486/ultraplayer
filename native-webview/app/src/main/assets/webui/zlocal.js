@@ -33,6 +33,7 @@
 function apiBase() { return String(global.__API_BASE || 'https://renciaapp.manus.space').replace(/\/+$/, ''); }
 var S = {
     code: '', user: '', pass: '', did: '', directAuth: false,
+    playlistUrl: '', playlistType: '',
     server: '',                 // base do IPTV (dns.base do resolve)
     info: null,                 // resposta do resolve
     fav: { live: [], movie: [], series: [] },   // DESEJADO local (verdade da UI)
@@ -265,7 +266,7 @@ function getDid() {
     try { var d = localStorage.getItem('zx_did'); if (!d) { d = 'win-' + Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem('zx_did', d); } return d; }
     catch (e) { return 'win-anon'; }
 }
-function saveCreds() { try { localStorage.setItem('zx_creds', JSON.stringify({ code: S.code, user: S.user, pass: S.pass })); } catch (e) {} }
+function saveCreds() { try { localStorage.setItem('zx_creds', JSON.stringify({ code: S.code, user: S.user, pass: S.pass, playlistUrl: S.playlistUrl || '', playlistType: S.playlistType || '' })); } catch (e) {} }
 function loadCreds() { try { return JSON.parse(localStorage.getItem('zx_creds') || 'null'); } catch (e) { return null; } }
 function clearCreds() { try { localStorage.removeItem('zx_creds'); } catch (e) {} }
 function platform() {
@@ -295,6 +296,54 @@ function fetchT(url, ms, options) {
     options.signal = ctl.signal;
     return fetch(url, options)
         .then(function (r) { clearTimeout(t); return r; }, function (e) { clearTimeout(t); throw e; });
+}
+var M3U_PENDING = {};
+global.__zxPlaylistResult = function (id, ok, text) { var p = M3U_PENDING[id]; if (!p) return; delete M3U_PENDING[id]; if (ok) p.resolve(text || ''); else p.reject(new Error('playlist_fetch_failed')); };
+function fetchPlaylistText(url) {
+    if (global.HdxNative && typeof global.HdxNative.fetchText === 'function') {
+        return new Promise(function (resolve, reject) {
+            var id = 'm3u_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
+            M3U_PENDING[id] = { resolve: resolve, reject: reject };
+            try { global.HdxNative.fetchText(String(url || ''), id); } catch (e) { delete M3U_PENDING[id]; reject(e); return; }
+            setTimeout(function () { if (M3U_PENDING[id]) { delete M3U_PENDING[id]; reject(new Error('playlist_timeout')); } }, 25000);
+        });
+    }
+    return fetchT(url, 25000, { credentials: 'omit', headers: { 'Accept': 'application/vnd.apple.mpegurl,text/plain,*/*' } }).then(function (r) { return r.text(); });
+}
+function parseM3UText(text) {
+    var lines = String(text || '').split(/\r?\n/), all = [], cur = null, nextId = 1;
+    for (var i = 0; i < lines.length; i++) {
+        var line = String(lines[i] || '').replace(/^\uFEFF/, '').trim();
+        if (!line) continue;
+        if (line.indexOf('#EXTINF:') === 0) {
+            var comma = line.indexOf(','), title = comma >= 0 ? line.slice(comma + 1).trim() : 'Canal ' + nextId;
+            var group = (line.match(/group-title=["']([^"']*)["']/i) || [,''])[1] || 'Canais';
+            var logo = (line.match(/tvg-logo=["']([^"']*)["']/i) || [,''])[1] || '';
+            var tvg = (line.match(/tvg-name=["']([^"']*)["']/i) || [,''])[1] || '';
+            cur = { name: tvg || title || ('Canal ' + nextId), group: group || 'Canais', stream_icon: logo, stream_id: nextId, num: nextId };
+            nextId++;
+        } else if (line.charAt(0) !== '#' && cur) {
+            cur.stream_url = line; all.push(cur); cur = null;
+        }
+    }
+    return all;
+}
+function catalogFromM3U() {
+    if (!S.playlistUrl) return Promise.reject(new Error('playlist_url_missing'));
+    return fetchPlaylistText(S.playlistUrl).then(function (text) {
+        var all = parseM3UText(text), byCat = {}, cats = [], catIds = {};
+        for (var i = 0; i < all.length; i++) {
+            var item = all[i], name = item.group || 'Canais';
+            if (!catIds[name]) { catIds[name] = String(Object.keys(catIds).length + 1); byCat[catIds[name]] = []; cats.push({ category_id: catIds[name], category_name: name, num: 0, adult: isAdultName(name) }); }
+            item.category_id = catIds[name]; byCat[catIds[name]].push(item);
+        }
+        for (var c = 0; c < cats.length; c++) cats[c].num = byCat[cats[c].category_id].length;
+        var out = { cats: cats, byCat: byCat, all: all };
+        S.cat.live = out;
+        S.cat.movies = { cats: [], byCat: {}, all: [] };
+        S.cat.series = { cats: [], byCat: {}, all: [] };
+        return out;
+    });
 }
 // painel /api/r/* (auth por code/user/pass/did) — com timeout + rastreio online/offline.
 // Retorna null quando a VPS está fora (o chamador usa cache/fila).
@@ -503,6 +552,10 @@ function xtSeriesInfo(id, tries) {
     });
 }
 function streamUrl(kind, id, ext) {
+    if ((S.playlistType || '').indexOf('m3u') === 0) {
+        var m3u = (S.cat.live && S.cat.live.all) || [];
+        for (var mi = 0; mi < m3u.length; mi++) if (String(m3u[mi].stream_id) === String(id)) return m3u[mi].stream_url || '';
+    }
     var u = enc(S.user), p = enc(S.pass);
     if (kind === 'live') return S.server + '/live/' + u + '/' + p + '/' + id + '.m3u8';
     if (kind === 'movie') return S.server + '/movie/' + u + '/' + p + '/' + id + '.' + (ext || 'mp4');
@@ -645,6 +698,10 @@ var PAGE = 100;
 function ensureCatalog(kind) {
     // kind: 'movies' | 'series' | 'live'. Resolve → { cats:[{category_id,category_name,num,adult}], byCat:{}, all:[] }
     if (S.cat[kind]) return Promise.resolve(S.cat[kind]);
+    if ((S.playlistType || '').indexOf('m3u') === 0) {
+        if (kind === 'live') return catalogFromM3U();
+        return Promise.resolve({ cats: [], byCat: {}, all: [] });
+    }
     var catsAction = kind === 'live' ? 'get_live_categories' : kind === 'movies' ? 'get_vod_categories' : 'get_series_categories';
     var listAction = kind === 'live' ? 'get_live_streams' : kind === 'movies' ? 'get_vod_streams' : 'get_series';
     var newKey = kind === 'series' ? 'last_modified' : 'added';
@@ -979,17 +1036,26 @@ function directResponseToState(j, mode, fallback) {
     if (!j || j.success === false || j.authorized === false) return null;
     var list = Array.isArray(j.playlists) ? j.playlists : [];
     if (!list.length && j.playlist_url) list = [{ playlist_url: j.playlist_url, playlist_name: j.playlist_name || 'Playlist' }];
-    var creds = null;
-    for (var i = 0; i < list.length && !creds; i++) creds = playlistToXtream(list[i], 'Playlist ' + (i + 1));
-    if (!creds) return null;
+    var creds = null, chosen = null;
+    for (var i = 0; i < list.length && !chosen; i++) {
+        var candidate = list[i] || {}, candidateUrl = String(candidate.playlist_url || candidate.url || '');
+        if (!candidateUrl) continue;
+        chosen = candidate; creds = playlistToXtream(candidate, 'Playlist ' + (i + 1));
+    }
+    if (!chosen) return null;
+    var chosenUrl = String(chosen.playlist_url || chosen.url || '');
+    var server = creds ? creds.server : '';
+    try { if (!server) { var pu = new URL(chosenUrl); server = pu.protocol + '//' + pu.host; } } catch (e) {}
+    if (!server) return null;
     var exp = j.expire_date || j.dataExpiracao || null, expTs = 0;
     if (exp) { var dt = new Date(exp); if (!isNaN(dt.getTime())) expTs = Math.floor(dt.getTime() / 1000); }
     S.directAuth = true;
     S.code = mode === 'mac' ? '__mac__' : '__credentials__';
     S.user = mode === 'mac' ? String(j.mac || fallback || '') : String(fallback || j.username || '');
-    S.pass = '__direct__'; S.did = getDid(); S.server = creds.server;
+    S.pass = '__direct__'; S.did = getDid(); S.server = server;
+    S.playlistUrl = chosenUrl; S.playlistType = String(chosen.type || (chosenUrl.indexOf('get.php') >= 0 ? 'm3u_plus' : 'xtream')).toLowerCase();
     try { localStorage.setItem('zx_direct_mode', mode); if (mode === 'mac') localStorage.setItem('zx_mac', S.user); } catch (e) {}
-    var d = { ok: true, dns: { base: creds.server, name: j.dns_titulo || '' }, license: { mac: j.mac || fallback || '', exp_date: expTs }, branding: { app_name: j.app_name || 'UltraPlayer', logo: j.logo_url || '', background: j.bg_url || '', banner: j.banner_url || '' } };
+    var d = { ok: true, dns: { base: server, name: j.dns_titulo || '' }, license: { mac: j.mac || fallback || '', exp_date: expTs }, branding: { app_name: j.app_name || 'UltraPlayer', logo: j.logo_url || '', background: j.bg_url || '', banner: j.banner_url || '' } };
     S.cat = { movies: null, series: null, live: null }; S.favDirty = { live: [], movie: [], series: [] };
     applyResolve(d, false); saveSnap(d); saveCreds(); go('/home', true); return true;
 }
@@ -3815,7 +3881,7 @@ function boot() {
                              // + return) nunca ligava o sync.
     var c = loadCreds();
     if (!(c && c.code && c.user && c.pass)) { renderMacActivation(); return; }
-    S.code = c.code; S.user = c.user; S.pass = c.pass;
+    S.code = c.code; S.user = c.user; S.pass = c.pass; S.playlistUrl = c.playlistUrl || ''; S.playlistType = c.playlistType || '';
 
     var snap = loadSnap();
     if (snap && snapAgeDays(snap) <= snapMaxDays(snap)) {

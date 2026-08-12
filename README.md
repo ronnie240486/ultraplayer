@@ -25,13 +25,11 @@ A interface recuperada está em `recovered/webui`. O arquivo `zlocal.js` concent
 | `backend-reference/` | Código de referência das rotas do painel, incluindo o novo contrato de login por credenciais. |
 | `releases/` | APK de debug gerado localmente e seu hash SHA-256. |
 
-## Versão UltraPlayer 1.3.0 — ativação por MAC
+## Versão UltraPlayer 1.4.0 — correção M3U
 
-A versão 1.3.0 usa a base Android nativa `native-webview/`, com interface local, ponte `HdxNative` e `PlayerActivity` separada. Todas as referências visíveis de marca foram substituídas por **UltraPlayer**, incluindo título, splash, user-agent, marca d’água, avisos e telas de configuração.
+A versão 1.4.0 mantém a ativação inicial por MAC exibido e corrige o caso em que o painel retorna uma playlist `m3u_plus`. O app agora persiste `playlist_url`, baixa a M3U pela ponte nativa Android, interpreta `#EXTINF` e `group-title`, monta a seção de TV ao vivo e reproduz cada canal usando o `stream_url` direto.
 
-Na primeira abertura, o aplicativo gera um identificador estável em formato MAC virtual de 12 dígitos, exibe esse código na tela e oferece o botão **Copiar MAC**. Você cadastra esse código no painel; o aplicativo consulta automaticamente `GET /api/v5/check_mac.php` a cada sete segundos até a lista ser liberada. O login com usuário e senha continua disponível como alternativa separada.
-
-O APK está em [`releases/UltraPlayer-1.3.0-mac-activation-debug.apk`](releases/UltraPlayer-1.3.0-mac-activation-debug.apk). Ele usa package `com.ultraplayer.app`, `minSdk 21`, versionName `1.3.0` e versionCode `4`.
+O APK está em [`releases/UltraPlayer-1.4.0-m3u-fix-debug.apk`](releases/UltraPlayer-1.4.0-m3u-fix-debug.apk). Ele usa package `com.ultraplayer.app`, `minSdk 21`, versionName `1.4.0` e versionCode `5`. O diagnóstico detalhado está em [`docs/release-1.4.0.md`](docs/release-1.4.0.md).
 
 ## Primeiras melhorias propostas
 
