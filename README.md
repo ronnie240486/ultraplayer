@@ -20,6 +20,15 @@ A interface recuperada está em `recovered/webui`. O arquivo `zlocal.js` concent
 | `recovered/android-decompiled/` | Projeto Gradle e demais classes/recursos gerados pelo JADX; é material de recuperação, não fonte original. |
 | `analysis/` | Manifest, hashes, inventário do ZIP, log de descompilação e achados da inspeção. |
 | `docs/` | Arquitetura, inventário funcional, riscos e roadmap de melhorias. |
+| `mobile/` | Projeto Expo/React Native do UltraPlayer 1.1.0, com login por MAC ou usuário/senha. |
+| `backend-reference/` | Código de referência das rotas do painel, incluindo o novo contrato de login por credenciais. |
+| `releases/` | APK de debug gerado localmente e seu hash SHA-256. |
+
+## Versão de teste 1.1.0
+
+Foi criada uma primeira versão compilável do UltraPlayer em `mobile/`, com identidade `com.ultraplayer.app` e duas modalidades independentes de acesso. O modo **MAC** aceita doze dígitos hexadecimais e normaliza formatos com dois-pontos ou hífen. O modo **usuário e senha** chama `POST /api/v5/login.php` e não salva a senha no estado persistido do aplicativo.
+
+O APK de debug está em [`releases/UltraPlayer-1.1.0-debug.apk`](releases/UltraPlayer-1.1.0-debug.apk). O login MAC utiliza o endpoint já existente `GET /api/v5/check_mac.php`. Para o segundo modo funcionar no painel publicado, é necessário disponibilizar o endpoint novo descrito em [`docs/backend-contract.md`](docs/backend-contract.md); a cópia alterada está em `backend-reference/server/apiRoutes.ts`.
 
 ## Primeiras melhorias propostas
 

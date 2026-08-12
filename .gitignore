@@ -1,6 +1,8 @@
 # Android/Gradle
 .gradle/
 **/build/
+**/.cxx/
+node_modules/
 local.properties
 *.iml
 .idea/
@@ -24,5 +26,6 @@ jadx-cache/
 
 # Generated output
 *.apk.sha256
+*.apk
 *.aab
 outputs/

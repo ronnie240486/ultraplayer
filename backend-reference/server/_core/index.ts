@@ -1,0 +1,110 @@
+import "dotenv/config";
+import express from "express";
+import { createServer } from "http";
+import net from "net";
+import { createExpressMiddleware } from "@trpc/server/adapters/express";
+import { registerOAuthRoutes } from "./oauth";
+import { registerStorageProxy } from "./storageProxy";
+import { appRouter } from "../routers";
+import { createContext } from "./context";
+import { serveStatic, setupVite } from "./vite";
+import { registerApiRoutes } from "../apiRoutes";
+
+function isPortAvailable(port: number): Promise<boolean> {
+  return new Promise(resolve => {
+    const server = net.createServer();
+    server.listen(port, () => {
+      server.close(() => resolve(true));
+    });
+    server.on("error", () => resolve(false));
+  });
+}
+
+async function findAvailablePort(startPort: number = 3000): Promise<number> {
+  for (let port = startPort; port < startPort + 20; port++) {
+    if (await isPortAvailable(port)) {
+      return port;
+    }
+  }
+  throw new Error(`No available port found starting from ${startPort}`);
+}
+
+async function startServer() {
+  const app = express();
+  const server = createServer(app);
+  // Trust the reverse proxy so req.protocol reflects the original HTTPS scheme
+  // This is required for sameSite=none cookies to work correctly behind a proxy
+  app.set("trust proxy", 1);
+  
+  // Middleware global de CORS para permitir requisições de qualquer origem
+  app.use((req, res, next) => {
+    console.log(`[CORS] ${req.method} ${req.path}`);
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.header('Access-Control-Max-Age', '86400');
+    
+    if (req.method === 'OPTIONS') {
+      res.sendStatus(200);
+      return;
+    }
+    next();
+  });
+  
+  // Middleware de logging global para debugar requisicoes
+  app.use((req, res, next) => {
+    const method = req.method;
+    const path = req.path;
+    const query = Object.keys(req.query).length > 0 ? JSON.stringify(req.query) : "";
+    const userAgent = req.get('user-agent') || 'unknown';
+    console.log(`[REQUEST] ${method} ${path} ${query} | UA: ${userAgent}`);
+    next();
+  });
+  
+  // Middleware para capturar 404s
+  app.use((req, res, next) => {
+    const originalSend = res.send;
+    res.send = function(data: any) {
+      if (res.statusCode === 404) {
+        console.log(`[404-NOT-FOUND] ${req.method} ${req.path} - Endpoint nao encontrado`);
+      }
+      return originalSend.call(this, data);
+    };
+    next();
+  });
+  
+  // Configure body parser with larger size limit for file uploads
+  app.use(express.json({ limit: "50mb" }));
+  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  registerStorageProxy(app);
+  registerOAuthRoutes(app);
+  // Registrar rotas da API ANTES de Vite para ter prioridade
+  registerApiRoutes(app);
+  // tRPC API
+  app.use(
+    "/api/trpc",
+    createExpressMiddleware({
+      router: appRouter,
+      createContext,
+    })
+  );
+  // development mode uses Vite, production mode uses static files
+  if (process.env.NODE_ENV === "development") {
+    await setupVite(app, server);
+  } else {
+    serveStatic(app);
+  }
+
+  const preferredPort = parseInt(process.env.PORT || "3000");
+  const port = await findAvailablePort(preferredPort);
+
+  if (port !== preferredPort) {
+    console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
+  }
+
+  server.listen(port, () => {
+    console.log(`Server running on http://localhost:${port}/`);
+  });
+}
+
+startServer().catch(console.error);
