@@ -3669,7 +3669,7 @@ function profAll() {
     var a = null;
     try { a = JSON.parse(localStorage.getItem('zx_profiles') || 'null'); } catch (e) {}
     if (!a || !a.length) {
-        a = [{ n: '', a: 0, ns: '' }];   // sem nome: profName() resolve no idioma ATUAL
+        a = [{ n: '', a: 0, ns: '', kids: false }];   // sem nome: profName() resolve no idioma ATUAL
         profSave(a);
     }
     return a;
@@ -3688,16 +3688,16 @@ function profSetActive(i) {
     try { localStorage.setItem('zx_prof_active', String(i)); } catch (e) {}
     S.profNs = profActive().ns;
 }
-function profCreate(name, av) {
+function profCreate(name, av, kids) {
     var a = profAll();
     if (a.length >= 4) return false;
     var seq = 2;
     try { seq = parseInt(localStorage.getItem('zx_prof_seq') || '2', 10) || 2; localStorage.setItem('zx_prof_seq', String(seq + 1)); } catch (e) {}
-    a.push({ n: name, a: av, ns: 'p' + seq + '_' });
+    a.push({ n: name, a: av, ns: 'p' + seq + '_', kids: !!kids });
     profSave(a);
     return true;
 }
-function profUpdate(i, name, av) { var a = profAll(); if (i < 0 || i >= a.length) return; a[i].n = name; a[i].a = av; profSave(a); }
+function profUpdate(i, name, av, kids) { var a = profAll(); if (i < 0 || i >= a.length) return; a[i].n = name; a[i].a = av; a[i].kids = !!kids; profSave(a); }
 function profDelete(i) {
     var a = profAll();
     if (a.length <= 1 || i < 0 || i >= a.length) return;
@@ -3770,28 +3770,26 @@ function profBindFit(ov) {
 function profIntroSeen() { try { return localStorage.getItem('zx_prof_intro') === '1'; } catch (e) { return false; } }
 function profIntroMark() { try { localStorage.setItem('zx_prof_intro', '1'); } catch (e) {} }
 
-/* ---- 12 avatares: círculo degradê + glifo SVG branco (zero assets) ---- */
+/* ---- 12 avatares ilustrados UltraPlayer, quadrados e arredondados ---- */
 var PROF_AVS = [
-    ['#10b981', '#056b4f', '<circle cx="12" cy="7.6" r="3.8" fill="#fff"></circle><path d="M4.5 20.5c0-4.1 3.4-7.4 7.5-7.4s7.5 3.3 7.5 7.4z" fill="#fff"></path>'],
-    ['#fabf24', '#e6730d', '<path d="M12 2.6l2.8 5.8 6.4.9-4.6 4.4 1.1 6.3-5.7-3-5.7 3 1.1-6.3L2.8 9.3l6.4-.9z" fill="#fff"></path>'],
-    ['#f5596b', '#b81c47', '<path d="M12 21L4 13.4a4.8 4.8 0 0 1 0-6.9 4.9 4.9 0 0 1 7 0l1 1 1-1a4.9 4.9 0 0 1 7 0 4.8 4.8 0 0 1 0 6.9z" fill="#fff"></path>'],
-    ['#59a6fa', '#1f52cc', '<path d="M13.5 2L6 13.5h4.5L9.5 22 17 10.5h-4.5z" fill="#fff"></path>'],
-    ['#a870fa', '#6129bf', '<path d="M8 5v14l11-7z" fill="#fff"></path>'],
-    ['#fc9e38', '#d94d17', '<path d="M3.5 17L2.5 7l4.6 3.4L12 4.5l4.9 5.9L21.5 7l-1 10z" fill="#fff"></path><rect x="3.5" y="18.2" width="17" height="2.4" rx="1.1" fill="#fff"></rect>'],
-    ['#40ccd9', '#0d738c', '<path d="M12 2.8L21 12l-9 9.2L3 12z" fill="#fff"></path>'],
-    ['#f066cc', '#9e1f8c', '<path d="M9 16V4l10-2v11.5" fill="none" stroke="#fff" stroke-width="2.2"></path><circle cx="6.4" cy="16.6" r="2.9" fill="#fff"></circle><circle cx="16.4" cy="14.1" r="2.9" fill="#fff"></circle>'],
-    ['#b88c61', '#734d2e', '<circle cx="7" cy="9" r="2.1" fill="#fff"></circle><circle cx="12" cy="7.3" r="2.1" fill="#fff"></circle><circle cx="17" cy="9" r="2.1" fill="#fff"></circle><ellipse cx="12" cy="15.8" rx="4.7" ry="3.9" fill="#fff"></ellipse>'],
-    ['#6bd45c', '#1a8040', '<circle cx="12" cy="6.4" r="3" fill="#fff"></circle><circle cx="6.6" cy="10.4" r="3" fill="#fff"></circle><circle cx="8.7" cy="16.8" r="3" fill="#fff"></circle><circle cx="15.3" cy="16.8" r="3" fill="#fff"></circle><circle cx="17.4" cy="10.4" r="3" fill="#fff"></circle><circle cx="12" cy="11.8" r="2.6" fill="#fff"></circle>'],
-    ['#facc59', '#cc801a', '<circle cx="12" cy="12" r="8.6" fill="none" stroke="#fff" stroke-width="2.2"></circle><circle cx="9" cy="10" r="1.35" fill="#fff"></circle><circle cx="15" cy="10" r="1.35" fill="#fff"></circle><path d="M8.2 14.2a4.8 4.8 0 0 0 7.6 0" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"></path>'],
-    ['#6b7280', '#2c3440', '<text x="12" y="17.2" text-anchor="middle" font-size="15" font-weight="900" font-family="Arial Black,Arial,sans-serif" fill="#fff">Z</text>']
+    'assets/profiles/avatar_01_cyber_hero.jpg',
+    'assets/profiles/avatar_02_mage.jpg',
+    'assets/profiles/avatar_03_guardian.jpg',
+    'assets/profiles/avatar_04_fairy.jpg',
+    'assets/profiles/avatar_05_ice_queen.jpg',
+    'assets/profiles/avatar_06_warrior.jpg',
+    'assets/profiles/avatar_07_little_dragon.jpg',
+    'assets/profiles/avatar_08_pirate.jpg',
+    'assets/profiles/avatar_09_neon_artist.jpg',
+    'assets/profiles/avatar_10_cosmic_princess.jpg',
+    'assets/profiles/avatar_11_android.jpg',
+    'assets/profiles/avatar_12_music_star.jpg'
 ];
 function profAvatarHtml(i, size) {
-    var d = PROF_AVS[(i >= 0 && i < PROF_AVS.length) ? i : 0];
-    var s = Math.round(size * 0.54);
-    return '<span class="zx-pf-av" style="width:' + size + 'px;height:' + size + 'px;'
-        + 'background:-webkit-linear-gradient(top,' + d[0] + ',' + d[1] + ');'
-        + 'background:linear-gradient(180deg,' + d[0] + ',' + d[1] + ')">'
-        + '<svg viewBox="0 0 24 24" style="width:' + s + 'px;height:' + s + 'px" aria-hidden="true">' + d[2] + '</svg></span>';
+    var src = PROF_AVS[(i >= 0 && i < PROF_AVS.length) ? i : 0];
+    return '<span class="zx-pf-av" style="width:' + size + 'px;height:' + size + 'px;background:#101a28">'
+        + '<img src="' + src + '" alt="" draggable="false" style="width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit">'
+        + '</span>';
 }
 /* CSS das telas de perfil — TV-SAFE de propósito: sem gap/inset/clamp/aspect-ratio
    (WebView antigo, caso TV HQ). inline-block + margens no lugar de gap. */
@@ -3799,12 +3797,14 @@ function injectProfCss() {
     if ($('zx-prof-css')) return;
     var st = document.createElement('style'); st.id = 'zx-prof-css';
     st.textContent =
-        '.zx-pf-av{display:-webkit-inline-box;display:inline-flex;-webkit-box-align:center;align-items:center;-webkit-box-pack:center;justify-content:center;border-radius:50%;vertical-align:middle}'
+        '.zx-pf-av{display:-webkit-inline-box;display:inline-flex;-webkit-box-align:center;align-items:center;-webkit-box-pack:center;justify-content:center;border-radius:22%;overflow:hidden;vertical-align:middle;box-sizing:border-box;background:#101a28}'
+        + '.zx-pf-av img{display:block;width:100%;height:100%;object-fit:cover;border-radius:inherit}'
         + '.zx-pf-av svg{display:block}'
         + '.zx-pf-cards{text-align:center;margin:6px 0 2px}'
         + '.zx-pf-card{display:inline-block;vertical-align:top;background:none;border:0;outline:none;cursor:pointer;margin:6px 12px;padding:6px;color:#fff;-webkit-tap-highlight-color:transparent}'
-        + '.zx-pf-card .zx-pf-av{border:4px solid transparent;box-sizing:content-box}'
-        + '.zx-pf-card:focus .zx-pf-av,.zx-pf-card:hover .zx-pf-av{border-color:#10b981;box-shadow:0 0 0 3px rgba(16,185,129,.45)}'
+        + '.zx-pf-card .zx-pf-av{border:3px solid transparent;box-sizing:border-box}'
+        + '.zx-pf-card:focus .zx-pf-av,.zx-pf-card:hover .zx-pf-av{border-color:#43e5f2;box-shadow:0 0 0 3px rgba(67,229,242,.28)}'
+        + '.zx-pf-card .zx-pf-badge{background:#43e5f2}'
         + '.zx-pf-avwrap{position:relative;display:inline-block}'
         + '.zx-pf-badge{position:absolute;right:0;bottom:2px;width:26px;height:26px;border-radius:50%;background:#10b981;border:3px solid #0a0f0d;display:-webkit-box;display:flex;-webkit-box-align:center;align-items:center;-webkit-box-pack:center;justify-content:center;box-sizing:content-box}'
         + '.zx-pf-badge svg{width:15px;height:15px;display:block}'
@@ -3816,11 +3816,11 @@ function injectProfCss() {
         + '.zx-pf-pill:focus,.zx-pf-pill:hover{border-color:#10b981;color:#fff;box-shadow:0 0 0 3px rgba(16,185,129,.45)}'
         + '.zx-pf-input{display:block;width:86%;margin:0 auto 6px;box-sizing:border-box;padding:13px 16px;background:rgba(20,20,20,.85);border:2px solid #1f3a30;border-radius:12px;color:#f5f5f1;font-size:17px;text-align:center;outline:none}'
         + '.zx-pf-input:focus{border-color:#10b981}'
-        + '.zx-pf-grid{text-align:center;margin:8px 0 2px}'
-        + '.zx-pf-gbtn{display:inline-block;background:none;border:0;outline:none;cursor:pointer;margin:5px;padding:3px;-webkit-tap-highlight-color:transparent}'
-        + '.zx-pf-gbtn .zx-pf-av{border:3px solid transparent;box-sizing:content-box}'
-        + '.zx-pf-gbtn:focus .zx-pf-av,.zx-pf-gbtn:hover .zx-pf-av{border-color:#10b981}'
-        + '.zx-pf-gbtn.zx-pf-sel .zx-pf-av{border-color:#fff}'
+        + '.zx-pf-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:15px 22px;text-align:center;margin:14px auto 8px;max-width:620px}'
+        + '.zx-pf-gbtn{display:flex;align-items:center;justify-content:center;background:none;border:0;outline:none;cursor:pointer;margin:0;padding:2px;-webkit-tap-highlight-color:transparent}'
+        + '.zx-pf-gbtn .zx-pf-av{border:3px solid transparent;box-sizing:border-box;border-radius:22%}'
+        + '.zx-pf-gbtn:focus .zx-pf-av,.zx-pf-gbtn:hover .zx-pf-av{border-color:#43e5f2;box-shadow:0 0 0 3px rgba(67,229,242,.28)}'
+        + '.zx-pf-gbtn.zx-pf-sel .zx-pf-av{border-color:#43e5f2;box-shadow:0 0 0 3px rgba(67,229,242,.32)}'
         + '.zx-pf-actions{text-align:center;margin-top:14px}'
         + '.zx-pf-save{display:inline-block;background:#10b981;color:#04231a;border:0;border-radius:12px;padding:13px 40px;font-size:16px;font-weight:800;cursor:pointer;outline:none;margin:0 8px;-webkit-tap-highlight-color:transparent}'
         + '.zx-pf-save:focus,.zx-pf-save:hover{box-shadow:0 0 0 3px #fff}'
@@ -3830,7 +3830,22 @@ function injectProfCss() {
         + '.zx-pf-fan .zx-pf-av{margin:0 -7px;border:3px solid #060a09}'
         + '.zx-pf-blt{display:block;text-align:left;color:#e7efe9;font-size:14px;margin:7px auto;max-width:420px}'
         + '.zx-pf-blt b{color:#10b981;margin-right:8px}'
-        + '#zx-prof-gate,#zx-prof-ed,#zx-prof-intro{overflow:hidden}';
+        + '#zx-prof-gate,#zx-prof-intro{overflow:hidden}'
+        + '#zx-prof-ed{overflow-y:auto;overflow-x:hidden;padding:24px 12px 36px;box-sizing:border-box;align-items:flex-start}'
+        + '#zx-prof-ed .zx-ffa-card{width:min(94vw,620px);max-width:620px;margin:0 auto;background:#070d18;border:1px solid rgba(44,65,93,.52);border-radius:20px;padding:22px 20px 28px;box-sizing:border-box}'
+        + '#zx-prof-ed .zx-ffa-title{font-size:28px;font-weight:800;color:#f7fbff;margin:4px 0 18px}'
+        + '#zx-prof-ed .zx-pf-prev .zx-pf-av{width:96px!important;height:96px!important;border-radius:22%;border:3px solid #43e5f2;box-shadow:0 0 0 4px rgba(67,229,242,.18)}'
+        + '#zx-prof-ed .zx-pf-input{width:100%;background:#111827;border:1px solid #34445d;border-radius:12px;text-align:left;color:#f7fbff}'
+        + '#zx-prof-ed .zx-ffa-sub{text-align:left;color:#d7e3f3;font-size:16px;font-weight:700;margin-top:18px!important}'
+        + '#zx-prof-ed .zx-pf-grid .zx-pf-av{width:72px!important;height:72px!important}'
+        + '#zx-prof-ed .zx-pf-save{background:#10c99a;color:#041c17;border-radius:12px;min-width:150px}'
+        + '.zx-pf-kids{display:flex;align-items:center;justify-content:space-between;gap:14px;background:#202b42;border-radius:16px;padding:17px 18px;margin:0 0 18px;text-align:left}'
+        + '.zx-pf-kids-title{color:#f1f6ff;font-size:18px;font-weight:800}'
+        + '.zx-pf-kids-sub{color:#8491a8;font-size:13px;line-height:1.35;margin-top:5px}'
+        + '.zx-pf-switch{position:relative;width:58px;height:32px;flex:0 0 58px;border:0;border-radius:999px;background:#111a2d;cursor:pointer;padding:0}'
+        + '.zx-pf-switch:before{content:"";position:absolute;top:4px;left:4px;width:24px;height:24px;border-radius:50%;background:#78849a;transition:all .18s ease}'
+        + '.zx-pf-switch.on{background:#43e5f2}.zx-pf-switch.on:before{left:30px;background:#05131b}'
+        + '@media (max-width:600px) and (orientation:portrait){#zx-prof-ed{padding:16px 8px 28px}#zx-prof-ed .zx-ffa-card{width:100%;padding:18px 12px 26px;border-radius:18px}#zx-prof-ed .zx-ffa-title{font-size:24px}.zx-pf-grid{gap:14px 8px}.zx-pf-kids{padding:15px 14px}.zx-pf-kids-title{font-size:16px}.zx-pf-kids-sub{font-size:12px}.zx-pf-gbtn{min-height:76px}}';
     document.head.appendChild(st);
 }
 /* ---- "Quem está assistindo?" (boot com 2+ perfis / botão do avatar) ---- */
@@ -3903,6 +3918,7 @@ function showProfEditor(idx, onDone) {
     var a = profAll();
     var nome = (idx >= 0) ? a[idx].n : '';
     var av = (idx >= 0) ? a[idx].a : (a.length % PROF_AVS.length);
+    var kids = (idx >= 0) ? !!a[idx].kids : false;
     var armDel = false;
     var ov = document.createElement('div'); ov.id = 'zx-prof-ed'; ov.className = 'zx-ff-ask tv-modal';
     document.body.appendChild(ov);
@@ -3913,6 +3929,7 @@ function showProfEditor(idx, onDone) {
     function paint() {
         var canDel = (idx >= 0 && profAll().length > 1);
         var h = '<div class="zx-ffa-card"><div class="zx-ffa-title">' + te(idx < 0 ? 'Novo perfil' : 'Editar perfil') + '</div>'
+            + '<div class="zx-pf-kids"><div><div class="zx-pf-kids-title">' + te('Perfil infantil') + '</div><div class="zx-pf-kids-sub">' + te('Sem canais e filmes adultos — nem com PIN, o conteúdo simplesmente não aparece') + '</div></div><button type="button" class="zx-pf-switch' + (kids ? ' on' : '') + '" id="zxPfKidsSwitch" aria-label="' + te('Perfil infantil') + '"></button></div>'
             + '<div class="zx-pf-prev" id="zxPfPrev" style="text-align:center;margin:4px 0 10px">' + profAvatarHtml(av, 74) + '</div>'
             + '<input type="text" class="zx-pf-input" id="zxPfName" maxlength="16" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="' + te('Nome do perfil') + '">'
             + '<div class="zx-ffa-sub" style="margin:8px 0 0">' + te('Escolha um avatar') + '</div>'
@@ -3925,6 +3942,8 @@ function showProfEditor(idx, onDone) {
             + (canDel ? '<button type="button" class="zx-pf-del" id="zxPfDel">' + te('Apagar perfil') + '</button>' : '')
             + '</div></div>';
         ov.innerHTML = h;
+        var kidsBtn = $('zxPfKidsSwitch');
+        if (kidsBtn) kidsBtn.addEventListener('click', function () { kids = !kids; kidsBtn.className = 'zx-pf-switch' + (kids ? ' on' : ''); });
         var inp = $('zxPfName');
         if (inp) inp.value = nome;
         // escolher avatar: troca classes + preview EM-PLACE (o rebuild matava o
@@ -3945,10 +3964,10 @@ function showProfEditor(idx, onDone) {
             if (!n) { try { inp.focus(); } catch (e) {} return; }
             if (n.length > 16) n = n.slice(0, 16);
             if (idx >= 0) {
-                profUpdate(idx, n, av);
+                profUpdate(idx, n, av, kids);
                 profApplyData();                       // pode ter editado o ativo
             } else {
-                profCreate(n, av);
+                profCreate(n, av, kids);
                 profSetActive(profAll().length - 1);   // criar já entra no novo
                 profApplyData();
             }
