@@ -1,0 +1,3158 @@
+/* ============================================================
+ * HDX TV Player — Smart-TV-only stylesheet
+ * Targets: 1280x720 / 1920x1080 viewports.
+ * Designed around TV remote navigation (no mouse / no hover).
+ * ============================================================ */
+/* Sentinela: o JS de auto-cura (layout_user) lê esta custom property pra
+ * saber se o CSS principal APLICOU. Se vier vazia (CSS não carregou →
+ * página "crua"), recarrega 1x. NÃO remover. */
+:root { --hdx-css: 1; }
+
+/* ----- Reset & base ----- */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+    width: 100%;
+    height: 100%;
+    background: #0a0a0a;
+    color: #f5f5f1;
+    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-size: 18px;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeSpeed;
+}
+a, a:visited { color: inherit; text-decoration: none; outline: none; }
+button { font-family: inherit; }
+img { display: block; max-width: 100%; border: 0; }
+ul, ol { list-style: none; }
+
+/* ----- Background (simple solid for TV performance) ----- */
+.bg-diamonds {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 0;
+    /* Fundo "ambiente" estilo streaming: preto + uma MANCHA radial da cor
+       da marca no centro (16,185,129 -> trocado pela cor do admin = esmeralda).
+       Núcleo forte + halo largo suave. Tudo estático, sem imagem nem filtro
+       — leve e universal em WebKit desde 2014. */
+    background-color: #070b09;
+    background-image:
+        radial-gradient(ellipse 46% 52% at 50% 58%, rgba(16,185,129, 0.34) 0%, rgba(7, 11, 9, 0) 56%),
+        radial-gradient(ellipse 105% 95% at 50% 56%, rgba(16,185,129, 0.16) 0%, rgba(7, 11, 9, 0) 62%);
+    pointer-events: none;
+    /* GPU: promove o fundo a UMA camada própria. Assim o gradiente é
+       rasterizado UMA vez (vira textura) e mover o foco/navegar NÃO
+       re-rasteriza o fundo inteiro a cada tecla — era isso que travava a
+       navegação nas telas "vazias" (login/configurações) na Samsung/LG,
+       onde o fundo aparece muito. Em catálogo os pôsteres cobrem o fundo,
+       por isso lá parecia normal. */
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+}
+
+.app-root {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+/* ----- Brand logo -----
+ * Otimização TV antiga: gradient + background-clip:text + text-shadow
+ * trocado por cor sólida. background-clip:text NÃO funciona em Maple
+ * antigo (texto sumia). Sólido é universal e renderiza instantâneo. */
+.brand-logo {
+    font-family: 'Arial Black', 'Helvetica Neue', sans-serif;
+    font-weight: 900;
+    letter-spacing: 4px;
+    color: #f0f0f0;
+}
+.brand-logo .accent {
+    color: #10b981;
+}
+/* Logo em IMAGEM (enviada no admin > Aparência) — mesmo lugar do texto */
+.brand-logo-img {
+    display: inline-block;
+    width: auto;
+    max-width: 70%;
+}
+
+/* ----- Generic focus styles (works on every WebView) ----- */
+a:focus, button:focus, input:focus, select:focus, [tabindex]:focus {
+    outline: none; /* we draw our own per-component */
+}
+
+/* =====================================================
+ * HOME / MAIN MENU (matches screenshot 1)
+ * ===================================================== */
+/* Home: zero flex/vh/vw (Samsung Maple/Orsay quebra essas).
+   Posicionamento absoluto pra centralização vertical (compat universal,
+   funciona desde IE6). Logo no topo, grid centralizada verticalmente. */
+.home-screen {
+    width: 100%;
+    min-height: 100%;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(18px, 3.5vh, 44px);
+    padding: clamp(16px, 4vh, 48px) clamp(16px, 4vw, 60px);
+    text-align: center;
+    overflow-y: auto;
+}
+/* Logo + grid centralizados como GRUPO verticalmente.
+   Total: logo (~110px) + gap (40px) + grid (220px) = ~370px.
+   Metade = 185px → margin-top da logo = -185px. */
+.home-logo {
+    text-align: center;
+}
+.home-logo img {
+    height: clamp(70px, 12vw, 160px);
+    width: auto;
+    display: inline-block;
+}
+.home-logo .brand-logo {
+    font-size: clamp(38px, 9vw, 110px);
+    line-height: 1;
+    display: inline-block;
+}
+
+.home-grid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: stretch;
+    gap: clamp(10px, 1.6vw, 20px);
+    width: 100%;
+    max-width: 1320px;
+}
+.home-tile {
+    flex: 0 1 auto;
+    width: clamp(116px, 15.5vw, 220px);
+    height: clamp(116px, 15.5vw, 220px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(8px, 1.2vw, 18px);
+    background-color: #181820;
+    background-image: linear-gradient(160deg, rgba(52,52,64,0.55), rgba(18,18,24,0.2));
+    border: 3px solid rgba(255, 255, 255, 0.06);
+    border-radius: 16px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+    color: #f5f5f1;
+    font-size: clamp(14px, 1.4vw, 22px);
+    font-weight: 600;
+    line-height: 1.2;
+    cursor: pointer;
+    text-align: center;
+    box-sizing: border-box;
+    padding: 8px;
+}
+.home-tile .tile-icon {
+    display: block;
+    margin: 0 auto;
+    width: clamp(40px, 5vw, 68px);
+    height: clamp(40px, 5vw, 68px);
+    line-height: 1;
+    color: #fff;
+}
+.home-tile .tile-icon svg {
+    width: 100%;
+    height: 100%;
+}
+.home-tile span {
+    display: block;
+    text-align: center;
+}
+.home-tile:focus, .home-tile.is-focused {
+    outline: none;
+    border-color: #10b981;
+    background-color: #1a1216;
+    background-image: linear-gradient(160deg, rgba(16,185,129, 0.30), rgba(22, 16, 19, 0.5));
+    box-shadow: 0 0 0 2px rgba(16,185,129, 0.45), 0 0 6px rgba(16,185,129, 0.22);  /* blur reduzido 30px->6px (repaint por tecla em TV fraca) */
+}
+
+.home-bottom {
+    text-align: center;
+}
+.home-reload {
+    background: rgba(20, 20, 20, 0.85);
+    border: 3px solid transparent;
+    border-radius: 14px;
+    padding: clamp(10px, 1.4vh, 18px) clamp(28px, 4vw, 56px);
+    color: #f5f5f1;
+    font-size: clamp(15px, 1.4vw, 22px);
+    font-weight: 600;
+    display: inline-block;
+    cursor: pointer;
+}
+.home-reload:focus {
+    border-color: #10b981;
+}
+.home-device-info {
+    text-align: center;
+    color: #aaa;
+    font-size: clamp(13px, 1.3vw, 20px);
+    line-height: 1.6;
+}
+.home-device-info strong { color: #f5f5f1; font-weight: 600; }
+
+/* TELA BAIXA (celular deitado etc.): SÓ as infos (Usuário/Vencimento/Mac) compactam —
+   viram UMA linha (lado a lado) com fonte menor, em vez de 3 linhas empilhadas que
+   empurravam o Mac pra fora da tela. Logo/ícones/Recarregar ficam do tamanho normal
+   (⚠️ pedido do Leonardo: mexer SÓ nesses 3 campos). */
+@media (max-height: 520px) {
+    .home-device-info { font-size: 12px; line-height: 1.4; }
+    .home-device-info div { display: inline-block; margin: 0 9px; }
+}
+
+/* =====================================================
+ * LOGIN
+ * ===================================================== */
+.login-screen {
+    width: 100%;
+    height: 100%;
+    padding: 50px 60px 0;
+    text-align: center;
+    box-sizing: border-box;
+}
+.login-screen .home-logo { margin-bottom: 36px; }
+.login-card {
+    width: 100%;
+    max-width: 520px;
+    background: rgba(20, 20, 20, 0.9);
+    border: 1px solid #2a2a2a;
+    border-radius: 16px;
+    padding: 36px 40px;
+}
+.login-card h1 {
+    font-size: 28px;
+    text-align: center;
+    margin-bottom: 8px;
+    color: #fff;
+}
+.login-card .login-sub {
+    text-align: center;
+    color: #aaa;
+    margin-bottom: 28px;
+    font-size: 16px;
+}
+.login-field {
+    margin-bottom: 18px;
+}
+.login-field label {
+    display: block;
+    color: #aaa;
+    text-transform: uppercase;
+    font-size: 12px;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+}
+.login-field input,
+.login-field select {
+    width: 100%;
+    padding: 14px 16px;
+    background: #1a1a1a;
+    color: #fff;
+    border: 2px solid #2a2a2a;
+    border-radius: 8px;
+    font-size: 18px;
+    font-family: inherit;
+}
+.login-field input:focus,
+.login-field select:focus {
+    border-color: #10b981;
+    background: #1f1f1f;
+    outline: none;
+}
+.login-submit {
+    width: 100%;
+    padding: 16px;
+    background: #10b981;
+    color: #fff;
+    border: 3px solid transparent;
+    border-radius: 8px;
+    font-size: 18px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    cursor: pointer;
+    margin-top: 8px;
+}
+.login-submit:focus {
+    background: #ff4654;
+    border-color: #fff;
+}
+.login-error {
+    background: rgba(16,185,129, 0.12);
+    border: 1px solid #10b981;
+    border-radius: 6px;
+    color: #ff8c95;
+    padding: 10px 14px;
+    margin-bottom: 16px;
+    font-size: 14px;
+    text-align: center;
+}
+
+/* =====================================================
+ * LIVE TV (matches screenshot 2)
+ * ===================================================== */
+.live-screen {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+.live-topbar {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 12px;
+    padding: 14px 20px;
+    background: transparent;
+}
+.live-topbar .tb-cell {
+    background: rgba(20, 20, 20, 0.9);
+    border: 2px solid transparent;
+    border-radius: 10px;
+    padding: 12px 18px;
+    color: #f5f5f1;
+    font-size: 18px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.live-topbar .tb-cell:focus {
+    border-color: #10b981;
+}
+.live-topbar .tb-group { flex: 1 1 auto; cursor: pointer; }
+.live-topbar .tb-group .tb-icon { font-size: 22px; opacity: 0.85; }
+.live-topbar .tb-group .tb-name { flex: 1; }
+.live-topbar .tb-group .tb-count { color: #aaa; font-size: 16px; }
+.live-topbar .tb-organize { cursor: pointer; min-width: 220px; }
+.live-topbar .tb-time {
+    flex: 0 0 auto;
+    min-width: 320px;
+    justify-content: space-between;
+    font-weight: 600;
+    pointer-events: none;
+}
+
+.live-body {
+    flex: 1 1 auto;
+    display: flex;
+    gap: 10px;
+    padding: 0 20px 20px;
+    min-height: 0;
+}
+
+/* Categories sidebar */
+.live-categories {
+    flex: 0 0 280px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow-y: auto;
+}
+.cat-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 18px 20px;
+    background: rgba(20, 20, 20, 0.85);
+    border: 2px solid transparent;
+    border-radius: 10px;
+    color: #f5f5f1;
+    font-size: 18px;
+    cursor: pointer;
+}
+.cat-item:focus, .cat-item.is-active {
+    border-color: #10b981;
+    background: rgba(2,29,20, 0.9);
+}
+.cat-item .cat-count { color: #aaa; font-size: 16px; }
+
+/* Channel list */
+.live-channels {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow-y: auto;
+    padding-right: 4px;
+    min-width: 0;
+}
+.channel-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 18px;
+    background: rgba(20, 20, 20, 0.85);
+    border: 2px solid transparent;
+    border-radius: 10px;
+    color: #f5f5f1;
+    cursor: pointer;
+}
+.channel-item:focus, .channel-item.is-focused {
+    border-color: #10b981;
+    background: #fafafa;
+    color: #1a1a1a;
+}
+.channel-item .ch-num {
+    flex: 0 0 40px;
+    font-size: 18px;
+    font-weight: 600;
+    text-align: right;
+}
+.channel-item .ch-logo {
+    flex: 0 0 44px;
+    width: 44px;
+    height: 44px;
+    border-radius: 6px;
+    background: #2a2a2a center/contain no-repeat;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+}
+.channel-item .ch-name {
+    flex: 1 1 auto;
+    font-size: 18px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.channel-item .ch-fav {
+    flex: 0 0 auto;
+    color: #10b981;
+    font-size: 22px;
+}
+
+/* Right pane: preview + EPG */
+.live-right {
+    flex: 0 0 520px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 0;
+}
+.live-preview {
+    flex: 0 0 auto;
+    background: #000;
+    border-radius: 10px;
+    width: 100%;
+    padding-bottom: 56.25%; /* 16:9 */
+    height: 0;
+    overflow: hidden;
+    position: relative;
+}
+.live-preview video, .live-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.live-now {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 18px;
+    background: rgba(20, 20, 20, 0.9);
+    border-radius: 10px;
+}
+.live-now .ch-num,
+.live-now .ch-logo,
+.live-now .ch-name { color: #fff; }
+.live-now .ch-name { font-size: 20px; font-weight: 600; }
+
+.live-epg {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-right: 4px;
+}
+.epg-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 16px;
+    background: rgba(20, 20, 20, 0.85);
+    border-radius: 8px;
+    color: #f5f5f1;
+    font-size: 15px;
+}
+.epg-row .epg-dot {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: #555;
+    flex: 0 0 12px;
+}
+.epg-row.is-now .epg-dot { background: #10b981; }
+.epg-row .epg-time {
+    color: #aaa;
+    flex: 0 0 auto;
+    font-variant-numeric: tabular-nums;
+}
+.epg-row .epg-title {
+    flex: 1 1 auto;
+    text-align: right;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Day calendar (far right) */
+.live-days {
+    flex: 0 0 80px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+.day-item {
+    background: rgba(20, 20, 20, 0.85);
+    border: 2px solid transparent;
+    border-radius: 10px;
+    padding: 12px 0;
+    text-align: center;
+    color: #f5f5f1;
+    cursor: pointer;
+}
+.day-item:focus, .day-item.is-active {
+    border-color: #10b981;
+}
+.day-item .day-num { font-size: 22px; font-weight: 700; line-height: 1; }
+.day-item .day-week {
+    color: #aaa;
+    font-size: 12px;
+    text-transform: capitalize;
+    margin-top: 4px;
+}
+.day-item.is-today .day-num { color: #10b981; }
+
+/* =====================================================
+ * GRID (Movies / Series / Lists)
+ * ===================================================== */
+.grid-screen {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+.grid-topbar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 18px 24px;
+}
+.grid-topbar .gt-back,
+.search-topbar .gt-back {
+    background: rgba(20, 20, 20, 0.85);
+    border: 2px solid transparent;
+    border-radius: 10px;
+    padding: 10px 18px;
+    color: #f5f5f1;
+    font-size: 16px;
+    cursor: pointer;
+}
+.grid-topbar .gt-back:focus,
+.search-topbar .gt-back:focus { border-color: #10b981; }
+.grid-topbar .gt-title {
+    font-size: 26px;
+    font-weight: 700;
+    color: #fff;
+}
+.grid-topbar .gt-time {
+    margin-left: auto;
+    color: #aaa;
+    font-size: 16px;
+}
+
+.grid-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 8px 24px 28px;
+}
+
+.poster-grid {
+    /* Old TV-safe layout: inline-block instead of grid (Tizen 2.x, NetTV 4) */
+    font-size: 0;
+    line-height: 0;
+    margin-right: -18px;
+}
+.poster-tile {
+    display: inline-block;
+    vertical-align: top;
+    margin: 0 18px 18px 0;
+    position: relative;
+    width: 180px;
+    height: 270px;
+    background: #1a1a1a center/cover no-repeat;
+    border: 3px solid transparent;
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
+}
+.poster-tile:focus, .poster-tile.is-focused {
+    border-color: #10b981;
+    z-index: 5;
+    position: relative;
+}
+.poster-tile .poster-fallback {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: #555; font-size: 64px; font-weight: 800;
+}
+/* Fallback de letras some SÓ quando o pôster carregou (preload JS) */
+.poster-tile.is-loaded .poster-fallback { display: none; }
+.poster-tile .poster-name {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    padding: 22px 10px 10px;
+    background: linear-gradient(to top, rgba(0,0,0,0.92), rgba(0,0,0,0));
+    color: #f5f5f1;
+    font-size: 14px;
+    font-weight: 500;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+/* =====================================================
+ * PLAYER (full-screen via CSS, no Fullscreen API)
+ * ===================================================== */
+.player-screen {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    width: 100%;
+    height: 100%;
+    background: #000;
+    z-index: 100;
+    overflow: hidden;
+}
+.player-screen video {
+    width: 100%;
+    height: 100%;
+    background: #000;
+    display: block;
+    /* object-fit isn't supported on Tizen 2/NetTV 4 — falls back to
+     * native video rendering which fills the box. Acceptable. */
+    object-fit: contain;
+}
+/* Esconde o "botão de play" cinza nativo que o Android/WebKit desenha por
+ * cima do <video> enquanto o autoplay é barrado / no buffer inicial. Dava
+ * sensação de player quebrado (o círculo+triângulo cinza). Nosso código já
+ * re-tenta tocar sozinho (mutado); esse botão só atrapalhava. O feedback
+ * fica por conta do nosso spinner "Carregando filme…". */
+.player-screen video::-webkit-media-controls-overlay-play-button,
+.player-screen video::-webkit-media-controls-start-playback-button,
+.player-screen video::-webkit-media-controls {
+    display: none !important;
+    -webkit-appearance: none;
+    appearance: none;
+}
+.player-loading,
+.player-error {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    color: #fff;
+    text-align: center;
+    z-index: 10;
+}
+.player-loading .spinner {
+    width: 56px; height: 56px;
+    border: 4px solid rgba(255,255,255,0.15);
+    border-top-color: #10b981;
+    border-radius: 50%;
+    margin: 0 auto 16px;
+    animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.player-error h2 { font-size: 22px; margin-bottom: 10px; }
+.player-error p { color: #aaa; }
+
+/* Optional thin overlay shown briefly on key press */
+.player-osd {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    padding: 22px 32px;
+    background: linear-gradient(to top, rgba(0,0,0,0.85), rgba(0,0,0,0));
+    color: #f5f5f1;
+    pointer-events: none;
+    opacity: 0;
+}
+.player-osd.is-visible { opacity: 1; }
+.player-osd .osd-title {
+    font-size: 22px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    text-align: center;       /* centralizado horizontalmente */
+}
+.player-osd .osd-time {
+    color: #aaa;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    margin-top: 8px;
+}
+
+/* Seek bar customizada — substitui a barra nativa de <video controls>.
+   Usa float (não flex) pra compat com Samsung Maple/Orsay. */
+.osd-seekbar {
+    margin: 0 auto;
+    max-width: 80%;
+    box-sizing: border-box;
+}
+.osd-times {
+    overflow: hidden;          /* contém os floats */
+    color: #ddd;
+    font-size: 15px;
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 6px;
+}
+.osd-times .osd-time-current { float: left; }
+.osd-times .osd-time-total   { float: right; }
+.osd-progress {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.osd-progress-fill {
+    height: 100%;
+    background: #10b981;
+    width: 0%;
+}
+
+/* OSD de volume — flutuante no canto superior direito do player.
+   Aparece ao ajustar volume (↑/↓ ou Vol+/-) e some em 1.5s.
+   IMPORTANTE: usa display toggle ao invés de opacity — em Samsung Maple/Orsay
+   o plugin SEF de vídeo renderiza em hardware overlay e pode ficar ACIMA
+   do DOM. Display:none deixa pelo menos o caso de opacity=0 não pintar.
+   Z-index altíssimo pra ficar ACIMA de qualquer outra coisa do DOM. */
+.player-volume {
+    display: none;
+    position: fixed;
+    top: clamp(12px, 3vh, 28px);
+    right: clamp(12px, 2vw, 28px);
+    width: clamp(180px, 22vw, 280px);
+    padding: 16px 20px;
+    background: rgba(0, 0, 0, 0.92);
+    border: 2px solid #10b981;
+    border-radius: 12px;
+    color: #fff;
+    pointer-events: none;
+    box-sizing: border-box;
+    z-index: 9999999;
+}
+.player-volume.is-visible { display: block; }
+.player-volume .pv-label {
+    color: #aaa;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1.4px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+.player-volume .pv-bar {
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 6px;
+}
+.player-volume .pv-fill {
+    height: 100%;
+    background: #10b981;
+    border-radius: 3px;
+    width: 100%;
+}
+.player-volume .pv-pct {
+    color: #fff;
+    font-size: 18px;
+    font-weight: 700;
+    text-align: right;
+}
+
+/* =====================================================
+ * COMMON: scrollbars
+ * ===================================================== */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 3px; }
+
+/* =====================================================
+ * Profiles (TV-friendly, simpler than main player)
+ * ===================================================== */
+.profile-screen {
+    width: 100%;
+    height: 100%;
+    padding: 60px 30px 0;
+    text-align: center;
+    box-sizing: border-box;
+}
+.profile-screen h1 {
+    font-size: 32px;
+    margin-bottom: 40px;
+    color: #fff;
+    text-align: center;
+}
+.profile-grid {
+    text-align: center;
+    font-size: 0;
+}
+.profile-card {
+    display: inline-block;
+    vertical-align: top;
+    background: none;
+    border: 3px solid transparent;
+    padding: 12px;
+    margin: 0 14px 28px;
+    border-radius: 16px;
+    color: #aaa;
+    cursor: pointer;
+    text-align: center;
+    font-size: 16px;
+}
+.profile-card:focus { border-color: #10b981; color: #fff; }
+.profile-avatar {
+    width: 140px;
+    height: 140px;
+    line-height: 140px;       /* trick clássico pra centralizar texto único */
+    border-radius: 14px;
+    background: #1a1a1a;
+    font-size: 72px;
+    text-align: center;
+    margin: 0 auto 10px;
+}
+.profile-name { font-size: 20px; }
+
+/* Generic alert — flutuante por cima do conteúdo, não empurra layout.
+   Aparece centralizado no topo, somem sozinho via JS. */
+.alert {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);   /* centra horizontal em qualquer largura */
+    width: 500px;
+    max-width: 90%;
+    padding: 14px 18px;
+    border-radius: 10px;
+    font-size: 18px;
+    text-align: center;
+    z-index: 9000;
+    box-sizing: border-box;
+}
+.alert.success {
+    background: rgba(20, 20, 20, 0.95);
+    border: 2px solid #10b981;
+    color: #fff;
+}
+.alert.error {
+    background: rgba(16,185,129, 0.18);
+    border: 2px solid #10b981;
+    color: #ff8c95;
+}
+
+/* =====================================================
+ * SIDEBAR + GRID layout (Filmes / Séries / TV ao vivo).
+ * Posicionamento absoluto — flex quebra em Samsung Maple/Orsay
+ * (categorias caem todas no topo). Absolute funciona desde IE6.
+ * ===================================================== */
+.sidebar-screen {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+.cat-sidebar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: clamp(200px, 24vw, 420px);   /* responsivo (acompanha o .sidebar-content) */
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 24px 12px 24px 24px;
+    box-sizing: border-box;
+}
+.cat-sidebar .cat-pill {
+    display: block;
+    position: relative;        /* âncora do .cat-count absoluto */
+    margin-bottom: 10px;
+    padding: 20px 60px 20px 26px;  /* espaço extra à direita pro count */
+    background: rgba(20, 20, 20, 0.85);
+    border: 2px solid transparent;
+    border-radius: 12px;
+    color: #f5f5f1;
+    font-size: 21px;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: left;
+    box-sizing: border-box;
+    width: 100%;
+    overflow: hidden;
+}
+.cat-sidebar .cat-pill .cat-count {
+    position: absolute;
+    right: 22px;
+    top: 50%;
+    margin-top: -10px;         /* metade da altura aprox p/ centralizar */
+    color: #aaa;
+    font-size: 18px;
+    line-height: 20px;
+}
+.cat-sidebar .cat-pill > span:first-child {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.cat-sidebar .cat-pill:focus {
+    outline: none;
+    background: #ffffff;
+    color: #1a1a1a;
+}
+.cat-sidebar .cat-pill:focus .cat-count { color: #555; }
+.cat-sidebar .cat-pill.is-active {
+    background: #ffffff;
+    color: #1a1a1a;
+}
+.cat-sidebar .cat-pill.is-active .cat-count { color: #555; }
+
+/* Pílula com ícone (Pesquisar) — sem flex, vertical-align em vez de align-items */
+.cat-sidebar .cat-pill-icon svg {
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 12px;
+}
+.cat-sidebar .cat-pill-icon > span {
+    display: block;
+    line-height: 20px;          /* mesma altura do svg pra alinhar */
+}
+
+/* Cadeado SVG dentro de .cat-pill marcando categoria adulta/bloqueada.
+ * inline-block + vertical-align em vez de flex (Maple/Orsay quebram flex
+ * em layouts full-screen). Cor herda do texto do .cat-pill (branco
+ * normal, escuro quando focado/ativo) — currentColor no SVG fill/stroke. */
+.cat-sidebar .cat-lock {
+    display: inline-block;
+    vertical-align: -3px;       /* alinha com baseline do texto */
+    margin-right: 8px;
+    width: 14px;
+    height: 14px;
+}
+
+.sidebar-content {
+    position: absolute;
+    top: 0;
+    left: clamp(200px, 24vw, 420px);   /* MESMO clamp da .cat-sidebar (acoplado) */
+    right: 0;
+    bottom: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 24px 32px 28px;
+    box-sizing: border-box;
+}
+.sidebar-content .sc-title {
+    color: #fff;
+    font-size: 30px;
+    font-weight: 700;
+    margin-bottom: 24px;
+    border-left: 4px solid #10b981;   /* barrinha de identidade HDX */
+    padding-left: 14px;
+}
+
+/* Poster grid — 5 colunas em qualquer TV, posters compactos pra caber
+ * ~3 fileiras visíveis no scroll inicial. Cada tile ocupa 19.6% (18%
+ * width + 1.6% margin laterais), então 5×19.6=98% cabe e 6×19.6=117.6%
+ * não cabe — força 5 colunas estritas em qualquer largura. text-align:
+ * center distribui a sobra de 2% igualmente nos dois lados (gaps
+ * esquerda/direita iguais). padding-bottom em % dá altura derivada da
+ * largura sem precisar do `aspect-ratio` (não existe em Maple/Tizen 2). */
+.poster-grid-tv {
+    font-size: 0;             /* kill inline-block whitespace */
+    line-height: 0;
+    /* À ESQUERDA (não center): com poucos itens (Favoritos/Continue/Recém) a
+       fileira parcial alinha à esquerda, igual ao começo de qualquer categoria
+       — antes 'center' jogava os poucos pôsteres pro meio da tela. Fileiras
+       cheias continuam preenchendo da esquerda à direita normalmente. */
+    text-align: left;
+}
+
+/* Indicador "Carregando mais..." no fim da grade quando paginação por
+   scroll tá ativa. Aparece quando user chega perto do fim. */
+.grid-loadmore {
+    display: block;
+    text-align: center;
+    padding: 24px 12px 32px;
+    color: #888;
+    font-size: 14px;
+    font-style: italic;
+    line-height: 1.4;
+}
+.poster-tile-tv {
+    display: inline-block;
+    vertical-align: top;
+    width: clamp(104px, 13vw, 200px);  /* responsivo: ~3-4 col no celular, ~6 em 1080p, ~8 em 4K */
+    margin: 0 0.7% 14px;
+    color: #f5f5f1;
+    cursor: pointer;
+    text-decoration: none;
+    font-size: 12px;
+    line-height: 1.3;
+    box-sizing: border-box;
+}
+.poster-tile-tv .pt-img {
+    width: 100%;
+    padding-bottom: 130%;     /* compacto pra caber 3 fileiras com 5 colunas */
+    height: 0;
+    background: #1a1a1a center/cover no-repeat;
+    border: 3px solid transparent;
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 5px 14px rgba(0, 0, 0, 0.45);
+}
+.poster-tile-tv .pt-img .pt-fallback {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: #555; font-size: 36px; font-weight: 800;
+}
+/* Quando lazy loader carregou a imagem, esconde o fallback de letras */
+.poster-tile-tv .pt-img.is-loaded .pt-fallback { display: none; }
+
+/* Badge de avaliação IMDb (★ 8.5) no canto superior direito do poster.
+ * Só aparece se a API retornou rating > 0. Estrela ★ é unicode (HTML
+ * entity &#9733; — universal em WebKit/Maple desde 2010). */
+.poster-tile-tv .pt-rating {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    padding: 3px 7px;
+    background: rgba(0, 0, 0, 0.78);
+    color: #fff;
+    font-size: 11px;
+    font-weight: bold;
+    line-height: 1.2;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+/* Nome do filme/série EMBAIXO da capa (igual HDX) — texto limpo, SEM overlay
+ * escuro dentro do pôster. Truncado em 1 linha com reticências. */
+.poster-tile-tv .pt-name {
+    display: block;
+    margin-top: 7px;
+    padding: 0 2px;
+    background: transparent;
+    color: #c9ccc6;
+    font-size: 12px;
+    line-height: 1.25;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    box-sizing: border-box;
+}
+/* Foco = MARCAÇÃO MAIS LEVE POSSÍVEL: só recolore a borda de 3px que JÁ existe
+   na capa (sem blur, sem sombra, sem scale).
+   ⚠️ O scale(zoom) TRAVOU a Samsung: animar o zoom de uma imagem grande
+   re-rasteriza a capa a cada quadro na GPU fraca. E sombra com blur repinta
+   caro. Borda sólida fina = repaint mínimo de uma faixa fininha = fluido. */
+.poster-tile-tv:focus { outline: none; }
+.poster-tile-tv:focus .pt-img {
+    border-color: #10b981;   /* vira esmeralda via tv_css_inline; sem box-shadow */
+}
+.poster-tile-tv:focus .pt-name { color: #fff; }   /* título do focado mais claro */
+
+/* =====================================================
+ * DETAIL HERO (Filme / Série) — full-bg image, info left
+ * ===================================================== */
+.detail-screen {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+/* Backdrop do filme/série atrás de TODA a tela de detalhe (inclusive os
+   "Você também pode gostar") — com transparência, em vez do wallpaper
+   aparecendo atrás dos recomendados. */
+.detail-bg {
+    position: fixed;
+    top: 0; right: 0; bottom: 0; left: 0;   /* NÃO usar inset:0 — Tizen <Ch87 ignora e o fundo some na Samsung */
+    background: #0a0a0a center top / cover no-repeat;
+    z-index: 0;
+    pointer-events: none;
+    /* GPU: backdrop fixo full-screen com gradientes — promove a uma camada
+       própria pra navegar pelos "recomendados" não re-rasterizar o fundo. */
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+}
+.detail-bg::after {
+    content: "";
+    position: absolute;
+    top: 0; right: 0; bottom: 0; left: 0;   /* idem: sem inset (Tizen antigo) */
+    /* escurece à ESQUERDA (legibilidade do texto) e, de cima pra baixo, vai
+       escurecendo SUAVE até PRETO na base — os recomendados ficam na parte
+       mais escura, sem aquela faixa clara estranha no meio. */
+    background:
+        linear-gradient(to right,  rgba(10,10,10,0.88) 0%, rgba(10,10,10,0.45) 48%, rgba(10,10,10,0) 92%),
+        linear-gradient(to bottom, rgba(10,10,10,0.10) 0%, rgba(10,10,10,0.35) 40%, rgba(10,10,10,0.80) 72%, rgba(10,10,10,1) 92%);
+}
+.detail-screen > .detail-hero,
+.detail-screen > .dh-similar,
+.detail-screen > .dh-similar-lazy { position: relative; z-index: 1; }
+.detail-hero {
+    position: relative;
+    min-height: clamp(300px, 60vh, 560px);   /* responsivo (não estoura no celular deitado) */
+    background: transparent;                  /* o .detail-bg (tela cheia) aparece atrás */
+}
+.detail-hero .dh-bg {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    bottom: 0;                 /* extends until end of hero (no hard cut) */
+    background: #0a0a0a center/cover no-repeat;
+    z-index: 0;
+    -webkit-transform: translateZ(0);   /* camada de GPU (gradientes do hero) */
+    transform: translateZ(0);
+}
+.detail-hero .dh-bg::after {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background:
+        linear-gradient(to right,  rgba(10,10,10,0.95) 0%, rgba(10,10,10,0.55) 55%, rgba(10,10,10,0.05) 100%),
+        linear-gradient(to bottom, rgba(10,10,10,0) 30%, rgba(10,10,10,0.85) 80%, rgba(10,10,10,1) 100%);
+}
+.detail-hero .dh-back {
+    position: absolute;
+    top: 24px;
+    left: 24px;
+    z-index: 5;
+    padding: 10px 18px;
+    background: rgba(0,0,0,0.55);
+    border: 2px solid transparent;
+    border-radius: 10px;
+    color: #fff;
+    font-size: 16px;
+    cursor: pointer;
+}
+.detail-hero .dh-back:focus { border-color: #10b981; }
+
+/* "← Voltar" como 1ª pílula da sidebar (categorias) — herda .cat-pill;
+   cor levemente apagada pra ler como "voltar", não como categoria. */
+.cat-sidebar .cat-pill-back { color: #cfcfcf; }
+
+/* "← Voltar" do settings (não tem sidebar) — pílula própria no topo. */
+.settings-screen .settings-back {
+    position: absolute;        /* canto sup. direito do header (zona vazia) —
+                                  não empurra o header pro layout fixo (top:130) */
+    top: 36px;
+    right: 40px;
+    z-index: 5;
+    padding: 10px 18px;
+    background: rgba(20, 20, 20, 0.85);
+    border: 2px solid transparent;
+    border-radius: 10px;
+    color: #f5f5f1;
+    text-decoration: none;
+    font-size: 16px;
+}
+.settings-screen .settings-back:focus { border-color: #10b981; outline: none; }
+
+.detail-hero .dh-content {
+    position: relative;
+    z-index: 1;
+    padding: 66px clamp(24px, 5vw, 60px) clamp(20px, 3vh, 30px);
+    max-width: 760px;
+}
+.detail-hero h1 {
+    color: #fff;
+    font-size: clamp(28px, 5vw, 56px);
+    font-weight: 800;
+    line-height: 1.05;
+    margin-bottom: clamp(12px, 2vh, 22px);
+}
+.detail-hero .dh-meta {
+    margin-bottom: 22px;
+}
+.detail-hero .dh-meta > * {
+    margin-right: 14px;       /* spacing without flex gap */
+    margin-bottom: 6px;
+    vertical-align: middle;
+}
+.detail-hero .dh-badge {
+    background: rgba(0,0,0,0.6);
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 8px;
+    padding: 6px 14px;
+    color: #fff;
+    font-size: 18px;
+    font-weight: 600;
+    display: inline-block;
+}
+.detail-hero .dh-badge svg { vertical-align: middle; margin-right: 6px; }
+.detail-hero .dh-genre {
+    color: #ddd;
+    font-size: 17px;
+}
+.detail-hero .dh-plot {
+    color: #f0f0f0;
+    font-size: 17px;
+    line-height: 1.55;
+    max-width: 700px;
+    margin-bottom: 30px;
+    /* text-shadow removido — texto fica sobre gradient escuro do dh-bg::after,
+       já é legível sem shadow. Em TV antiga, text-shadow em texto longo
+       (sinopse) repinta cada scroll → custa CPU. */
+}
+.detail-hero .dh-buttons {
+    max-width: 360px;
+}
+.detail-hero .dh-buttons > * { margin-bottom: 12px; }
+.btn-tv {
+    display: block;
+    padding: 16px 28px;
+    background: rgba(20, 20, 20, 0.92);
+    border: 3px solid transparent;
+    border-radius: 12px;
+    color: #f5f5f1;
+    font-size: 17px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    text-decoration: none;
+}
+.btn-tv:focus {
+    background: #fff;
+    color: #1a1a1a;
+}
+.btn-tv.is-primary {
+    background: #fff;
+    color: #1a1a1a;
+}
+.btn-tv.is-primary:focus {
+    background: #fff;
+    color: #1a1a1a;
+    border-color: #10b981;
+}
+.btn-tv .btn-icon {
+    width: 22px; height: 22px;
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 14px;
+}
+
+/* Series-specific: seasons + episodes section */
+.detail-seasons {
+    position: relative;
+    z-index: 2;
+    /* No more negative margin — caused overlap with the "Favoritos" button
+     * on LG WebOS where text "REMOVER DOS FAVORITOS" wraps taller. */
+    padding: 30px 60px 60px;
+    background: transparent;
+}
+.detail-seasons h2 {
+    color: #fff;
+    font-size: 30px;
+    font-weight: 800;
+    margin-bottom: 18px;
+}
+.season-pills {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 8px;
+    margin-bottom: 24px;
+    scrollbar-width: none;
+    white-space: nowrap;
+}
+.season-pills::-webkit-scrollbar { display: none; }
+.season-pill {
+    display: inline-block;
+    margin-right: 12px;     /* spacing without flex gap */
+    padding: 14px 30px;
+    background: rgba(20, 20, 20, 0.92);
+    border: 2px solid transparent;
+    border-radius: 12px;
+    color: #f5f5f1;
+    font-size: 17px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+}
+.season-pill:focus {
+    outline: none;
+    background: #fff;
+    color: #1a1a1a;
+}
+.season-pill.is-active {
+    background: #fff;
+    color: #1a1a1a;
+}
+
+.episode-row {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 12px;
+    scrollbar-width: none;
+    white-space: nowrap;
+}
+.episode-row::-webkit-scrollbar { display: none; }
+.episode-tile {
+    display: inline-block;
+    width: clamp(180px, 24vw, 280px);
+    margin-right: 14px;     /* spacing without flex gap */
+    vertical-align: top;
+    color: #f5f5f1;
+    text-decoration: none;
+    cursor: pointer;
+}
+.episode-tile .ep-img {
+    width: 100%;
+    padding-bottom: 56.25%; /* 16:9 */
+    height: 0;
+    background: #1a1a1a center/cover no-repeat;
+    border: 3px solid transparent;
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+}
+.episode-tile .ep-img .ep-fallback {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: #555; font-size: 30px; font-weight: 700;
+}
+/* Fallback "EP n" some SÓ quando a capa carregou de verdade (preload JS) */
+.episode-tile .ep-img.is-loaded .ep-fallback { display: none; }
+.episode-tile .ep-label {
+    margin-top: 10px;
+    font-size: 15px;
+    color: #ddd;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.episode-tile:focus { outline: none; }
+.episode-tile:focus .ep-img {
+    border-color: #fff;
+}
+
+/* Badge "✓ assistido" no canto superior direito do episódio.
+ * Sem display:flex pra centralizar (Maple quebra) — line-height = altura
+ * do círculo + text-align:center centraliza o ✓ universalmente. */
+.episode-tile .ep-watched {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 28px;
+    height: 28px;
+    background: rgba(0, 200, 80, 0.92);
+    color: #fff;
+    border-radius: 50%;
+    text-align: center;
+    line-height: 28px;
+    font-size: 16px;
+    font-weight: bold;
+    box-sizing: border-box;
+}
+/* Barra de progresso na base do episódio (pra cenas em pause) */
+.episode-tile .ep-progress {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.2);
+    overflow: hidden;
+}
+.episode-tile .ep-progress-fill {
+    height: 100%;
+    background: #10b981;
+    /* width: NN% — vem do inline style com valor dinâmico */
+}
+
+/* =====================================================
+ * SETTINGS — sidebar + content (zero flex/gap; Maple compat)
+ * ===================================================== */
+.settings-screen {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    box-sizing: border-box;
+    overflow: hidden;
+    padding: 36px 40px 24px;
+}
+.settings-header {
+    margin-bottom: 22px;
+}
+.settings-header h1 {
+    color: #fff;
+    font-size: 40px;
+    font-weight: 800;
+    margin: 0 0 6px;
+    letter-spacing: 0.5px;
+}
+.settings-header h1::after {
+    content: "";
+    display: block;
+    width: 64px;
+    height: 4px;
+    background: #10b981;
+    border-radius: 3px;
+    margin-top: 10px;
+}
+.settings-sub {
+    color: #888;
+    font-size: 16px;
+    font-weight: 400;
+}
+.settings-layout {
+    position: absolute;
+    left: 40px;
+    right: 40px;
+    top: 130px;             /* abaixo do header */
+    bottom: 24px;
+}
+.settings-menu {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: clamp(200px, 24vw, 320px);
+    overflow-y: auto;
+    padding-right: 6px;
+}
+.settings-menu .sm-item {
+    display: block;
+    padding: 16px 18px;
+    margin-bottom: 8px;
+    background: rgba(20, 20, 20, 0.85);
+    border: 2px solid transparent;
+    border-radius: 12px;
+    color: #f5f5f1;
+    font-size: 17px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    box-sizing: border-box;
+    width: 100%;
+    text-align: left;
+    font-family: inherit;
+    -webkit-appearance: none;
+    appearance: none;
+}
+.settings-menu .sm-item .sm-ico {
+    display: inline-block;
+    vertical-align: middle;
+    width: 24px;
+    height: 24px;
+    margin-right: 14px;
+    color: #10b981;
+}
+.settings-menu .sm-item .sm-label {
+    display: inline-block;
+    vertical-align: middle;
+}
+.settings-menu .sm-item:focus {
+    outline: none;
+    background: #fff;
+    color: #1a1a1a;
+    border-color: #10b981;
+}
+.settings-menu .sm-item:focus .sm-ico { color: #10b981; }
+.settings-menu .sm-item.is-active {
+    background: rgba(16,185,129, 0.12);
+    border-color: #10b981;
+    color: #fff;
+}
+.settings-menu .sm-item.is-active .sm-ico { color: #10b981; }
+.settings-menu .sm-logout {
+    background: transparent;
+    border: 2px solid #10b981;
+    color: #10b981;
+    margin-top: 18px;
+}
+.settings-menu .sm-logout .sm-ico { color: #10b981; }
+.settings-menu .sm-logout:focus {
+    background: #10b981;
+    color: #fff;
+    border-color: #10b981;
+}
+.settings-menu .sm-logout:focus .sm-ico { color: #fff; }
+
+.settings-content {
+    position: absolute;
+    left: calc(clamp(200px, 24vw, 320px) + 30px);   /* acompanha a .settings-menu + gap */
+    right: 0;
+    top: 0;
+    bottom: 0;
+    overflow-y: auto;
+    padding: 4px 8px 4px 12px;
+}
+.settings-pane .pane-title {
+    color: #fff;
+    font-size: 26px;
+    font-weight: 700;
+    margin: 0 0 6px;
+}
+.settings-pane .pane-sub {
+    color: #999;
+    font-size: 15px;
+    line-height: 1.6;
+    margin: 0 0 22px;
+}
+.settings-pane .pane-sub strong { color: #f5f5f1; font-weight: 600; }
+.settings-pane .pane-section {
+    margin-bottom: 26px;
+}
+.settings-pane .pane-section-title {
+    color: #aaa;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    font-weight: 600;
+    margin-bottom: 12px;
+}
+
+/* Info cards — usuário, vencimento, etc */
+.info-cards {
+    font-size: 0;             /* kill whitespace inline-block */
+    line-height: 0;
+}
+.info-card {
+    display: inline-block;
+    vertical-align: top;
+    width: 49%;
+    margin: 0 1% 10px 0;
+    padding: 18px 22px;
+    background: rgba(20, 20, 20, 0.85);
+    border: 1px solid #2a2a2a;
+    border-radius: 12px;
+    box-sizing: border-box;
+    font-size: 16px;
+    line-height: 1.4;
+}
+.info-card .ic-label {
+    color: #888;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+.info-card .ic-value {
+    color: #fff;
+    font-size: 20px;
+    font-weight: 600;
+    word-break: break-all;
+}
+.info-card .ic-value.ic-user { color: #10b981; }
+.info-card .ic-extra {
+    margin-top: 4px;
+    color: #aaa;
+    font-size: 13px;
+}
+.info-card .ic-extra.is-warn { color: #ffb84d; }
+
+/* opt-row — escolha de player (Nativo/HTML5) */
+.opt-row {
+    font-size: 0;
+    line-height: 0;
+}
+.opt-btn {
+    display: inline-block;
+    vertical-align: top;
+    width: 49%;
+    margin: 0 1% 10px 0;
+    padding: 18px;
+    background: rgba(20, 20, 20, 0.85);
+    border: 2px solid transparent;
+    border-radius: 12px;
+    color: #f5f5f1;
+    font-size: 17px;
+    font-weight: 600;
+    cursor: pointer;
+    box-sizing: border-box;
+    text-align: center;
+    font-family: inherit;
+    -webkit-appearance: none;
+    appearance: none;
+}
+.opt-btn:focus {
+    outline: none;
+    background: #fff;
+    color: #1a1a1a;
+    border-color: #10b981;
+}
+.opt-btn.is-active {
+    background: rgba(16,185,129, 0.15);
+    border-color: #10b981;
+    color: #fff;
+}
+
+/* action-btn — limpar cache, etc */
+.action-btn {
+    display: block;
+    width: 100%;
+    padding: 18px 22px;
+    margin-bottom: 12px;
+    background: rgba(20, 20, 20, 0.85);
+    border: 2px solid transparent;
+    border-radius: 12px;
+    color: #f5f5f1;
+    cursor: pointer;
+    box-sizing: border-box;
+    text-align: left;
+    font-family: inherit;
+    -webkit-appearance: none;
+    appearance: none;
+}
+.action-btn .ab-title {
+    color: #fff;
+    font-size: 17px;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+.action-btn .ab-sub {
+    color: #888;
+    font-size: 14px;
+    line-height: 1.4;
+}
+.action-btn:focus {
+    outline: none;
+    background: #fff;
+    border-color: #10b981;
+}
+.action-btn:focus .ab-title { color: #1a1a1a; }
+.action-btn:focus .ab-sub { color: #555; }
+
+/* PIN flow — entrada sequencial em settings (sem input nativo) */
+.pin-flow {
+    background: rgba(20, 20, 20, 0.6);
+    border: 1px solid #2a2a2a;
+    border-radius: 14px;
+    padding: 28px 30px 22px;
+    max-width: 540px;
+}
+.pin-flow .pf-step {
+    color: #888;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 6px;
+}
+.pin-flow .pf-label {
+    color: #fff;
+    font-size: 22px;
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: 18px;
+}
+.pin-flow .al-pin-display {
+    margin-bottom: 14px;
+}
+.pin-flow .al-keypad {
+    margin-top: 18px;
+    margin-bottom: 0;
+}
+.pin-flow .al-key {
+    height: 54px;
+    line-height: 50px;
+    font-size: 20px;
+}
+.pin-msg {
+    margin: 14px 0;
+    padding: 12px 16px;
+    border-radius: 10px;
+    font-size: 15px;
+    min-height: 22px;
+    color: #aaa;
+}
+.pin-msg.is-ok  { background: rgba(0,200,80,0.12);  border: 1px solid #00c850; color: #6fdf94; }
+.pin-msg.is-err { background: rgba(16,185,129,0.12); border: 1px solid #10b981; color: #ff8c95; }
+
+/* Botão primary — vermelho do app */
+.btn-primary {
+    display: inline-block;
+    padding: 14px 32px;
+    background: #10b981;
+    border: 2px solid #10b981;
+    border-radius: 12px;
+    color: #fff;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    text-decoration: none;
+    font-family: inherit;
+    -webkit-appearance: none;
+    appearance: none;
+}
+.btn-primary:focus {
+    outline: none;
+    background: #fff;
+    color: #10b981;
+}
+
+/* Legacy compat — não usado mais mas mantém pra não quebrar nada antigo */
+.settings-option {
+    display: block;
+    padding: 18px 24px;
+    background: rgba(20, 20, 20, 0.85);
+    border: 2px solid transparent;
+    border-radius: 12px;
+    color: #f5f5f1;
+    font-size: 17px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-bottom: 10px;
+    text-decoration: none;
+}
+.settings-option:focus {
+    outline: none;
+    background: #fff;
+    color: #1a1a1a;
+}
+.settings-option.is-active {
+    background: #fff;
+    color: #1a1a1a;
+}
+.settings-info-block {
+    background: rgba(20, 20, 20, 0.85);
+    border-radius: 12px;
+    padding: 24px;
+    color: #ddd;
+    font-size: 15px;
+    line-height: 1.7;
+}
+.settings-info-block strong { color: #fff; }
+.settings-info-block .row {
+    display: flex; justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.settings-info-block .row:last-child { border: 0; }
+
+/* =====================================================
+ * Live TV channel grid (matches movies/series sidebar layout)
+ * ===================================================== */
+.channel-grid-tv {
+    /* inline-block fallback for old TVs without grid support */
+    font-size: 0;
+    line-height: 0;
+    margin-right: -14px;
+}
+.channel-tile-tv {
+    display: inline-block;
+    vertical-align: top;
+    position: relative;
+    width: clamp(230px, 20vw, 320px);
+    min-height: 92px;
+    margin: 0 10px 12px 0;
+    padding: 14px 18px;
+    background-color: #181820;
+    background-image: linear-gradient(150deg, rgba(52,52,64,0.45), rgba(18,18,24,0.12));
+    border: 3px solid transparent;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    color: #f5f5f1;
+    text-decoration: none;
+    cursor: pointer;
+    min-height: 56px;
+    font-size: 14px;
+    line-height: 1.3;
+    box-sizing: border-box;
+}
+.channel-tile-tv .ct-logo {
+    display: inline-block;
+    vertical-align: middle;
+    width: 76px;
+    height: 76px;
+    margin-right: 16px;
+    border-radius: 8px;
+    background: #2a2a2a center/contain no-repeat;
+    text-align: center;
+    line-height: 56px;
+}
+.channel-tile-tv .ct-logo .ct-fallback { font-size: 26px; }
+/* Fallback 📺 some SÓ quando o logo carregou de verdade (preload JS) */
+.channel-tile-tv .ct-logo.is-loaded .ct-fallback { display: none; }
+.channel-tile-tv .ct-info {
+    display: inline-block;
+    vertical-align: middle;
+    width: calc(100% - 100px);
+}
+.channel-tile-tv .ct-num {
+    color: #aaa;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 2px;
+}
+.channel-tile-tv .ct-name {
+    color: #f5f5f1;
+    font-size: 18px;
+    font-weight: 500;
+    /* nome completo: até 2 linhas (antes cortava com "…" em 1 linha) */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    white-space: normal;
+    line-height: 1.25;
+}
+.channel-tile-tv:focus {
+    outline: none;
+    background: #fff;
+    color: #1a1a1a;
+    box-shadow: 0 0 0 2px rgba(16,185,129, 0.5), 0 0 6px rgba(16,185,129, 0.25);  /* blur reduzido 22px->6px (canal focado repinta a cada tecla) */
+}
+.channel-tile-tv:focus .ct-num { color: #555; }
+.channel-tile-tv:focus .ct-name { color: #1a1a1a; }
+
+/* ===== Grade de canais no PC/celular: preenche a LARGURA TODA (sem espaço
+   preto à direita). Grid responsivo: 3 colunas no PC, 2 no celular — sempre
+   esticando pra caber até o fim. As TVs antigas (body.ui-tv) seguem no
+   inline-block fixo de cima; o seletor :not() é ignorado nelas. ===== */
+body:not(.ui-tv) .channel-grid-tv {
+    display: grid;
+    /* encaixa quantas colunas de >=190px couberem, SEMPRE esticando pra
+       preencher a largura toda (1fr) — DENSO, igual os outros players:
+       PC = 4-5 colunas; Android/tablet = 3; celular estreito = 2. Sempre se
+       ajustando ao tamanho da tela, sem espaço preto. */
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 10px;
+    font-size: 14px;
+    line-height: 1.3;
+    margin-right: 0;
+}
+body:not(.ui-tv) .channel-tile-tv {
+    width: auto;
+    margin: 0;
+    min-height: 0;
+    padding: 10px 12px;
+}
+@media (max-width: 560px) {
+    body:not(.ui-tv) .channel-grid-tv { grid-template-columns: repeat(auto-fill, minmax(135px, 1fr)); gap: 8px; }
+}
+
+/* Coração de favoritar (canto sup. dir. do tile do canal). Click no PC/touch;
+   na TV/Roku é a tecla "*" (Opções) com o canal selecionado. */
+.ct-fav {
+    position: absolute;
+    top: 8px; right: 8px;
+    width: 34px; height: 34px;
+    padding: 0; border: 0; border-radius: 50%;
+    background: rgba(0, 0, 0, 0.5);
+    cursor: pointer; z-index: 3;
+    display: inline-flex; align-items: center; justify-content: center;
+    line-height: 0;
+}
+.ct-fav svg { width: 18px; height: 18px; fill: none; stroke: #fff; }
+.ct-fav:hover { background: rgba(0, 0, 0, 0.78); }
+.ct-fav.is-fav { background: rgba(16,185,129, 0.18); }
+.ct-fav.is-fav svg { fill: #10b981; stroke: #10b981; }
+body.ui-tv .ct-fav { width: 42px; height: 42px; top: 10px; right: 10px; }
+body.ui-tv .ct-fav svg { width: 22px; height: 22px; }
+
+/* =====================================================
+ * TV ao Vivo — LISTA (1 canal por linha) + painel de EPG ao lado.
+ * (Antes: grade com vários canais por linha, que tumultuava e tinha o bug
+ *  do foco fugindo na horizontal. Em lista não há nav horizontal de canal.)
+ * ===================================================== */
+.live-split { display: flex; align-items: flex-start; gap: 16px; }
+.live-split #content-grid { flex: 1 1 auto; min-width: 0; margin-right: 0; }
+/* no PC a grade de canais é display:grid (várias colunas) — na lista força 1
+   coluna (specificity > body:not(.ui-tv) .channel-grid-tv) */
+body:not(.ui-tv) .live-split .channel-grid-tv { display: block; }
+/* canal vira LINHA cheia (seletores qualificados p/ vencer a regra de grade
+   body.ui-tv .channel-tile-tv{width:400px} e body:not(.ui-tv) ...{width:auto},
+   que têm specificity maior que um simples .live-split .channel-tile-tv) */
+body.ui-tv .live-split .channel-tile-tv,
+body:not(.ui-tv) .live-split .channel-tile-tv {
+    display: flex; align-items: center;
+    width: 100%; min-height: 0; margin: 0 0 8px; padding: 11px 16px;
+    box-sizing: border-box; vertical-align: top;
+}
+.live-split .channel-tile-tv .ct-logo { flex: 0 0 auto; }
+.live-split .channel-tile-tv .ct-info { display: block; width: auto; flex: 1 1 auto; min-width: 0; }
+.live-split .channel-tile-tv .ct-name { -webkit-line-clamp: 1; }
+
+.live-epg {
+    flex: 0 0 38%; max-width: 540px; box-sizing: border-box;
+    position: -webkit-sticky; position: sticky; top: 6px;
+    background: rgba(20, 22, 26, 0.72); border-radius: 14px;
+    padding: 18px 20px; min-height: 220px;
+}
+.live-epg .epg-ch { font-size: 22px; font-weight: 800; margin-bottom: 4px; color: #fff; }
+.live-epg .epg-sub { color: #93a; color: #9aa6a2; font-size: 13px; margin-bottom: 12px; }
+.live-epg .epg-item { padding: 9px 0; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.live-epg .epg-item.is-now .epg-title { color: #10B981; }
+.live-epg .epg-time { color: #8c968f; font-size: 13px; }
+.live-epg .epg-title { color: #f0f0ec; font-size: 16px; font-weight: 600; }
+.live-epg .epg-empty { color: #889; padding: 24px 0; text-align: center; }
+.live-epg .epg-play {
+    display: block; width: 100%; margin: 12px 0 18px; padding: 14px;
+    background: #10B981; color: #04231a; border: 0; border-radius: 10px;
+    font-size: 17px; font-weight: 800; cursor: pointer; text-align: center;
+}
+.live-epg .epg-play:focus { outline: none; box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.65); background: #0c9a6c; }
+body.ui-tv .live-epg { flex-basis: 36%; max-width: none; padding: 22px 24px; }
+body.ui-tv .live-epg .epg-ch { font-size: 28px; }
+body.ui-tv .live-epg .epg-title { font-size: 19px; }
+body.ui-tv .live-epg .epg-time { font-size: 15px; }
+body.ui-tv .live-epg .epg-play { font-size: 21px; padding: 16px; }
+/* celular: EPG embaixo da lista */
+@media (max-width: 760px) {
+    .live-split { flex-direction: column; }
+    .live-epg { flex-basis: auto; width: 100%; max-width: none; position: static; }
+}
+
+/* =====================================================
+ * Search screen + Virtual keyboard
+ * ===================================================== */
+.search-screen {
+    width: 100%; height: 100%;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+}
+.search-topbar {
+    flex: 0 0 auto;
+    display: flex; align-items: center; gap: 16px;
+    padding: 18px 28px;
+}
+.search-title {
+    color: #fff; font-size: 26px; font-weight: 700;
+}
+.search-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 0 28px 28px;
+    max-width: 1200px;
+    width: 100%;
+    margin: 0 auto;
+}
+.search-form {
+    display: flex; gap: 12px; align-items: stretch;
+    margin-bottom: 18px;
+}
+.search-form input,
+.search-form .search-trigger {
+    flex: 1 1 auto;
+    padding: 18px 22px;
+    background: rgba(20, 20, 20, 0.92);
+    border: 3px solid #2a2a2a;
+    border-radius: 14px;
+    color: #fff;
+    font-size: 22px;
+    font-family: inherit;
+    min-width: 0;
+    text-align: left;
+    cursor: pointer;
+    box-sizing: border-box;
+    -webkit-appearance: none;
+    appearance: none;
+}
+.search-form input:focus,
+.search-form .search-trigger:focus {
+    outline: none;
+    border-color: #10b981;
+    background: #1a1a1a;
+}
+.search-form .search-trigger .vkb-display {
+    color: #fff;
+    word-break: break-all;
+    line-height: 28px;
+    min-height: 28px;
+}
+.search-form .search-trigger .vkb-display.vkb-empty {
+    color: #777;
+}
+.search-form .search-go {
+    padding: 0 28px;
+    background: #10b981;
+    border: 3px solid transparent;
+    border-radius: 14px;
+    color: #fff;
+    font-size: 18px;
+    font-weight: 700;
+    cursor: pointer;
+}
+.search-form .search-go:focus {
+    border-color: #fff;
+}
+/* <input> real (PC/celular) — herda a caixa de .search-form input / .tv-field
+   input; aqui só o cursor (vira esmeralda pelo swap) e o placeholder. */
+input.vkb-native { -webkit-appearance: none; appearance: none; caret-color: #10b981; }
+input.vkb-native::placeholder { color: #777; opacity: 1; }
+
+/* === On-screen keyboard (V-Play STB pattern) ===
+ * Modal overlay, focus trapped, no transitions / transforms — TV-light. */
+.kbd-modal {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.85);
+    z-index: 10000;
+}
+.kbd-card {
+    position: absolute;
+    left: 0; right: 0;
+    bottom: 0;
+    padding: 16px 24px 24px;
+    background: rgba(15, 15, 15, 0.97);
+    border-top: 1px solid #2a2a2a;
+}
+/* Header buttons removed — Cancelar/OK now live inside the function row
+ * so the user never has to scroll up across the whole keyboard to reach
+ * them. They sit right next to the letter keys. */
+
+.kbd-preview {
+    background: rgba(0, 0, 0, 0.5);
+    border: 2px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    padding: 12px 18px;
+    margin-bottom: 12px;
+    min-height: 52px;
+}
+.kbd-preview-label {
+    color: #aaa;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    margin-bottom: 2px;
+}
+.kbd-preview-text {
+    color: #fff;
+    font-size: 20px;
+    font-family: 'Segoe UI Mono', 'Menlo', monospace;
+    word-break: break-all;
+    min-height: 26px;
+}
+.kbd-preview-text .kbd-cursor { color: #10b981; }
+
+.kbd-helper {
+    text-align: center;
+    margin-bottom: 10px;
+}
+.kbd-helper .kbd-helper-key { margin: 0 5px; }
+.kbd-helper-key {
+    background: rgba(60, 60, 60, 0.7);
+    border: 2px solid transparent;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 16px;
+    padding: 10px 20px;
+    cursor: pointer;
+    font-family: inherit;
+}
+.kbd-helper-key:focus {
+    outline: none;
+    background: #fff;
+    color: #1a1a1a;
+}
+
+.kbd-letters {
+    margin: 0 auto 10px;
+    max-width: 1100px;
+}
+/* Fileira numérica fixa no topo do teclado (mesma largura das letras) */
+.kbd-nums {
+    margin: 0 auto 8px;
+    max-width: 1100px;
+}
+.kbd-row {
+    /* inline-block fallback for old TVs without grid */
+    font-size: 0;
+    line-height: 0;
+    margin-bottom: 6px;
+    text-align: center;
+    white-space: nowrap;
+}
+.kbd-key {
+    display: inline-block;
+    width: 9.4%;       /* ~10 per row with margins */
+    margin: 0 3px;
+    background: rgba(40, 40, 40, 0.7);
+    border: 2px solid transparent;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 22px;
+    font-weight: 600;
+    height: 56px;
+    cursor: pointer;
+    font-family: inherit;
+    box-sizing: border-box;
+}
+.kbd-key:focus {
+    outline: none;
+    background: #fff;
+    color: #1a1a1a;
+}
+
+.kbd-fn {
+    font-size: 0;
+    line-height: 0;
+    max-width: 1100px;
+    margin: 0 auto;
+    text-align: center;
+}
+.kbd-fn-key, .kbd-fn-space {
+    display: inline-block;
+    margin: 0 3px;
+    background: rgba(60, 60, 60, 0.7);
+    border: 2px solid transparent;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    height: 56px;
+    padding: 0 18px;
+    cursor: pointer;
+    font-family: inherit;
+    vertical-align: middle;
+    box-sizing: border-box;
+}
+.kbd-fn-space { width: 30%; }
+/* Cancel + OK have distinct colors so the user spots them quickly */
+.kbd-fn-cancel { background: rgba(120, 30, 30, 0.85); }
+.kbd-fn-cancel:focus { background: #fff; color: #1a1a1a; }
+.kbd-fn-ok { background: rgba(0, 168, 120, 0.85); padding: 0 22px; }
+.kbd-fn-ok:focus { background: #fff; color: #1a1a1a; }
+.kbd-fn-key:focus, .kbd-fn-space:focus {
+    outline: none;
+    background: #fff;
+    color: #1a1a1a;
+}
+/* =========================================================
+ * AJUSTES SÓ PRA CELULAR (telas estreitas, até 1024px CSS).
+ * NÃO afeta TV (largura CSS ~1440) nem desktop (> 1024). A home já é
+ * responsiva via clamp(); aqui acertamos sidebar, teclado e grades no celular.
+ * ========================================================= */
+@media (max-width: 1024px), (max-height: 600px) {
+    /* Sidebar de categorias: MAIS LARGA no celular (32vw vs 24vw da base) pra
+       caber o nome inteiro (ex.: "Filmes | Lançamentos" deixa de virar
+       "Lança..."), com fonte/padding menores. Largura SEMPRE acoplada com o
+       left do .sidebar-content — mudar um = mudar o outro. */
+    .cat-sidebar { width: clamp(230px, 32vw, 310px); padding: 14px 8px 14px 12px; }
+    .sidebar-content { left: clamp(230px, 32vw, 310px); padding: 16px 14px 20px; }
+    .cat-sidebar .cat-pill { font-size: 15px; padding: 12px 38px 12px 14px; margin-bottom: 7px; }
+    .cat-sidebar .cat-pill .cat-count { font-size: 13px; right: 12px; margin-top: -9px; }
+    .sidebar-content .sc-title { font-size: 22px; margin-bottom: 14px; }
+
+    /* Mais densidade nas grades de canais no celular — 3 por linha
+       (tile + logo menores; antes cabiam só 2 e sobrava espaço) */
+    .channel-tile-tv { width: clamp(170px, 30vw, 235px); padding: 8px 10px; min-height: 66px; margin: 0 8px 8px 0; }
+    .channel-tile-tv .ct-logo { width: 54px; height: 54px; line-height: 54px; margin-right: 10px; }
+    .channel-tile-tv .ct-logo .ct-fallback { font-size: 24px; }
+    .channel-tile-tv .ct-info { width: calc(100% - 70px); }
+    .channel-tile-tv .ct-num { font-size: 11px; margin-bottom: 0; }
+    .channel-tile-tv .ct-name { font-size: 14px; }
+
+    /* Teclado virtual menor — cabe na altura do celular deitado (antes só <=720px) */
+    .kbd-card { padding: 10px 12px 14px; }
+    .kbd-preview { min-height: 0; padding: 8px 12px; margin-bottom: 8px; }
+    .kbd-preview-text { font-size: 17px; min-height: 20px; }
+    .kbd-helper { margin-bottom: 6px; }
+    .kbd-row { margin-bottom: 4px; }
+    .kbd-key { height: 42px; font-size: 16px; margin: 0 2px; }
+    .kbd-helper-key { font-size: 14px; padding: 8px 14px; }
+    .kbd-fn-key, .kbd-fn-space { height: 42px; font-size: 13px; padding: 0 12px; }
+
+    /* LOGIN cabe na altura do celular deitado — sem precisar rolar pra ver os campos */
+    /* (Login compacto fica num bloco @media mais abaixo, DEPOIS da base do
+       login — senão a base, definida adiante no arquivo, sobrescreveria.) */
+
+    /* Detalhe de filme/série compacto — ver o botão e os episódios sem rolar tanto */
+    .detail-hero { min-height: 0; }
+    .detail-hero .dh-content { padding: 48px 16px 14px; max-width: 100%; }
+    .detail-hero h1 { font-size: clamp(22px, 5vw, 34px); margin-bottom: 6px; }
+    .detail-hero .dh-back { top: 10px; left: 10px; padding: 6px 12px; font-size: 13px; }
+    .detail-hero .dh-meta { margin-bottom: 10px; }
+    .detail-hero .dh-badge { font-size: 13px; padding: 4px 10px; }
+    .detail-hero .dh-genre { font-size: 13px; }
+    .detail-hero .dh-plot { font-size: 13px; line-height: 1.4; }
+
+    /* Topbar (Favoritos / listas) e tela de busca compactas no celular —
+       título 26px ficava gigante. */
+    .grid-topbar { padding: 10px 14px; gap: 10px; }
+    .grid-topbar .gt-title { font-size: 18px; }
+    .grid-topbar .gt-time { font-size: 13px; }
+    .search-topbar { padding: 10px 14px; gap: 10px; }
+    .search-title { font-size: 18px; }
+    .grid-topbar .gt-back,
+    .search-topbar .gt-back { padding: 6px 12px; font-size: 13px; }
+    .search-body { padding: 0 14px 14px; }
+    .search-form { gap: 8px; margin-bottom: 12px; }
+    .search-form input,
+    .search-form .search-trigger { padding: 10px 14px; font-size: 16px; border-width: 2px; border-radius: 10px; }
+    .search-form .search-trigger .vkb-display { line-height: 20px; min-height: 20px; }
+    .search-form .search-go { padding: 0 16px; font-size: 14px; border-width: 2px; border-radius: 10px; }
+
+    /* Pôsteres (Favoritos e resultados de busca) menores — 180×270 da TV
+       ficava gigante no celular. */
+    .poster-grid { margin-right: -10px; }
+    .poster-tile { width: 124px; height: 186px; margin: 0 10px 10px 0; border-width: 2px; }
+    .poster-tile .poster-name { font-size: 11px; padding: 14px 6px 6px; }
+
+    /* Configurações compacta — header 40px + menu largo tomavam a tela. */
+    .settings-screen { padding: 14px 16px; }
+    .settings-screen .settings-back { top: 14px; right: 16px; padding: 6px 12px; font-size: 13px; }
+    .settings-header { margin-bottom: 12px; }
+    .settings-header h1 { font-size: 24px; }
+    .settings-header h1::after { width: 44px; height: 3px; margin-top: 6px; }
+    .settings-sub { font-size: 12px; }
+    .settings-layout { left: 16px; right: 16px; top: 84px; bottom: 14px; }
+    /* menu e content acoplados (mesmo clamp) */
+    .settings-menu { width: clamp(160px, 30vw, 250px); }
+    .settings-content { left: calc(clamp(160px, 30vw, 250px) + 14px); padding: 2px 6px; }
+    .settings-menu .sm-item { padding: 10px 12px; font-size: 14px; margin-bottom: 6px; }
+    .settings-menu .sm-item .sm-ico { width: 18px; height: 18px; margin-right: 10px; }
+    .settings-menu .sm-logout { margin-top: 12px; }
+    .settings-pane .pane-title { font-size: 19px; }
+    .settings-pane .pane-sub { font-size: 12px; margin-bottom: 12px; }
+    .settings-pane .pane-section { margin-bottom: 16px; }
+    .settings-pane .pane-section-title { font-size: 11px; }
+    .info-card { padding: 12px 14px; }
+    .info-card .ic-label { font-size: 11px; }
+    .info-card .ic-value { font-size: 16px; }
+    .info-card .ic-extra { font-size: 11px; }
+}
+
+.search-results { margin-top: 8px; }
+
+/* =====================================================
+ * Login screen redesign — TV-cinematic, in-your-face,
+ * not a tiny web form lost in the middle of the screen.
+ * ===================================================== */
+/* Login: usa "ghost element" pra centralizar (compat com Tizen 2.x / J series).
+   flexbox com justify-content quebra em WebKit antigo; ghost+inline-block sempre funciona. */
+.tv-login-screen {
+    width: 100%;
+    min-height: 100%;
+    /* Login ANCORADO NO TOPO (antes centralizava no meio) + FIXO: os campos ficam no
+       alto e o que se digita aparece na barra de preview (#zx-ime-preview) logo acima
+       do teclado — o cliente não precisa enxergar o campo atrás do teclado. */
+    padding: clamp(18px, 5vh, 56px) 20px 28px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+}
+/* Removido: era um 2º gradiente full-screen SOBRE o .bg-diamonds (já mostra o
+   brilho esmeralda atrás). Dois gradientes empilhados deixavam o login pesado
+   pra repintar na Samsung/LG. */
+.tv-login-screen::before { display: none; }
+.tv-login-screen::after { display: none; }   /* não usamos mais o ghost (agora é flex) */
+.tv-login-card {
+    margin: 0 auto;            /* só centra HORIZONTAL; vertical fica no topo (anti-teclado) */
+    text-align: left;
+    position: relative;
+    z-index: 1;
+    width: 720px;
+    max-width: 92%;
+    padding: 32px 40px;
+    /* Cartão elegante sobre o fundo (cor sólida = fallback TV antiga) */
+    background-color: rgba(18, 18, 24, 0.72);
+    background-image: linear-gradient(160deg, rgba(40, 40, 50, 0.5), rgba(14, 14, 18, 0.3));
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 20px;
+    box-shadow: 0 20px 55px rgba(0, 0, 0, 0.55);
+}
+.tv-login-card .login-brand {
+    text-align: center;
+    margin-bottom: 22px;
+}
+.tv-login-card .login-brand .brand-logo {
+    font-size: 110px;
+    line-height: 1;
+}
+.tv-login-card .login-brand .brand-logo-img {
+    height: clamp(56px, 11vh, 110px);
+    width: auto;
+    margin: 0 auto;
+}
+.tv-login-card h1 {
+    color: #fff;
+    font-size: 38px;
+    font-weight: 800;
+    text-align: center;
+    margin-bottom: 10px;
+    letter-spacing: 0.3px;
+}
+.tv-login-card .login-tagline {
+    color: #aaa;
+    font-size: 18px;
+    text-align: center;
+    margin-bottom: 22px;
+}
+.tv-login-card .tv-field {
+    margin-bottom: 14px;
+}
+/* Barra de PREVIEW no TOPO da tela (Android/login): mostra o rótulo do campo e o
+   texto digitado, pra o cliente ler sem enxergar o campo atrás do teclado. Fica no
+   TOPO (fixa) — bem acima do teclado, que sobrepõe a base. A página fica FIXA
+   (adjustNothing + overflow:hidden). Aparece só enquanto um campo do login tem foco. */
+#zx-ime-preview {
+    position: fixed;
+    left: 0; right: 0; top: 0; bottom: auto;
+    z-index: 2147483646;
+    background: #0d1512;
+    border-bottom: 2px solid #10b981;
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 140px 12px 20px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+}
+/* Botão VOLTAR no canto direito da barra: sai da digitação (fecha o teclado). */
+#zx-ime-preview .zx-imp-back {
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    padding: 9px 18px;
+    border: 2px solid #10b981;
+    border-radius: 10px;
+    background: rgba(16, 185, 129, 0.16);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 800;
+    cursor: pointer;
+    -webkit-user-select: none;
+    user-select: none;
+}
+#zx-ime-preview .zx-imp-label {
+    color: #10b981;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 4px;
+}
+#zx-ime-preview .zx-imp-text {
+    color: #fff;
+    font-size: 22px;
+    line-height: 28px;
+    min-height: 28px;
+    word-break: break-all;
+}
+#zx-ime-preview .zx-imp-empty { color: #10b981; }
+.tv-login-card .tv-field label {
+    display: block;
+    color: #aaa;
+    text-transform: uppercase;
+    font-size: 12px;
+    letter-spacing: 1.5px;
+    margin-bottom: 8px;
+    padding-left: 4px;
+}
+.tv-login-card .tv-field input,
+.tv-login-card .tv-field select,
+.tv-login-card .tv-field .vkb-trigger {
+    display: block;
+    width: 100%;
+    padding: 18px 22px;
+    background: rgba(20, 20, 20, 0.85);
+    color: #fff;
+    border: 3px solid #2a2a2a;
+    border-radius: 14px;
+    font-size: 22px;
+    font-family: inherit;
+    text-align: left;
+    box-sizing: border-box;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+}
+.tv-login-card .tv-field input:focus,
+.tv-login-card .tv-field select:focus,
+.tv-login-card .tv-field .vkb-trigger:focus {
+    border-color: #10b981;
+    background: rgba(2,29,20, 0.9);
+    outline: none;
+}
+.vkb-trigger .vkb-display {
+    display: block;
+    color: #fff;
+    word-break: break-all;
+    min-height: 26px;
+    line-height: 26px;
+}
+.vkb-trigger .vkb-display.vkb-empty {
+    color: #777;
+}
+.tv-login-card .tv-submit {
+    width: 100%;
+    padding: 22px;
+    background: #10b981;
+    color: #fff;
+    border: 3px solid transparent;
+    border-radius: 14px;
+    font-size: 22px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    cursor: pointer;
+    margin-top: 12px;
+    box-shadow: 0 8px 24px rgba(16,185,129, 0.35);
+}
+.tv-login-card .tv-submit:focus {
+    border-color: #fff;
+    outline: none;
+}
+.tv-login-card .tv-error {
+    background: rgba(16,185,129, 0.15);
+    border: 1px solid #10b981;
+    border-radius: 10px;
+    color: #ff8c95;
+    padding: 14px 18px;
+    margin-bottom: 18px;
+    font-size: 16px;
+    text-align: center;
+}
+
+/* ===========================================================
+ * LOGIN COMPACTO pra telas pequenas (celular).
+ * Fica AQUI, depois da base do login, pra vencer por ordem.
+ * Tira a centralização vertical e alinha no topo: aparece
+ * Código -> Usuário -> Senha -> Entrar em ordem, tudo junto,
+ * sem precisar rolar. Não afeta TV (~1440px / alta) nem desktop.
+ * =========================================================== */
+@media (max-width: 1024px), (max-height: 600px) {
+    .tv-login-screen { padding: 10px 16px; }
+    .tv-login-card { width: 480px; padding: 6px 18px; }   /* margin:auto da base centra */
+    .tv-login-card .login-brand { margin-bottom: 6px; }
+    .tv-login-card .login-brand .brand-logo { font-size: 40px; }
+    .tv-login-card .login-brand .brand-logo-img { height: 40px; }
+    .tv-login-card h1 { font-size: 19px; margin-bottom: 2px; }
+    .tv-login-card .login-tagline { font-size: 11px; margin-bottom: 8px; }
+    .tv-login-card .tv-field { margin-bottom: 7px; }
+    .tv-login-card .tv-field label { font-size: 10px; letter-spacing: 1px; margin-bottom: 2px; }
+    .tv-login-card .tv-field input,
+    .tv-login-card .tv-field select,
+    .tv-login-card .tv-field .vkb-trigger { padding: 11px 14px; font-size: 15px; border-width: 2px; border-radius: 10px; }
+    .tv-login-card .vkb-trigger .vkb-display { min-height: 20px; line-height: 20px; }
+    .tv-login-card .tv-submit { padding: 11px; font-size: 15px; border-width: 2px; margin-top: 6px; }
+}
+
+/* ============================================================
+ * Bloqueio Adulto — lock screen, PIN inputs e modal de 1ª vez
+ * ============================================================ */
+
+/* ----- Lock screen (/live/lock/{id}) — combina com estilo do app ----- */
+.adult-lock {
+    height: 100%;
+    width: 100%;
+    display: block;
+    text-align: center;
+    padding: 50px 20px;
+    box-sizing: border-box;
+    /* Cartão mais alto que a tela (celular deitado) tem que ROLAR —
+     * html/body/.app-root são overflow:hidden, então sem isto o teclado
+     * do PIN ficava cortado depois do 1 2 3, sem como digitar. */
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+.al-card {
+    display: inline-block;
+    width: 560px;
+    max-width: 92%;
+    background: rgba(15, 15, 15, 0.95);
+    border: 2px solid rgba(16,185,129, 0.5);
+    border-radius: 18px;
+    padding: 40px 40px 32px;
+    text-align: center;
+    color: #f5f5f1;
+    box-sizing: border-box;
+}
+.al-icon {
+    color: #10b981;
+    margin-bottom: 14px;
+    line-height: 1;
+}
+.al-title {
+    font-size: 28px;
+    font-weight: 800;
+    margin: 0 0 6px;
+    color: #fff;
+    letter-spacing: 0.4px;
+}
+.al-sub {
+    color: #10b981;
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0 0 14px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.al-hint {
+    color: #aaa;
+    font-size: 14px;
+    line-height: 1.6;
+    margin: 0 0 22px;
+}
+.al-hint-default {
+    display: inline-block;
+    margin-top: 4px;
+    font-size: 13px;
+    color: #888;
+}
+.al-hint strong { color: #f5f5f1; }
+.al-error {
+    background: rgba(16,185,129, 0.18);
+    border: 1px solid #10b981;
+    color: #ff8c95;
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin: 0 0 18px;
+    font-size: 15px;
+}
+.al-pin-display {
+    display: block;
+    margin: 6px 0 26px;
+    font-size: 0;
+    text-align: center;
+}
+.al-pin-display.al-shake {
+    animation: al-shake 0.36s linear;
+}
+@keyframes al-shake {
+    10%, 90% { transform: translateX(-2px); }
+    20%, 80% { transform: translateX(4px); }
+    30%, 50%, 70% { transform: translateX(-8px); }
+    40%, 60% { transform: translateX(8px); }
+}
+/* PIN dots — círculos simples (mais clean que caixas) */
+.al-pin-dot {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    margin: 0 10px;
+    background: transparent;
+    border: 2px solid #555;
+    border-radius: 50%;
+    vertical-align: middle;
+}
+.al-pin-dot.is-filled {
+    background: #10b981;
+    border-color: #10b981;
+}
+
+.al-keypad {
+    width: 100%;
+    margin: 0 0 22px;
+    font-size: 0;
+    text-align: center;
+}
+.al-key {
+    display: inline-block;
+    width: 31.5%;
+    margin: 4px 0.75%;
+    height: 60px;
+    line-height: 56px;
+    background: rgba(20, 20, 20, 0.85);
+    border: 2px solid transparent;
+    border-radius: 12px;
+    color: #f5f5f1;
+    font-size: 22px;
+    font-weight: 700;
+    text-align: center;
+    cursor: pointer;
+    box-sizing: border-box;
+    font-family: inherit;
+    -webkit-appearance: none;
+    appearance: none;
+}
+.al-key:focus {
+    outline: none;
+    background: #fff;
+    color: #1a1a1a;
+    border-color: #10b981;
+}
+.al-key-fn {
+    background: rgba(40, 40, 40, 0.85);
+    color: #ddd;
+    font-size: 15px;
+}
+.al-key-ok {
+    background: #10b981;
+    color: #fff;
+    border-color: #10b981;
+}
+.al-key-ok:focus {
+    background: #fff;
+    color: #10b981;
+    border-color: #10b981;
+}
+
+.al-actions {
+    margin-top: 8px;
+    text-align: center;
+    border-top: 1px solid #2a2a2a;
+    padding-top: 18px;
+    font-size: 0;
+}
+.al-actions a {
+    display: inline-block;
+    padding: 10px 18px;
+    margin: 0 6px;
+    color: #aaa;
+    text-decoration: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 500;
+    border: 2px solid transparent;
+}
+.al-actions a:focus {
+    outline: none;
+    background: rgba(16,185,129, 0.12);
+    border-color: #10b981;
+    color: #fff;
+}
+.al-actions .al-settings { color: #ff8c95; }
+
+/* Lock no celular (deitado): DUAS COLUNAS — info (cadeado/título/dica) à
+ * esquerda, teclado à direita, ações embaixo. Tudo cabe na tela SEM ROLAR
+ * (pedido do Leo: "não pode ter que rolar"). O cartão de TV empilhado dava
+ * 800px de altura vs ~410px úteis. Centralização via margin:auto no card
+ * (não corta se um aparelho minúsculo precisar do overflow de segurança). */
+@media (max-width: 1024px), (max-height: 600px) {
+    .adult-lock {
+        display: flex;
+        padding: 8px 12px;
+    }
+    .al-card {
+        margin: auto;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        width: 660px;
+        max-width: 96%;
+        padding: 14px 20px 10px;
+        border-radius: 14px;
+        text-align: center;
+    }
+    .al-info {
+        flex: 1 1 50%;
+        min-width: 230px;
+        box-sizing: border-box;
+        padding-right: 16px;
+    }
+    .al-card form {
+        flex: 1 1 45%;
+        min-width: 230px;
+    }
+    .al-icon { margin-bottom: 4px; }
+    .al-icon svg { width: 30px; height: 30px; }
+    .al-title { font-size: 19px; }
+    .al-sub { font-size: 13px; margin-bottom: 6px; }
+    .al-hint { font-size: 12px; line-height: 1.35; margin-bottom: 0; }
+    .al-hint-default { font-size: 11px; margin-top: 2px; }
+    .al-error { padding: 6px 10px; font-size: 12px; margin: 8px 0 0; }
+    .al-pin-display { margin: 0 0 8px; }
+    .al-pin-dot { width: 12px; height: 12px; margin: 0 7px; }
+    .al-keypad { margin-bottom: 0; }
+    .al-key { height: 38px; line-height: 34px; font-size: 16px; margin: 3px 0.75%; border-radius: 9px; }
+    .al-key-fn { font-size: 12px; }
+    .al-actions {
+        flex: 1 1 100%;
+        margin-top: 8px;
+        padding-top: 8px;
+    }
+    .al-actions a { padding: 5px 12px; font-size: 13px; }
+}
+
+/* ----- PIN form em Configurações ----- */
+.adult-pin-row {
+    margin-bottom: 14px;
+}
+.adult-pin-row label {
+    display: block;
+    color: #aaa;
+    font-size: 14px;
+    margin-bottom: 6px;
+}
+.adult-pin-input {
+    display: block;
+    width: 160px;
+    padding: 14px 16px;
+    background: rgba(20, 20, 20, 0.85);
+    border: 2px solid #2a2a2a;
+    border-radius: 10px;
+    color: #fff;
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: 6px;
+    text-align: center;
+    -webkit-appearance: none;
+    appearance: none;
+}
+.adult-pin-input:focus {
+    outline: none;
+    border-color: #10b981;
+    background: #1a1a1a;
+}
+.adult-pin-msg {
+    margin: 10px 0 14px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 15px;
+    min-height: 18px;
+    color: #aaa;
+}
+.adult-pin-msg.is-ok  { background: rgba(0,200,80,0.12);  border: 1px solid #00c850; color: #6fdf94; }
+.adult-pin-msg.is-err { background: rgba(16,185,129,0.12); border: 1px solid #10b981; color: #ff8c95; }
+
+/* ----- Modal de 1ª vez (avisar sobre senha padrão) ----- */
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.78);
+    z-index: 9000;
+    text-align: center;
+    overflow: auto;
+}
+.modal-card {
+    display: inline-block;
+    width: 520px;
+    max-width: 92%;
+    margin-top: 80px;        /* 10vh substituído por px (Maple compat) */
+    background: #181818;
+    border: 2px solid rgba(16,185,129, 0.6);
+    border-radius: 16px;
+    padding: 28px 32px 24px;
+    color: #f5f5f1;
+    text-align: center;
+}
+.modal-icon {
+    color: #10b981;
+    margin-bottom: 6px;
+}
+.modal-card h2 {
+    font-size: 22px;
+    margin: 4px 0 14px;
+    color: #fff;
+}
+.modal-card p {
+    color: #ddd;
+    font-size: 15px;
+    line-height: 1.5;
+    margin: 0 0 10px;
+}
+.modal-actions {
+    margin-top: 18px;
+    text-align: center;
+    font-size: 0;
+}
+.modal-btn {
+    display: inline-block;
+    padding: 12px 22px;
+    margin: 6px;
+    background: rgba(40, 40, 40, 0.9);
+    border: 2px solid transparent;
+    border-radius: 10px;
+    color: #f5f5f1;
+    font-size: 15px;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+}
+.modal-btn:focus {
+    outline: none;
+    background: #fff;
+    color: #1a1a1a;
+    border-color: #10b981;
+}
+.modal-btn-primary {
+    background: #10b981;
+    color: #fff;
+}
+.modal-btn-primary:focus {
+    background: #fff;
+    color: #10b981;
+}
+
+/* ============================================================
+ * PLAYER TOUCH (celular/tablet) — controles por toque.
+ * TUDO aqui é gated por `.player-screen.touch-on`, classe que o
+ * player_touch.js só adiciona após o PRIMEIRO touchstart real.
+ * TV (controle remoto) nunca dispara touch → nada muda na TV.
+ * ============================================================ */
+.player-screen.touch-on .player-osd { display: none; }  /* OSD de teclado sai de cena no touch */
+
+.tp-osd {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 60;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.22s ease;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0) 26%, rgba(0,0,0,0) 64%, rgba(0,0,0,0.72) 100%);
+}
+.tp-osd.is-on {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* --- Barra de cima: voltar / título / ajuste de tela --- */
+.tp-top {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+}
+.tp-btn {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 44px;
+    height: 40px;
+    padding: 0 14px;
+    background: rgba(20, 20, 20, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 999px;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.tp-btn:active { background: rgba(255, 255, 255, 0.22); }
+.tp-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+}
+
+/* --- Botões centrais: -10s / play-pause / +10s --- */
+.tp-center {
+    position: absolute;
+    top: 50%; left: 0; right: 0;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(34px, 10vw, 90px);
+    pointer-events: none;            /* só os botões clicam, não a faixa */
+}
+.tp-center button { pointer-events: auto; }
+.tp-skip, .tp-play {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 15, 15, 0.62);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 50%;
+    color: #fff;
+    font-family: inherit;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.tp-skip {
+    width: 58px;
+    height: 58px;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.1;
+}
+.tp-skip svg { margin-bottom: 1px; }
+.tp-play {
+    width: 76px;
+    height: 76px;
+}
+.tp-skip:active, .tp-play:active { background: rgba(255, 255, 255, 0.25); }
+
+/* --- Barra de baixo: tempo + seekbar arrastável --- */
+.tp-bottom {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    padding: 10px 16px 16px;
+}
+.tp-times {
+    display: flex;
+    justify-content: space-between;
+    color: #eee;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 4px;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+.tp-bar {
+    position: relative;
+    height: 34px;                /* área de toque generosa */
+    cursor: pointer;
+    touch-action: none;          /* arrastar a barra não rola a página */
+}
+.tp-bar-track {
+    position: absolute;
+    left: 0; right: 0; top: 50%;
+    height: 5px;
+    margin-top: -2.5px;
+    background: rgba(255, 255, 255, 0.28);
+    border-radius: 3px;
+}
+.tp-bar-fill {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 0%;
+    background: #10b981;
+    border-radius: 3px;
+}
+.tp-knob {
+    position: absolute;
+    top: 50%; left: 0%;
+    width: 16px;
+    height: 16px;
+    margin: -8px 0 0 -8px;
+    background: #fff;
+    border-radius: 50%;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.6);
+}
+.tp-bar.is-dragging .tp-knob { transform: scale(1.35); }
+.tp-live-tag {
+    text-align: center;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding-bottom: 4px;
+}
+.tp-live-tag .dot { color: #10b981; }
+
+/* --- Toast (feedback de ±10s e modo de tela) --- */
+.tp-toast {
+    position: absolute;
+    top: 18%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(15, 15, 15, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 999px;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 9px 18px;
+    z-index: 70;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.18s ease;
+    pointer-events: none;
+    white-space: nowrap;
+}
+.tp-toast.is-on { opacity: 1; visibility: visible; }
+
+/* ============================================================
+ * "Você também pode gostar" — linha de parecidos no detalhe
+ * de filme/série (preenche o espaço vazio abaixo do hero).
+ * Rola horizontal; tiles focáveis (navegação ◄ ► no controle).
+ * ============================================================ */
+.dh-similar {
+    padding: 8px clamp(24px, 5vw, 60px) 36px;
+}
+.dh-similar .dhs-title {
+    color: #fff;
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 16px;
+}
+.dh-similar .dhs-row {
+    white-space: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    font-size: 0;
+    line-height: 0;
+    padding-bottom: 6px;
+}
+.dh-similar .dhs-tile {
+    display: inline-block;
+    vertical-align: top;
+    width: 150px;
+    margin-right: 14px;
+    text-decoration: none;
+    color: #f5f5f1;
+    cursor: pointer;
+}
+.dh-similar .dhs-img {
+    width: 100%;
+    padding-bottom: 145%;
+    height: 0;
+    background: #1a1a1a center/cover no-repeat;
+    border: 3px solid transparent;
+    border-radius: 8px;
+    position: relative;
+    overflow: hidden;
+}
+.dh-similar .dhs-tile:focus { outline: none; }
+.dh-similar .dhs-tile:focus .dhs-img { border-color: #10b981; }
+.dh-similar .dhs-fallback {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #555;
+    font-size: 28px;
+    font-weight: 800;
+}
+.dh-similar .dhs-name {
+    margin-top: 8px;
+    font-size: 13px;
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+@media (max-width: 1024px), (max-height: 600px) {
+    .dh-similar { padding: 4px 16px 20px; }
+    .dh-similar .dhs-title { font-size: 16px; margin-bottom: 10px; }
+    .dh-similar .dhs-tile { width: 108px; margin-right: 10px; }
+    .dh-similar .dhs-img { border-width: 2px; }
+    .dh-similar .dhs-name { font-size: 11px; margin-top: 6px; }
+}
+
+/* ============================================================
+ * CAMADA TV (body.ui-tv) — servida SÓ pra navegadores de TV
+ * (is_tv_browser no servidor). Resolução nativa 1920×1080,
+ * tamanhos pensados pra ver do SOFÁ (10-foot UI).
+ * ⚠️ Margens no lugar de `gap`: flex gap só existe em Chrome 84+
+ * e as TVs (Tizen 6 = Chrome 76) IGNORAM gap → itens grudados.
+ * Celular/desktop nunca recebem a classe — nada muda pra eles.
+ * ============================================================ */
+
+/* ---- Home ---- */
+body.ui-tv .home-logo { margin-bottom: 48px; }
+body.ui-tv .home-logo .brand-logo { font-size: 128px; }
+body.ui-tv .home-logo img { height: 150px; }
+body.ui-tv .home-grid { margin-bottom: 34px; max-width: 1560px; }
+body.ui-tv .home-tile {
+    width: 264px;
+    height: 264px;
+    margin: 0 13px 26px;
+    font-size: 26px;
+    border-width: 4px;
+    border-radius: 18px;
+}
+body.ui-tv .home-tile .tile-icon {
+    width: 100px;
+    height: 100px;
+    margin-bottom: 22px;          /* substitui o gap interno */
+}
+body.ui-tv .home-bottom { margin-bottom: 28px; }
+body.ui-tv .home-reload { font-size: 24px; padding: 16px 60px; border-radius: 16px; }
+body.ui-tv .home-device-info { font-size: 22px; }
+
+/* ---- Telas com sidebar (TV ao vivo / Filmes / Séries) ---- */
+body.ui-tv .cat-sidebar { width: 450px; padding: 26px 14px 26px 22px; }
+body.ui-tv .sidebar-content { left: 450px; padding: 30px 40px 36px; }
+body.ui-tv .cat-sidebar .cat-pill {
+    font-size: 25px;
+    padding: 18px 58px 18px 22px;
+    margin-bottom: 12px;
+    border-radius: 14px;
+}
+body.ui-tv .cat-sidebar .cat-pill .cat-count { font-size: 20px; right: 20px; margin-top: -12px; }
+body.ui-tv .cat-sidebar .cat-lock { width: 20px; height: 20px; }
+body.ui-tv .sidebar-content .sc-title { font-size: 38px; margin-bottom: 28px; }
+
+/* Pôsteres (filmes/séries) na TV: EXATAMENTE 4 por linha, igual o HDX.
+   Em % (não px!) porque a TV Tizen às vezes renderiza a 1280, às vezes a 1920
+   — em px o nº de colunas mudava (330px deu 3). 22% + 1.2% de margem dos dois
+   lados = 4×24.4% = 97.6% → 4 cabem, 5 não. Menos pôster por quadro = ▼ liso. */
+body.ui-tv .poster-tile-tv { width: 22%; margin: 0 1.2% 22px; font-size: 17px; }
+body.ui-tv .poster-tile-tv .pt-name { font-size: 17px; margin-top: 9px; padding: 0 4px; }
+
+/* Canais: 4 colunas largas com logo maior */
+body.ui-tv .channel-tile-tv { width: 400px; padding: 16px 20px; margin: 0 12px 14px 0; min-height: 116px; }
+body.ui-tv .channel-tile-tv .ct-logo { width: 92px; height: 92px; line-height: 92px; margin-right: 18px; }
+body.ui-tv .channel-tile-tv .ct-info { width: calc(100% - 116px); }
+body.ui-tv .channel-tile-tv .ct-num { font-size: 15px; }
+body.ui-tv .channel-tile-tv .ct-name { font-size: 22px; }
+
+/* ---- Topbars (Favoritos / Busca) — gap morto vira margem ---- */
+body.ui-tv .grid-topbar { padding: 20px 36px; }
+body.ui-tv .grid-topbar .gt-back,
+body.ui-tv .search-topbar .gt-back { font-size: 20px; padding: 10px 22px; margin-right: 20px; }
+body.ui-tv .grid-topbar .gt-title { font-size: 30px; }
+body.ui-tv .grid-topbar .gt-time { font-size: 20px; }
+body.ui-tv .search-topbar { padding: 20px 36px; }
+body.ui-tv .search-title { font-size: 30px; margin-right: 20px; }
+
+/* Favoritos (grade .poster-tile) */
+body.ui-tv .poster-tile { width: 216px; height: 324px; margin: 0 14px 14px 0; }
+body.ui-tv .poster-tile .poster-name { font-size: 15px; }
+
+/* ---- Player (OSD / erro / loading) ---- */
+body.ui-tv .player-osd .osd-title { font-size: 32px; }
+body.ui-tv .player-osd .osd-time { font-size: 18px; }
+body.ui-tv .osd-times { font-size: 20px; }
+body.ui-tv .osd-progress { height: 9px; border-radius: 5px; }
+body.ui-tv .player-error h2 { font-size: 36px; margin-bottom: 14px; }
+body.ui-tv .player-error p { font-size: 22px; }
+body.ui-tv .player-loading p { font-size: 22px; }
+
+/* ---- Detalhe de filme/série ---- */
+body.ui-tv .detail-hero .dh-back { font-size: 20px; padding: 12px 24px; }
+body.ui-tv .detail-hero .dh-badge { font-size: 18px; }
+body.ui-tv .detail-hero .dh-genre { font-size: 18px; }
+body.ui-tv .detail-hero .dh-plot { font-size: 20px; line-height: 1.55; max-width: 860px; }
+body.ui-tv .detail-hero .dh-content { max-width: 940px; }
+body.ui-tv .btn-tv { font-size: 20px; padding: 18px 32px; }
+body.ui-tv .detail-hero .dh-buttons { max-width: 460px; }
+body.ui-tv .season-pill { font-size: 21px; padding: 16px 36px; }
+body.ui-tv .episode-tile .ep-label { font-size: 17px; }
+body.ui-tv .grid-loadmore { font-size: 18px; }
+
+/* ---- "Você também pode gostar" no detalhe ---- */
+body.ui-tv .dh-similar .dhs-title { font-size: 30px; margin-bottom: 20px; }
+body.ui-tv .dh-similar .dhs-tile { width: 200px; margin-right: 18px; }
+body.ui-tv .dh-similar .dhs-name { font-size: 16px; }
+
+/* ---- Configurações ---- */
+body.ui-tv .settings-screen .settings-back { font-size: 20px; padding: 12px 24px; }
+body.ui-tv .settings-header h1 { font-size: 44px; }
+body.ui-tv .settings-sub { font-size: 20px; }
+body.ui-tv .settings-menu .sm-item { font-size: 22px; padding: 16px 18px; margin-bottom: 10px; }
+body.ui-tv .settings-pane .pane-title { font-size: 30px; }
+body.ui-tv .info-card .ic-value { font-size: 24px; }
+body.ui-tv .info-card .ic-label { font-size: 15px; }
+
+/* End */
+
+/* ZLS-NARROW-COLS: celular ESTREITO — sidebar de 230px deixava o grid em 1
+   coluna e a nav horizontal (seta direita) quebrava. Afina sidebar+poster
+   p/ garantir 2+ colunas. Só telas pequenas; TV/desktop intactos. */
+@media (max-width:600px){
+  .cat-sidebar{width:118px;padding:10px 5px 10px 7px;}
+  .sidebar-content{left:118px;padding:12px 9px 18px;}
+  .cat-sidebar .cat-pill{font-size:11.5px;padding:9px 7px;margin-bottom:5px;line-height:1.25;}
+  .cat-sidebar .cat-pill .cat-count{font-size:10px;right:5px;margin-top:-7px;}
+  .cat-sidebar .cat-pill > span:first-child{white-space:normal;}
+  .poster-tile-tv{width:clamp(80px,27vw,128px);margin:0 1.2% 12px;}
+  .sidebar-content .sc-title{font-size:18px;margin-bottom:10px;}
+}
