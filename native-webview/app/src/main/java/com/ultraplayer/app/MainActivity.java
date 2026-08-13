@@ -1,5 +1,6 @@
 package com.ultraplayer.app;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
@@ -7,6 +8,7 @@ import android.content.Intent;
 import android.content.res.Configuration;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.speech.RecognizerIntent;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -29,6 +31,8 @@ public final class MainActivity extends Activity {
     private FrameLayout root;
     private View splash;
     private boolean isTv;
+    private static final int VOICE_REQUEST = 7412;
+    private static final int VOICE_PERMISSION_REQUEST = 7413;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -167,6 +171,19 @@ public final class MainActivity extends Activity {
         public boolean isTv() { return isTv; }
 
         @JavascriptInterface
+        public void startVoice() {
+            runOnUiThread(() -> {
+                try {
+                    if (android.os.Build.VERSION.SDK_INT >= 23 && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                        requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, VOICE_PERMISSION_REQUEST);
+                    } else {
+                        launchVoiceRecognizer();
+                    }
+                } catch (Throwable ignored) { sendVoiceError(); }
+            });
+        }
+
+        @JavascriptInterface
         public void retry() {
             runOnUiThread(() -> { if (webView != null) webView.reload(); });
         }
@@ -227,6 +244,48 @@ public final class MainActivity extends Activity {
                 } catch (Throwable ignored) { }
             });
         }
+    }
+
+    private void launchVoiceRecognizer() {
+        try {
+            Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+            intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+            intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "pt-BR");
+            intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "pt-BR");
+            intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+            intent.putExtra(RecognizerIntent.EXTRA_PROMPT, "Diga o nome do canal, filme ou série");
+            startActivityForResult(intent, VOICE_REQUEST);
+        } catch (Throwable ignored) { sendVoiceError(); }
+    }
+
+    private void sendVoiceResult(String text) {
+        if (webView == null) return;
+        webView.evaluateJavascript("try{window.__voiceResult(" + JSONObject.quote(text == null ? "" : text) + ")}catch(e){}", null);
+    }
+
+    private void sendVoiceError() {
+        if (webView == null) return;
+        webView.evaluateJavascript("try{window.__voiceError()}catch(e){}", null);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == VOICE_PERMISSION_REQUEST) {
+            if (grantResults.length > 0 && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) launchVoiceRecognizer();
+            else sendVoiceError();
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != VOICE_REQUEST) return;
+        if (resultCode == RESULT_OK && data != null) {
+            java.util.ArrayList<String> results = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
+            if (results != null && !results.isEmpty()) { sendVoiceResult(results.get(0)); return; }
+        }
+        sendVoiceError();
     }
 
     @Override

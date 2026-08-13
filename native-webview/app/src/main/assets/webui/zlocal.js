@@ -631,9 +631,8 @@ function streamUrl(kind, id, ext) {
 /* ---------- branding (logo/nome/cor/fundo) ---------- */
 function brandLogoHtml() {
     var b = S.branding || {};
-    if (b.logo_url) return '<img src="' + attr(b.logo_url) + '" alt="' + attr(b.brand_name || 'UltraPlayer') + '" class="brand-logo-img">';
     var name = b.brand_name || 'UltraPlayer';
-    var mark = '<img src="assets/branding/ultraplayer_mark.png" alt="" class="brand-mark" draggable="false">';
+    var mark = '<img src="assets/branding/ultraplayer_launcher.png" alt="UltraPlayer" class="brand-mark" draggable="false">';
     var word = name.length >= 2 ? esc(name.slice(0, -1)) + '<span class="accent">' + esc(name.slice(-1)) + '</span>' : '<span class="accent">' + esc(name) + '</span>';
     return '<div class="brand-lockup">' + mark + '<span class="brand-logo">' + word + '</span></div>';
 }
@@ -908,14 +907,7 @@ function shimGet(url, cb) {
     m = path.match(/^\/api\/live\/epg\/(\d+)$/);
     if (m) {
         var sid = m[1];
-        xt('get_short_epg', '&stream_id=' + enc(sid) + '&limit=6').then(function (d) {
-            var listings = (d && d.epg_listings) || [], epg = [];
-            for (var i = 0; i < listings.length; i++) {
-                var p = listings[i];
-                epg.push({ title: b64(p.title), start: hhmm(p.start), end: hhmm(p.end) });
-            }
-            cb({ epg: epg }, 200);
-        });
+        xt('get_short_epg', '&stream_id=' + enc(sid) + '&limit=6').then(function (d) { cb({ epg: epgItemsFromResponse(d) }, 200); });
         return true;
     }
     return false;
@@ -947,7 +939,20 @@ function b64(s) {
     try { return decodeURIComponent(escape(global.atob(s))); } catch (e) { try { return global.atob(s); } catch (e2) { return s; } }
 }
 function hhmm(s) { s = String(s || ''); var m = s.match(/(\d{2}):(\d{2})/); return m ? (m[1] + ':' + m[2]) : ''; }
-
+function epgText(v) {
+    var raw = String(v || ''); if (!raw) return '';
+    try { var decoded = b64(raw); if (decoded && decoded !== raw && /[A-Za-zÀ-ÿ]/.test(decoded) && !/[\u0000-\u0008]/.test(decoded)) return decoded; } catch (e) {}
+    return raw;
+}
+function epgItemsFromResponse(d) {
+    var listings = [];
+    if (Array.isArray(d)) listings = d;
+    else if (d) listings = d.epg_listings || d.epg || d.programs || d.data || [];
+    if (!Array.isArray(listings)) listings = [];
+    var out = [];
+    for (var i = 0; i < listings.length; i++) { var p = listings[i] || {}; out.push({ title: epgText(p.title || p.name || p.programme || p.description), start: hhmm(p.start || p.start_time || p.start_datetime), end: hhmm(p.end || p.end_time || p.stop_datetime) }); }
+    return out.filter(function (p) { return p.title || p.start; });
+}
 function installShim() {
     if (S._shim) return; S._shim = true;
     if (!global.Tv) global.Tv = {};
@@ -1345,6 +1350,67 @@ function applyResolve(d, fromCache) {
 }
 
 /* ---- HOME ---- */
+function normVoiceText(v) { return String(v || '').toLowerCase().normalize ? String(v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '') : String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, ''); }
+function voiceCleanQuery(text) {
+    var q = normVoiceText(text);
+    q = q.replace(/^(abrir|abra|abre|assistir|assista|tocar|toque|ver|veja|mostrar|mostre|buscar|procure|procurar)\s+/, '');
+    q = q.replace(/\b(um|uma|o|a|os|as|canal|canais|filme|filmes|serie|series|série|séries)\b/g, ' ');
+    return q.replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
+}
+function voiceKind(text) {
+    var q = normVoiceText(text);
+    if (/\b(serie|series|novela|novelas|temporada|episodio|episodios|anime)\b/.test(q)) return 'series';
+    if (/\b(filme|filmes|movie|movies|cinema|vod)\b/.test(q)) return 'movies';
+    return 'live';
+}
+function voiceMatchScore(item, q, kind) {
+    var n = normVoiceText(item && (item.name || item.title));
+    if (!n || !q) return 0;
+    if (n === q) return 1000;
+    if (kind === 'live' && n.indexOf(q) === 0) return 700;
+    if (n.indexOf(q) === 0) return 650;
+    if (n.indexOf(q) >= 0) return 500;
+    var words = q.split(' '), score = 0;
+    for (var i = 0; i < words.length; i++) if (words[i] && n.indexOf(words[i]) >= 0) score += 50;
+    return score;
+}
+function renderVoiceResults(kind, query, list) {
+    var title = kind === 'live' ? 'Canais encontrados' : kind === 'movies' ? 'Filmes encontrados' : 'Séries encontradas';
+    var body = kind === 'live' ? channelTiles(list) : posterTiles(list, kind);
+    setHtml('<div class="search-screen"><div class="search-topbar"><a href="/home" class="gt-back" autofocus>← Voltar</a><div class="search-title">' + esc(title) + '</div></div><div class="voice-result-query">Comando: <strong>' + esc(query) + '</strong></div><div id="voice-results" class="' + (kind === 'live' ? 'live-channels' : 'poster-grid') + '">' + (body || '<div class="zx-empty">Nenhum resultado encontrado.</div>') + '</div></div>' + flatStyles());
+    if (kind === 'live') {
+        loadChannelLogos();
+        var grid = $('voice-results'); if (grid) grid.addEventListener('click', function (e) { var row = e.target; while (row && row !== grid && !((' ' + (row.className || '') + ' ').indexOf(' channel-tile-tv ') >= 0)) row = row.parentNode; if (!row || row === grid) return; e.preventDefault(); var sid = row.getAttribute('data-sid'), name = row.getAttribute('data-name') || ''; if (sid) playViaNative({ kind: 'live', url: streamUrl('live', sid), title: name, resume: 0, zxKind: 'live', zxId: sid, name: name, zap: liveZapList(sid) }); });
+    } else { var pg = $('voice-results'); if (pg) { fitPosterGrid(pg); afterRender(); } }
+    focusHomeStart();
+}
+function runVoiceCommand(text) {
+    var raw = String(text || '').trim(), kind = voiceKind(raw), q = voiceCleanQuery(raw);
+    if (!q) { renderVoiceResults(kind, raw, []); return; }
+    showLoading(true);
+    ensureCatalog(kind).then(function (cat) {
+        var all = (cat && cat.all) || [], scored = [];
+        for (var i = 0; i < all.length; i++) { var sc = voiceMatchScore(all[i], q, kind); if (sc > 0) scored.push({ item: all[i], score: sc }); }
+        scored.sort(function (a, b) { return b.score - a.score; });
+        var best = scored.length ? scored[0].item : null;
+        showLoading(false);
+        if (kind === 'live' && scored.length === 1 && scored[0].score >= 650) { var sid = best.stream_id; playViaNative({ kind: 'live', url: streamUrl('live', sid), title: best.name || q, resume: 0, zxKind: 'live', zxId: sid, name: best.name || q, zap: liveZapList(sid) }); return; }
+        if (kind !== 'live' && scored.length === 1 && scored[0].score >= 1000) { go('/' + kind + '/' + (kind === 'series' ? (best.series_id || best.stream_id) : best.stream_id)); return; }
+        renderVoiceResults(kind, raw, scored.slice(0, 80).map(function (x) { return x.item; }));
+    }).catch(function () { showLoading(false); renderVoiceResults(kind, raw, []); });
+}
+function startVoiceCommand() {
+    var btn = $('zxVoiceBtn'); if (btn) { btn.className += ' is-listening'; btn.setAttribute('aria-label', 'Ouvindo'); }
+    function done() { var b = $('zxVoiceBtn'); if (b) b.className = b.className.replace(/\s*is-listening\b/g, ''); }
+    global.__voiceResult = function (text) { done(); runVoiceCommand(text); };
+    global.__voiceError = function () { done(); };
+    try {
+        if (global.HdxNative && typeof global.HdxNative.startVoice === 'function') { global.HdxNative.startVoice(); return; }
+        var R = global.SpeechRecognition || global.webkitSpeechRecognition;
+        if (R) { var r = new R(); r.lang = 'pt-BR'; r.maxAlternatives = 1; r.onresult = function (e) { global.__voiceResult(e.results[0][0].transcript); }; r.onerror = global.__voiceError; r.onend = done; r.start(); return; }
+    } catch (e) {}
+    done();
+}
 function renderHome() {
     injectProfCss();   // avatar do topo usa .zx-pf-av — sem isto a 1ª pintura sai QUADRADA/torta (o CSS só entrava quando o gate abria)
     // Passou pela TELA INICIAL → zera a memória das seções (categoria + rolagem +
@@ -1401,6 +1467,7 @@ function renderHome() {
         + '<div class="zh-date">' + esc(dateStr) + '</div></div>'
         + '<div class="zh-icons">'
         + '<a href="/lists" class="zh-tbtn">' + svg(svSrv) + '<span>Servidor</span></a>'
+        + '<button type="button" class="zh-tbtn ic zh-voice" id="zxVoiceBtn" aria-label="Comando de voz"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line><line x1="8" y1="22" x2="16" y2="22"></line></svg></button>'
         + '<a href="/reload" class="zh-tbtn ic">' + svg(svRel) + '</a>'
         + '<a href="/settings" class="zh-tbtn ic">' + svg(svGer) + '</a>'
         + '<a href="#" class="zh-tbtn ic zh-profbtn" id="zxProfBtn" aria-label="' + te('Perfis') + '">' + profAvatarHtml(profActive().a, 34) + '</a>'
@@ -1489,6 +1556,7 @@ function renderHome() {
     try {
         var pb = document.getElementById('zxProfBtn');
         if (pb) pb.addEventListener('click', function (e) { if (e && e.preventDefault) e.preventDefault(); showProfGate('menu'); });
+        var vb = document.getElementById('zxVoiceBtn'); if (vb) vb.addEventListener('click', function (e) { if (e && e.preventDefault) e.preventDefault(); startVoiceCommand(); });
     } catch (e) {}
     firstRunFlow();   // 1ª abertura no Android → idioma + aviso anti-pirataria + escolha Celular x TV
     maybeProfBootGate();   // 2+ perfis → pergunta quem está assistindo (1x por abertura)
@@ -1806,6 +1874,8 @@ function homeStyles(ac) {
         + '.zh-profbtn .zx-pf-av svg{width:1.45vw;height:1.45vw;stroke:none;}'
         + '.zh-tbtn:active,.zh-tbtn:hover{background:' + a + '26;}'
         + '.zh-tbtn:focus-visible{background:' + a + '2e;border-color:' + a + ';box-shadow:0 0 0 .24vw ' + a + ';outline:none;}'
+        + '.zh-voice.is-listening{background:' + a + '55;border-color:' + a + ';animation:zxVoicePulse 1s infinite;}@keyframes zxVoicePulse{50%{box-shadow:0 0 0 .35vw ' + a + '66;}}'
+        + '.voice-result-query{padding:14px 22px;color:#9db0a7;font-size:16px;}.voice-result-query strong{color:#f4f7f5;}'
         + '.zh-fav:focus-visible{outline:none;box-shadow:0 0 0 .28vw ' + a + ';border-radius:1vw;}'
         + '.zh-recent{margin-top:2vw;display:flex;flex-direction:column;gap:1vw;}'
         + '.zh-h2{display:flex;align-items:center;gap:.9vw;font-size:1.7vw;font-weight:800;}'
@@ -2367,15 +2437,15 @@ function wireLiveEpg() {
         var chEl = $('epg-ch'), bodyEl = $('epg-body');
         if (chEl) chEl.textContent = selName;
         if (bodyEl) bodyEl.innerHTML = '<div class="epg-sub">Carregando programação…</div>';
-        if (global.Tv && Tv.get) Tv.get('/api/live/epg/' + encodeURIComponent(sid), function (data) {
+        function paintEpg(epg) {
             if (selSid !== sid) return;
             var body = $('epg-body'); if (!body) return;
-            var epg = (data && data.epg) || [];
-            if (!epg.length) { body.innerHTML = '<div class="epg-empty">Sem programação para este canal.</div>'; return; }
+            if (!epg || !epg.length) { body.innerHTML = '<div class="epg-empty">Sem programação para este canal.</div>'; return; }
             var h = '';
             for (var i = 0; i < epg.length; i++) { var p = epg[i]; var t = esc(p.start || '') + (p.end ? (' - ' + esc(p.end)) : '') + (i === 0 ? ('  • ' + (currentLang() === 'en' ? 'NOW' : 'AGORA')) : ''); h += '<div class="epg-item' + (i === 0 ? ' is-now' : '') + '"><div class="epg-time">' + t + '</div><div class="epg-title">' + esc(p.title || '—') + '</div></div>'; }
             body.innerHTML = h;
-        });
+        }
+        xt('get_short_epg', '&stream_id=' + enc(sid) + '&limit=6').then(function (data) { paintEpg(epgItemsFromResponse(data)); }).catch(function () { paintEpg([]); });
     }
     function preloadFirst() { var first = content.querySelector('.channel-tile-tv'); if (first) renderEpg(first); }
     var t = null;
