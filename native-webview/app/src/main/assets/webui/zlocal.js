@@ -2544,9 +2544,10 @@ function liveStyles() {
         + '.live-epg .epg-sub{color:#8fa39a;font-size:9px;line-height:1.05;}'
         + '.live-epg{max-height:calc(100vh - 92px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;}'
         + '.live-epg .epg-body{max-height:calc(100vh - 190px);overflow-y:auto;overscroll-behavior:contain;padding-right:4px;scrollbar-width:thin;}'
-        + '.live-epg .epg-item{position:relative;padding:8px 46px 8px 0;min-height:46px;box-sizing:border-box;}'
-        + '.live-epg .epg-title{font-size:10px;line-height:1.05;font-weight:650;}'
-        + '.epg-alarm{position:absolute;right:0;top:50%;z-index:5;pointer-events:auto;touch-action:manipulation;transform:translateY(-50%);width:38px;height:38px;border:1px solid ' + a + '44;border-radius:10px;background:' + a + '12;color:#9fb4aa;font-size:18px;cursor:pointer;}'
+        + '.live-epg .epg-item{display:flex;align-items:center;gap:4px;position:relative;padding:8px 0;min-height:46px;box-sizing:border-box;overflow:hidden;}'
+        + '.live-epg .epg-copy{min-width:0;flex:1 1 auto;overflow:hidden;}'
+        + '.live-epg .epg-title{font-size:10px;line-height:1.05;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
+        + '.epg-alarm{position:static;flex:0 0 30px;width:30px;height:30px;z-index:5;pointer-events:auto;touch-action:manipulation;transform:none;border:1px solid ' + a + '44;border-radius:8px;background:' + a + '12;color:#9fb4aa;font-size:15px;cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center;}'
         + '.epg-alarm:hover,.epg-alarm:focus{border-color:' + a + ';color:#fff;outline:none;box-shadow:0 0 0 3px ' + a + '33;}'
         + '.epg-alarm.is-on{background:' + a + '42;color:' + a + ';}'
         + '.zx-epg-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:100001;display:flex;align-items:center;gap:10px;max-width:min(560px,88vw);padding:14px 20px;border:1px solid rgba(255,255,255,.18);border-radius:16px;background:rgba(9,20,15,.96);box-shadow:0 14px 36px rgba(0,0,0,.45);color:#f4fff9;font-size:16px;font-weight:700;text-align:center;line-height:1.25;}'
@@ -2727,8 +2728,8 @@ function wireLiveEpg() {
             if (selSid !== sid) return;
             var body = $('epg-body'); if (!body) return;
             if (!epg || !epg.length) { body.innerHTML = '<div class="epg-empty">Sem programação para este canal.</div>'; return; }
-            var h = '';
-            for (var i = 0; i < epg.length; i++) { var p = epg[i], when = epgTimestamp(p.rawStart || p.start), armed = epgAlarmHas(when, p.title || '', selName); var t = esc(p.start || '') + (p.end ? (' - ' + esc(p.end)) : '') + (i === 0 ? ('  • ' + (currentLang() === 'en' ? 'NOW' : 'AGORA')) : ''); h += '<div class="epg-item' + (i === 0 ? ' is-now' : '') + '"><div class="epg-time">' + t + '</div><div class="epg-title">' + esc(p.title || '—') + '</div><button type="button" class="epg-alarm' + (armed ? ' is-on' : '') + '" data-when="' + attr(when) + '" data-title="' + attr(p.title || '') + '" data-channel="' + attr(selName) + '" aria-label="Ativar aviso da programação">' + (armed ? '🔔' : '🔔') + '</button></div>'; }
+var h = '';
+             for (var i = 0; i < epg.length; i++) { var p = epg[i], when = epgTimestamp(p.rawStart || p.start), armed = epgAlarmHas(when, p.title || '', selName); var t = esc(p.start || '') + (p.end ? (' - ' + esc(p.end)) : '') + (i === 0 ? ('  • ' + (currentLang() === 'en' ? 'NOW' : 'AGORA')) : ''); h += '<div class="epg-item' + (i === 0 ? ' is-now' : '') + '"><div class="epg-copy"><div class="epg-time">' + t + '</div><div class="epg-title">' + esc(p.title || '—') + '</div></div><button type="button" class="epg-alarm' + (armed ? ' is-on' : '') + '" data-when="' + attr(when) + '" data-title="' + attr(p.title || '') + '" data-channel="' + attr(selName) + '" aria-label="Ativar aviso da programação">🔔</button></div>'; }
             body.innerHTML = h;
         }
         xt('get_short_epg', '&stream_id=' + enc(sid) + '&limit=50').then(function (data) { paintEpg(epgItemsFromResponse(data)); }).catch(function () { paintEpg([]); });
@@ -2761,7 +2762,7 @@ function wireLiveEpg() {
             renderEpg(row);
             if (nsid) {
                 try {
-                    if (global.HdxNative && global.HdxNative.miniPlay) global.HdxNative.miniPlay(JSON.stringify({ kind: 'live', url: streamUrl('live', nsid), title: nnm, zap: (function(){ try { var z = liveZapList(nsid); return z ? z.list : null; } catch(e) { return null; } })(), zap_index: (function(){ try { var z = liveZapList(nsid); return z ? z.index : 0; } catch(e) { return 0; } })() }));
+                    if (global.HdxNative && global.HdxNative.miniPlay) global.HdxNative.miniPlay(JSON.stringify({ kind: 'live', url: streamUrl('live', nsid), title: nnm, zap: (function(){ try { var z = liveFullZapList(nsid) || liveZapList(nsid); return z ? z.list : null; } catch(e) { return null; } })(), zap_index: (function(){ try { var z = liveFullZapList(nsid) || liveZapList(nsid); return z ? z.index : 0; } catch(e) { return 0; } })() }));
                     setTimeout(syncMiniVideoBounds, 60); setTimeout(syncMiniVideoBounds, 260);
                 } catch (e) {}
             }
@@ -3483,6 +3484,24 @@ function nativeAvail() { try { return !!(global.HdxNative && global.HdxNative.pl
 /* ZAPPING (canais ao vivo): monta a lista da tela atual (ordem visível, direto dos
    tiles) pro player nativo trocar de canal com ↑/↓ do controle. Janela de ±150 em
    volta do canal atual (payload leve pro Intent). null se não der (toca normal). */
+function liveFullZapList(sid) {
+    try {
+        var c = S.cat.live, all = c && c.all || [], cats = c && c.cats || [], out = [], idx = -1;
+        for (var i = 0; i < all.length; i++) {
+            var item = all[i] || {}, id = parseInt(item.stream_id || 0, 10);
+            if (!id) continue;
+            var cat = item.category_name || item.group || item.group_title || '';
+            if (!cat) {
+                var cid = String(item.category_id || '');
+                for (var ci = 0; ci < cats.length; ci++) if (String(cats[ci].category_id || '') === cid) { cat = cats[ci].category_name || ''; break; }
+            }
+            if (String(id) === String(sid)) idx = out.length;
+            out.push({ i: id, t: item.name || (t('Canal') + ' ' + id), c: cat, u: streamUrl('live', id) });
+        }
+        if (!out.length) return null;
+        return { list: out, index: idx < 0 ? 0 : idx };
+    } catch (e) { return null; }
+}
 function liveZapList(sid) {
     try {
         var tiles = document.querySelectorAll('.channel-tile-tv');
@@ -3518,8 +3537,8 @@ function playViaNative(opts) {
             kind: opts.kind, url: opts.url, title: opts.title || opts.name || '',
             resume: opts.resume || 0, id: String(opts.zxId || ''),
             has_next: !!(opts.nextEp),  // série com próximo ep → ExoPlayer mostra "Próximo"
-            zap: opts.zap ? opts.zap.list : undefined,        // canais ↑/↓ (zapping)
-            zap_index: opts.zap ? opts.zap.index : undefined
+            zap: opts.zap ? opts.zap.list : (opts.kind === 'live' ? ((liveFullZapList(opts.zxId) || {}).list || undefined) : undefined),        // menu completo e zapping
+            zap_index: opts.zap ? opts.zap.index : (opts.kind === 'live' ? ((liveFullZapList(opts.zxId) || {}).index || 0) : undefined)
         }));
     } catch (e) {}
 }
@@ -3967,10 +3986,11 @@ function ffMobileCss() {
         + 'body.zx-ff-mobile .live-epg{padding:10px 10px !important;overflow-x:hidden !important;box-sizing:border-box !important}'
         + 'body.zx-ff-mobile .live-epg .epg-ch{font-size:13px !important;margin-bottom:3px !important}'
         + 'body.zx-ff-mobile .live-epg .epg-sub{font-size:8px !important;margin-bottom:5px !important}'
-        + 'body.zx-ff-mobile .live-epg .epg-item{display:grid !important;grid-template-columns:minmax(0,1fr) 24px !important;column-gap:3px !important;padding:4px 0 !important;min-height:30px !important;overflow:hidden !important;align-items:center !important}'
-        + 'body.zx-ff-mobile .live-epg .epg-title{grid-column:1 !important;grid-row:2 !important;font-size:8px !important;line-height:1.05 !important;white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important}'
-        + 'body.zx-ff-mobile .live-epg .epg-time{grid-column:1 !important;grid-row:1 !important;font-size:7px !important;line-height:1 !important}'
-        + 'body.zx-ff-mobile .live-epg .epg-alarm{grid-column:2 !important;grid-row:1 / span 2 !important;position:static !important;transform:none !important;justify-self:end !important;width:24px !important;height:24px !important;font-size:12px !important;border-radius:6px !important;margin:0 !important}'
+        + 'body.zx-ff-mobile .live-epg .epg-item{display:flex !important;align-items:center !important;gap:3px !important;padding:4px 0 !important;min-height:30px !important;overflow:hidden !important}'
+        + 'body.zx-ff-mobile .live-epg .epg-copy{min-width:0 !important;flex:1 1 auto !important;overflow:hidden !important}'
+        + 'body.zx-ff-mobile .live-epg .epg-title{font-size:8px !important;line-height:1.05 !important;white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important}'
+        + 'body.zx-ff-mobile .live-epg .epg-time{font-size:7px !important;line-height:1 !important}'
+        + 'body.zx-ff-mobile .live-epg .epg-alarm{position:static !important;flex:0 0 22px !important;width:22px !important;height:22px !important;font-size:11px !important;border-radius:5px !important;margin:0 !important;padding:0 !important}'
         + 'body.zx-ff-mobile .live-split .channel-tile-tv .ct-logo{width:36px !important;height:36px !important;line-height:36px !important;margin-right:5px !important}'
         + 'body.zx-ff-mobile .live-split .channel-tile-tv .ct-logo img{width:100%;height:100%;object-fit:contain}'
         + 'body.zx-ff-mobile .live-split .channel-tile-tv .ct-fallback{font-size:17px !important}'
