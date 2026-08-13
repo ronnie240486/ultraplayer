@@ -1549,7 +1549,34 @@ function voiceResultsStyles() {
         + 'body.zx-ff-mobile .voice-search-screen .ct-logo{width:66px !important;height:66px !important;flex-basis:66px !important;margin-right:12px !important;}'
         + 'body.zx-ff-mobile .voice-search-screen .ct-name{font-size:16px !important;}'
         + 'body.zx-ff-mobile .voice-search-screen .poster-tile-tv .pt-name{font-size:14px !important;}'
+        + '.voice-search-screen .voice-channel-card{position:relative;display:flex;align-items:center;min-height:104px;height:auto !important;padding:12px 58px 12px 14px;box-sizing:border-box;border:1px solid ' + a + '55;border-radius:16px;background:linear-gradient(145deg,var(--zx-panel,#0d241a),rgba(255,255,255,.04));color:var(--zx-text,#f4fff9);text-decoration:none;overflow:hidden;}'
+        + '.voice-search-screen .voice-channel-logo{width:68px;height:68px;flex:0 0 68px;margin-right:14px;border-radius:12px;background:' + a + '18 center/contain no-repeat;display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:28px;}'
+        + '.voice-search-screen .voice-channel-logo.is-loaded span{display:none;}'
+        + '.voice-search-screen .voice-channel-info{min-width:0;display:flex;flex-direction:column;gap:5px;overflow:hidden;}.voice-search-screen .voice-channel-info small{font-size:12px;color:var(--zx-muted,#9db0a7);}.voice-search-screen .voice-channel-info strong{font-size:17px;line-height:1.15;white-space:normal;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}'
+        + '.voice-search-screen .voice-channel-fav{position:absolute;right:14px;top:50%;transform:translateY(-50%);width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.3);color:#fff;font-size:29px;}'
+        + 'body.zx-ff-mobile .voice-search-screen .voice-channel-card{min-height:112px !important;height:112px !important;padding:13px 60px 13px 14px !important;}'
+        + 'body.zx-ff-mobile .voice-search-screen .voice-channel-logo{width:72px !important;height:72px !important;flex-basis:72px !important;}'
+        + 'body.zx-ff-mobile .voice-search-screen .voice-channel-info strong{font-size:18px !important;}'
         + '</style>';
+}
+function voiceChannelTile(s, i) {
+    var sid = parseInt(s.stream_id || 0, 10), name = s.name || 'Canal', logo = s.stream_icon || '', num = parseInt(s.num || (i + 1), 10);
+    return '<a class="voice-channel-card" tabindex="0" data-sid="' + sid + '" data-name="' + attr(name) + '" data-logo="' + attr(logo) + '">' +
+        '<div class="voice-channel-logo"' + (logo ? ' data-logo="' + attr(logo) + '"' : '') + '><span>📺</span></div>' +
+        '<div class="voice-channel-info"><small>#' + num + '</small><strong>' + esc(name) + '</strong></div>' +
+        '<span class="voice-channel-fav" aria-label="Favoritar canal">♡</span></a>';
+}
+function voiceChannelTiles(list) { var h = ''; for (var i = 0; i < list.length; i++) h += voiceChannelTile(list[i], i); return h; }
+function loadVoiceChannelLogos() {
+    try {
+        var logos = document.querySelectorAll('.voice-search-screen .voice-channel-logo[data-logo]');
+        for (var i = 0; i < logos.length; i++) (function (el) {
+            if (el.getAttribute('data-loaded')) return;
+            var src = el.getAttribute('data-logo') || ''; if (!src) return;
+            el.setAttribute('data-loaded', '1');
+            var im = new Image(); im.onload = function () { el.style.backgroundImage = "url('" + src.replace(/'/g, "\\'") + "')"; el.className += ' is-loaded'; }; im.src = src;
+        })(logos[i]);
+    } catch (e) {}
 }
 function loadVoicePosterImages() {
     try {
@@ -1567,11 +1594,11 @@ function loadVoicePosterImages() {
 }
 function renderVoiceResults(kind, query, list) {
     var title = kind === 'live' ? 'Canais encontrados' : kind === 'movies' ? 'Filmes encontrados' : 'Séries encontradas';
-    var body = kind === 'live' ? channelTiles(list) : posterTiles(list, kind);
+    var body = kind === 'live' ? voiceChannelTiles(list) : posterTiles(list, kind);
     setHtml('<div class="search-screen voice-search-screen"><div class="search-topbar"><a href="/home" class="gt-back" autofocus>← Voltar</a><div class="search-title">' + esc(title) + '</div></div><div class="voice-result-query">Comando: <strong>' + esc(query) + '</strong></div><div id="voice-results" class="' + (kind === 'live' ? 'live-channels' : 'poster-grid') + '">' + (body || '<div class="zx-empty">Nenhum resultado encontrado.</div>') + '</div></div>' + flatStyles() + voiceResultsStyles());
     if (kind === 'live') {
-        loadChannelLogos();
-        var grid = $('voice-results'); if (grid) grid.addEventListener('click', function (e) { var row = e.target; while (row && row !== grid && !((' ' + (row.className || '') + ' ').indexOf(' channel-tile-tv ') >= 0)) row = row.parentNode; if (!row || row === grid) return; e.preventDefault(); var sid = row.getAttribute('data-sid'), name = row.getAttribute('data-name') || ''; if (sid) playViaNative({ kind: 'live', url: streamUrl('live', sid), title: name, resume: 0, zxKind: 'live', zxId: sid, name: name, zap: liveZapList(sid) }); });
+        loadVoiceChannelLogos();
+        var grid = $('voice-results'); if (grid) grid.addEventListener('click', function (e) { var row = e.target; while (row && row !== grid && !((' ' + (row.className || '') + ' ').indexOf(' voice-channel-card ') >= 0)) row = row.parentNode; if (!row || row === grid) return; e.preventDefault(); var sid = row.getAttribute('data-sid'), name = row.getAttribute('data-name') || ''; if (sid) playViaNative({ kind: 'live', url: streamUrl('live', sid), title: name, resume: 0, zxKind: 'live', zxId: sid, name: name, zap: liveFullZapList(sid) || liveZapList(sid) }); });
     } else { var pg = $('voice-results'); if (pg) { afterRender(); loadVoicePosterImages(); setTimeout(loadVoicePosterImages, 250); } }
     focusHomeStart();
 }
@@ -1602,16 +1629,17 @@ function chooseVoiceResult(found, q) {
 function voiceExactHit(found, q, preferredKind) {
     var nq = normVoiceText(q), words = nq.split(' ').filter(function (x) { return x.length > 0; });
     if (words.length < 2) return null;
-    var hits = [];
+    var prefix = null;
     for (var i = 0; i < found.length; i++) {
         if (preferredKind && found[i].kind !== preferredKind) continue;
         var scored = found[i].scored || [];
         for (var j = 0; j < scored.length; j++) {
             var item = scored[j].item || {}, name = normVoiceText(item.name || item.title || '');
-            if (name === nq) hits.push({ kind: found[i].kind, item: item });
+            if (name === nq) return { kind: found[i].kind, item: item };
+            if (!prefix && name.indexOf(nq) === 0) prefix = { kind: found[i].kind, item: item };
         }
     }
-    return hits.length === 1 ? hits[0] : null;
+    return prefix;
 }
 function playVoiceExact(hit) {
     try {
@@ -4066,7 +4094,11 @@ function ffMobileCss() {
         + 'body.zx-ff-mobile .live-epg .epg-copy{display:block !important;min-width:0 !important;flex:1 1 auto !important;overflow:hidden !important}'
         + 'body.zx-ff-mobile .live-epg .epg-title{font-size:10px !important;line-height:1.08 !important;white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important}'
         + 'body.zx-ff-mobile .live-epg .epg-time{font-size:8px !important;line-height:1.05 !important}'
-        + 'body.zx-ff-mobile .live-epg .epg-alarm{position:static !important;display:flex !important;visibility:visible !important;opacity:1 !important;flex:0 0 26px !important;width:26px !important;min-width:26px !important;height:26px !important;font-size:14px !important;border-radius:6px !important;margin:0 0 0 3px !important;padding:0 !important;align-items:center !important;justify-content:center !important;z-index:50 !important}'
+        + 'body.zx-ff-mobile .live-epg .epg-item{display:flex !important;position:relative !important;align-items:center !important;gap:5px !important;width:100% !important;min-height:38px !important;padding:5px 0 !important;overflow:visible !important;box-sizing:border-box !important}'
+        + 'body.zx-ff-mobile .live-epg .epg-copy{display:block !important;min-width:0 !important;flex:1 1 auto !important;overflow:hidden !important}'
+        + 'body.zx-ff-mobile .live-epg .epg-title{display:block !important;font-size:11px !important;line-height:1.12 !important;white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important}'
+        + 'body.zx-ff-mobile .live-epg .epg-time{font-size:9px !important;line-height:1.05 !important}'
+        + 'body.zx-ff-mobile .live-epg .epg-alarm{position:static !important;display:flex !important;visibility:visible !important;opacity:1 !important;flex:0 0 28px !important;width:28px !important;min-width:28px !important;height:28px !important;font-size:15px !important;border-radius:6px !important;margin:0 2px 0 0 !important;padding:0 !important;align-items:center !important;justify-content:center !important;z-index:999 !important;float:none !important}'
         + 'body.zx-ff-mobile .live-split .channel-tile-tv .ct-logo{width:36px !important;height:36px !important;line-height:36px !important;margin-right:5px !important}'
         + 'body.zx-ff-mobile .live-split .channel-tile-tv .ct-logo img{width:100%;height:100%;object-fit:contain}'
         + 'body.zx-ff-mobile .live-split .channel-tile-tv .ct-fallback{font-size:17px !important}'
