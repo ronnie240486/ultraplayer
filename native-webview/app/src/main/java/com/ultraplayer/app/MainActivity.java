@@ -45,8 +45,11 @@ public final class MainActivity extends Activity {
     private View miniExpandHit;
     private android.widget.LinearLayout fullControls;
     private FrameLayout fullChannelMenu;
+    private android.widget.LinearLayout fullCategoryBar;
     private android.widget.LinearLayout fullChannelList;
+    private final java.util.ArrayList<JSONObject> fullChannelItems = new java.util.ArrayList<>();
     private TextView fullZoomLabel;
+    private String fullSelectedCategory = "Todos";
     private float fullZoom = 1.0f;
     private String miniPayload = "";
     private boolean miniExpanded = false;
@@ -434,13 +437,28 @@ public final class MainActivity extends Activity {
 
         fullChannelMenu = new FrameLayout(this);
         fullChannelMenu.setVisibility(View.GONE);
-        fullChannelMenu.setPadding(dp(12), dp(12), dp(12), dp(12));
-        fullChannelMenu.setBackground(makeRoundBackground(0xEE07130F, 0xDD6EE7B7, 2, dp(14)));
+        fullChannelMenu.setPadding(dp(8), dp(8), dp(8), dp(8));
+        fullChannelMenu.setBackgroundColor(0x6607130F);
+        android.widget.LinearLayout menuShell = new android.widget.LinearLayout(this);
+        menuShell.setOrientation(android.widget.LinearLayout.VERTICAL);
+        menuShell.setPadding(dp(4), dp(4), dp(4), dp(4));
+        menuShell.setBackgroundColor(0x66050B08);
+
+        android.widget.HorizontalScrollView categoryScroll = new android.widget.HorizontalScrollView(this);
+        categoryScroll.setHorizontalScrollBarEnabled(false);
+        fullCategoryBar = new android.widget.LinearLayout(this);
+        fullCategoryBar.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        categoryScroll.addView(fullCategoryBar, new android.widget.HorizontalScrollView.LayoutParams(-2, -1));
+        menuShell.addView(categoryScroll, new android.widget.LinearLayout.LayoutParams(-1, dp(54)));
+
         android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+        scroll.setVerticalScrollBarEnabled(true);
         fullChannelList = new android.widget.LinearLayout(this);
         fullChannelList.setOrientation(android.widget.LinearLayout.VERTICAL);
+        fullChannelList.setPadding(dp(8), dp(8), dp(8), dp(8));
         scroll.addView(fullChannelList, new android.widget.ScrollView.LayoutParams(-1, -2));
-        fullChannelMenu.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
+        menuShell.addView(scroll, new android.widget.LinearLayout.LayoutParams(-1, 0, 1f));
+        fullChannelMenu.addView(menuShell, new FrameLayout.LayoutParams(-1, -1));
         miniContainer.addView(fullChannelMenu);
     }
 
@@ -468,7 +486,9 @@ public final class MainActivity extends Activity {
     }
 
     private void populateFullChannelMenu() {
-        if (fullChannelList == null) return;
+        if (fullChannelList == null || fullCategoryBar == null) return;
+        fullChannelItems.clear();
+        fullCategoryBar.removeAllViews();
         fullChannelList.removeAllViews();
         try {
             JSONObject current = new JSONObject(miniPayload == null ? "{}" : miniPayload);
@@ -478,46 +498,90 @@ public final class MainActivity extends Activity {
                 empty.setText("Nenhum canal disponível nesta lista");
                 empty.setTextColor(android.graphics.Color.WHITE);
                 empty.setTextSize(15f);
-                empty.setPadding(dp(8), dp(16), dp(8), dp(16));
+                empty.setPadding(dp(12), dp(16), dp(12), dp(16));
                 fullChannelList.addView(empty);
                 return;
             }
-            TextView head = new TextView(this);
-            head.setText("Canais");
-            head.setTextColor(android.graphics.Color.WHITE);
-            head.setTextSize(18f);
-            head.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
-            head.setPadding(dp(8), 0, dp(8), dp(10));
-            fullChannelList.addView(head);
+            java.util.LinkedHashSet<String> cats = new java.util.LinkedHashSet<>();
             for (int i = 0; i < zap.length(); i++) {
                 JSONObject item = zap.optJSONObject(i);
-                if (item == null) continue;
-                String name = item.optString("t", "Canal " + (i + 1));
-                String url = item.optString("u", "");
-                if (url.isEmpty()) continue;
-                android.widget.Button row = fullButton(name, "Trocar para " + name);
-                row.setGravity(android.view.Gravity.LEFT | android.view.Gravity.CENTER_VERTICAL);
-                row.setTextSize(14f);
-                android.widget.LinearLayout.LayoutParams rp = new android.widget.LinearLayout.LayoutParams(-1, dp(46));
-                rp.bottomMargin = dp(6);
-                fullChannelList.addView(row, rp);
-                final String nextUrl = url;
-                final String nextName = name;
-                row.setOnClickListener(v -> {
-                    try {
-                        JSONObject next = new JSONObject(miniPayload == null ? "{}" : miniPayload);
-                        next.put("url", nextUrl);
-                        next.put("title", nextName);
-                        showMiniPlayer(next.toString());
-                        fullChannelMenu.setVisibility(View.GONE);
-                    } catch (Throwable ignored) { }
+                if (item == null || item.optString("u", "").isEmpty()) continue;
+                fullChannelItems.add(item);
+                String cat = item.optString("c", "").trim();
+                if (!cat.isEmpty()) cats.add(cat);
+            }
+            cats.add("Todos");
+            fullSelectedCategory = "Todos";
+            java.util.ArrayList<String> ordered = new java.util.ArrayList<>();
+            ordered.add("Todos");
+            for (String cat : cats) if (!"Todos".equals(cat)) ordered.add(cat);
+            for (String cat : ordered) {
+                android.widget.Button tab = fullButton(cat, "Categoria " + cat);
+                tab.setTextSize(13f);
+                tab.setSingleLine(true);
+                tab.setPadding(dp(12), 0, dp(12), 0);
+                android.widget.LinearLayout.LayoutParams tp = new android.widget.LinearLayout.LayoutParams(-2, dp(42));
+                tp.rightMargin = dp(6);
+                fullCategoryBar.addView(tab, tp);
+                final String selected = cat;
+                tab.setOnClickListener(v -> {
+                    fullSelectedCategory = selected;
+                    renderFullChannelCategory(selected);
                 });
             }
+            renderFullChannelCategory("Todos");
         } catch (Throwable ignored) { }
-        int width = Math.min(Math.max(dp(300), getResources().getDisplayMetrics().widthPixels - dp(24)), dp(430));
-        FrameLayout.LayoutParams mp = new FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.MATCH_PARENT, android.view.Gravity.TOP | android.view.Gravity.LEFT);
-        mp.leftMargin = dp(12); mp.rightMargin = dp(12); mp.topMargin = dp(70); mp.bottomMargin = dp(12);
+        FrameLayout.LayoutParams mp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, android.view.Gravity.TOP | android.view.Gravity.LEFT);
+        mp.leftMargin = dp(8); mp.rightMargin = dp(8); mp.topMargin = dp(70); mp.bottomMargin = dp(8);
         fullChannelMenu.setLayoutParams(mp);
+    }
+
+    private void renderFullChannelCategory(String category) {
+        if (fullChannelList == null) return;
+        fullChannelList.removeAllViews();
+        TextView head = new TextView(this);
+        head.setText(category);
+        head.setTextColor(android.graphics.Color.WHITE);
+        head.setTextSize(16f);
+        head.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
+        head.setPadding(dp(8), dp(4), dp(8), dp(8));
+        fullChannelList.addView(head);
+        int shown = 0;
+        for (JSONObject item : fullChannelItems) {
+            String itemCat = item.optString("c", "").trim();
+            if (!"Todos".equals(category) && !category.equals(itemCat)) continue;
+            String name = item.optString("t", "Canal");
+            String url = item.optString("u", "");
+            if (url.isEmpty()) continue;
+            android.widget.Button row = fullButton(name, "Trocar para " + name);
+            row.setGravity(android.view.Gravity.LEFT | android.view.Gravity.CENTER_VERTICAL);
+            row.setTextSize(14f);
+            row.setBackground(makeRoundBackground(0x66162D24, 0x996EE7B7, 1, dp(8)));
+            android.widget.LinearLayout.LayoutParams rp = new android.widget.LinearLayout.LayoutParams(-1, dp(44));
+            rp.bottomMargin = dp(5);
+            fullChannelList.addView(row, rp);
+            final String nextUrl = url;
+            final String nextName = name;
+            row.setOnClickListener(v -> {
+                try {
+                    JSONObject next = new JSONObject(miniPayload == null ? "{}" : miniPayload);
+                    next.put("url", nextUrl);
+                    next.put("title", nextName);
+                    next.put("zap", new org.json.JSONArray(fullChannelItems));
+                    showMiniPlayer(next.toString());
+                    fullChannelMenu.setVisibility(View.GONE);
+                } catch (Throwable ignored) { }
+            });
+            shown++;
+        }
+        if (shown == 0) {
+            TextView empty = new TextView(this);
+            empty.setText("Nenhum canal nesta categoria");
+            empty.setTextColor(0xDDFFFFFF);
+            empty.setTextSize(14f);
+            empty.setPadding(dp(8), dp(12), dp(8), dp(12));
+            fullChannelList.addView(empty);
+        }
     }
 
     private void resizeMiniPlayer(boolean tvMode) {
