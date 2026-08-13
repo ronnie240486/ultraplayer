@@ -2754,7 +2754,7 @@ function wireLiveEpg() {
             renderEpg(row);
             if (nsid) {
                 try {
-                    if (global.HdxNative && global.HdxNative.miniPlay) global.HdxNative.miniPlay(JSON.stringify({ kind: 'live', url: streamUrl('live', nsid), title: nnm }));
+                    if (global.HdxNative && global.HdxNative.miniPlay) global.HdxNative.miniPlay(JSON.stringify({ kind: 'live', url: streamUrl('live', nsid), title: nnm, zap: (function(){ try { var z = liveZapList(nsid); return z ? z.list : null; } catch(e) { return null; } })(), zap_index: (function(){ try { var z = liveZapList(nsid); return z ? z.index : 0; } catch(e) { return 0; } })() }));
                     setTimeout(syncMiniVideoBounds, 60); setTimeout(syncMiniVideoBounds, 260);
                 } catch (e) {}
             }
@@ -3957,6 +3957,13 @@ function ffMobileCss() {
         + 'body.zx-ff-mobile .live-split .channel-tile-tv{padding:8px 10px !important;min-height:0 !important}'
         + 'body.zx-ff-mobile .live-split .channel-tile-tv .ct-logo{width:43px !important;height:43px !important;line-height:43px !important;margin-right:8px !important}'
         + 'body.zx-ff-mobile .live-split .channel-tile-tv .ct-name{font-size:14px !important;line-height:1.15 !important}'
+        + 'body.zx-ff-mobile .live-epg{padding:10px 10px !important;overflow-x:hidden !important;box-sizing:border-box !important}'
+        + 'body.zx-ff-mobile .live-epg .epg-ch{font-size:13px !important;margin-bottom:3px !important}'
+        + 'body.zx-ff-mobile .live-epg .epg-sub{font-size:8px !important;margin-bottom:5px !important}'
+        + 'body.zx-ff-mobile .live-epg .epg-item{padding:6px 34px 6px 0 !important;min-height:34px !important;overflow:hidden !important}'
+        + 'body.zx-ff-mobile .live-epg .epg-title{font-size:9px !important;line-height:1.1 !important;white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important}'
+        + 'body.zx-ff-mobile .live-epg .epg-time{font-size:8px !important;line-height:1 !important}'
+        + 'body.zx-ff-mobile .live-epg .epg-alarm{right:0 !important;width:28px !important;height:28px !important;font-size:14px !important;border-radius:7px !important}'
         + 'body.zx-ff-mobile .live-split .channel-tile-tv .ct-logo{width:43px !important;height:43px !important;line-height:43px !important;margin-right:8px !important}'
         + 'body.zx-ff-mobile .live-split .channel-tile-tv .ct-logo img{width:100%;height:100%;object-fit:contain}'
         + 'body.zx-ff-mobile .live-split .channel-tile-tv .ct-fallback{font-size:20px}'

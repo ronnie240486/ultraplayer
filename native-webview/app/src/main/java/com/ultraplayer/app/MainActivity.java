@@ -43,6 +43,11 @@ public final class MainActivity extends Activity {
     private TextView miniTitle;
     private ImageButton miniCloseButton;
     private View miniExpandHit;
+    private android.widget.LinearLayout fullControls;
+    private FrameLayout fullChannelMenu;
+    private android.widget.LinearLayout fullChannelList;
+    private TextView fullZoomLabel;
+    private float fullZoom = 1.0f;
     private String miniPayload = "";
     private boolean miniExpanded = false;
     private FrameLayout.LayoutParams miniLayoutBeforeExpand;
@@ -337,6 +342,7 @@ public final class MainActivity extends Activity {
         miniExpandHit.setBackgroundColor(android.graphics.Color.TRANSPARENT);
         miniExpandHit.setOnClickListener(v -> openFullMiniPlayer());
         miniContainer.addView(miniExpandHit, new FrameLayout.LayoutParams(-1, -1));
+        createFullPlayerOverlays();
 
         miniTitle = new TextView(this);
         miniTitle.setTextColor(android.graphics.Color.WHITE);
@@ -367,6 +373,151 @@ public final class MainActivity extends Activity {
 
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    private android.widget.Button fullButton(String label, String description) {
+        android.widget.Button b = new android.widget.Button(this);
+        b.setText(label);
+        b.setContentDescription(description);
+        b.setTextColor(android.graphics.Color.WHITE);
+        b.setTextSize(12f);
+        b.setAllCaps(false);
+        b.setMinHeight(dp(42));
+        b.setMinWidth(dp(48));
+        b.setPadding(dp(8), 0, dp(8), 0);
+        b.setBackground(makeRoundBackground(0xCC183329, 0xAA6EE7B7, 1, dp(8)));
+        return b;
+    }
+
+    private void createFullPlayerOverlays() {
+        fullControls = new android.widget.LinearLayout(this);
+        fullControls.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        fullControls.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        fullControls.setPadding(dp(8), dp(5), dp(8), dp(5));
+        fullControls.setBackgroundColor(0xCC06100B);
+        fullControls.setVisibility(View.GONE);
+        FrameLayout.LayoutParams cp = new FrameLayout.LayoutParams(-1, dp(58), android.view.Gravity.TOP | android.view.Gravity.LEFT);
+        cp.leftMargin = dp(8); cp.rightMargin = dp(8); cp.topMargin = dp(6);
+        miniContainer.addView(fullControls, cp);
+
+        android.widget.Button menu = fullButton("☰", "Abrir menu de canais");
+        menu.setOnClickListener(v -> toggleFullChannelMenu());
+        fullControls.addView(menu, new android.widget.LinearLayout.LayoutParams(dp(54), -1));
+
+        android.widget.Button stretch = fullButton("↔", "Esticar ou ajustar a imagem");
+        stretch.setOnClickListener(v -> {
+            int mode = miniPlayerView.getResizeMode();
+            miniPlayerView.setResizeMode(mode == androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    ? androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FILL
+                    : androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT);
+        });
+        fullControls.addView(stretch, new android.widget.LinearLayout.LayoutParams(dp(54), -1));
+
+        android.widget.Button minus = fullButton("−", "Diminuir zoom");
+        minus.setOnClickListener(v -> changeFullZoom(-0.1f));
+        fullControls.addView(minus, new android.widget.LinearLayout.LayoutParams(dp(48), -1));
+
+        android.widget.Button plus = fullButton("+", "Aumentar zoom");
+        plus.setOnClickListener(v -> changeFullZoom(0.1f));
+        fullControls.addView(plus, new android.widget.LinearLayout.LayoutParams(dp(48), -1));
+
+        fullZoomLabel = new TextView(this);
+        fullZoomLabel.setTextColor(android.graphics.Color.WHITE);
+        fullZoomLabel.setTextSize(12f);
+        fullZoomLabel.setGravity(android.view.Gravity.CENTER);
+        fullZoomLabel.setText("100%");
+        fullControls.addView(fullZoomLabel, new android.widget.LinearLayout.LayoutParams(dp(58), -1));
+
+        android.widget.Button reset = fullButton("1×", "Voltar ao tamanho original");
+        reset.setOnClickListener(v -> { fullZoom = 1.0f; applyFullZoom(); });
+        fullControls.addView(reset, new android.widget.LinearLayout.LayoutParams(dp(52), -1));
+
+        fullChannelMenu = new FrameLayout(this);
+        fullChannelMenu.setVisibility(View.GONE);
+        fullChannelMenu.setPadding(dp(12), dp(12), dp(12), dp(12));
+        fullChannelMenu.setBackground(makeRoundBackground(0xEE07130F, 0xDD6EE7B7, 2, dp(14)));
+        android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+        fullChannelList = new android.widget.LinearLayout(this);
+        fullChannelList.setOrientation(android.widget.LinearLayout.VERTICAL);
+        scroll.addView(fullChannelList, new android.widget.ScrollView.LayoutParams(-1, -2));
+        fullChannelMenu.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
+        miniContainer.addView(fullChannelMenu);
+    }
+
+    private void changeFullZoom(float delta) {
+        fullZoom = Math.max(0.8f, Math.min(1.6f, fullZoom + delta));
+        applyFullZoom();
+    }
+
+    private void applyFullZoom() {
+        if (miniPlayerView == null) return;
+        miniPlayerView.setScaleX(fullZoom);
+        miniPlayerView.setScaleY(fullZoom);
+        if (fullZoomLabel != null) fullZoomLabel.setText(Math.round(fullZoom * 100f) + "%");
+    }
+
+    private void toggleFullChannelMenu() {
+        if (fullChannelMenu == null) return;
+        if (fullChannelMenu.getVisibility() == View.VISIBLE) {
+            fullChannelMenu.setVisibility(View.GONE);
+            return;
+        }
+        populateFullChannelMenu();
+        fullChannelMenu.bringToFront();
+        fullChannelMenu.setVisibility(View.VISIBLE);
+    }
+
+    private void populateFullChannelMenu() {
+        if (fullChannelList == null) return;
+        fullChannelList.removeAllViews();
+        try {
+            JSONObject current = new JSONObject(miniPayload == null ? "{}" : miniPayload);
+            org.json.JSONArray zap = current.optJSONArray("zap");
+            if (zap == null || zap.length() == 0) {
+                TextView empty = new TextView(this);
+                empty.setText("Nenhum canal disponível nesta lista");
+                empty.setTextColor(android.graphics.Color.WHITE);
+                empty.setTextSize(15f);
+                empty.setPadding(dp(8), dp(16), dp(8), dp(16));
+                fullChannelList.addView(empty);
+                return;
+            }
+            TextView head = new TextView(this);
+            head.setText("Canais");
+            head.setTextColor(android.graphics.Color.WHITE);
+            head.setTextSize(18f);
+            head.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
+            head.setPadding(dp(8), 0, dp(8), dp(10));
+            fullChannelList.addView(head);
+            for (int i = 0; i < zap.length(); i++) {
+                JSONObject item = zap.optJSONObject(i);
+                if (item == null) continue;
+                String name = item.optString("t", "Canal " + (i + 1));
+                String url = item.optString("u", "");
+                if (url.isEmpty()) continue;
+                android.widget.Button row = fullButton(name, "Trocar para " + name);
+                row.setGravity(android.view.Gravity.LEFT | android.view.Gravity.CENTER_VERTICAL);
+                row.setTextSize(14f);
+                android.widget.LinearLayout.LayoutParams rp = new android.widget.LinearLayout.LayoutParams(-1, dp(46));
+                rp.bottomMargin = dp(6);
+                fullChannelList.addView(row, rp);
+                final String nextUrl = url;
+                final String nextName = name;
+                row.setOnClickListener(v -> {
+                    try {
+                        JSONObject next = new JSONObject(miniPayload == null ? "{}" : miniPayload);
+                        next.put("url", nextUrl);
+                        next.put("title", nextName);
+                        showMiniPlayer(next.toString());
+                        fullChannelMenu.setVisibility(View.GONE);
+                    } catch (Throwable ignored) { }
+                });
+            }
+        } catch (Throwable ignored) { }
+        int width = Math.min(Math.max(dp(300), getResources().getDisplayMetrics().widthPixels - dp(24)), dp(430));
+        FrameLayout.LayoutParams mp = new FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.MATCH_PARENT, android.view.Gravity.TOP | android.view.Gravity.LEFT);
+        mp.leftMargin = dp(12); mp.rightMargin = dp(12); mp.topMargin = dp(70); mp.bottomMargin = dp(12);
+        fullChannelMenu.setLayoutParams(mp);
     }
 
     private void resizeMiniPlayer(boolean tvMode) {
@@ -453,6 +604,11 @@ public final class MainActivity extends Activity {
             if (root != null) root.requestLayout();
             if (miniTitle != null) miniTitle.setVisibility(View.GONE);
             if (miniExpandHit != null) miniExpandHit.setVisibility(View.GONE);
+            if (fullControls != null) fullControls.setVisibility(View.VISIBLE);
+            if (fullChannelMenu != null) fullChannelMenu.setVisibility(View.GONE);
+            fullZoom = 1.0f;
+            miniPlayerView.setResizeMode(androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT);
+            applyFullZoom();
             miniPlayerView.setUseController(true);
             miniPlayerView.setControllerAutoShow(true);
             if (miniCloseButton != null) {
@@ -487,6 +643,12 @@ public final class MainActivity extends Activity {
         miniContainer.requestLayout();
         if (miniTitle != null) miniTitle.setVisibility(View.VISIBLE);
         if (miniExpandHit != null) miniExpandHit.setVisibility(View.VISIBLE);
+        if (fullControls != null) fullControls.setVisibility(View.GONE);
+        if (fullChannelMenu != null) fullChannelMenu.setVisibility(View.GONE);
+        fullZoom = 1.0f;
+        miniPlayerView.setScaleX(1.0f);
+        miniPlayerView.setScaleY(1.0f);
+        miniPlayerView.setResizeMode(androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT);
         miniPlayerView.setUseController(false);
         if (miniCloseButton != null) {
             miniCloseButton.setContentDescription("Fechar mini player");
@@ -552,6 +714,10 @@ public final class MainActivity extends Activity {
     @Override
     public void onBackPressed() {
         if (miniExpanded) {
+            if (fullChannelMenu != null && fullChannelMenu.getVisibility() == View.VISIBLE) {
+                fullChannelMenu.setVisibility(View.GONE);
+                return;
+            }
             collapseFullMiniPlayer();
             return;
         }
