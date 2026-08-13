@@ -320,6 +320,8 @@ public final class MainActivity extends Activity {
         miniContainer.setVisibility(View.GONE);
         miniContainer.setBackgroundColor(android.graphics.Color.rgb(4, 12, 9));
         miniContainer.setElevation(24f);
+        miniContainer.setClickable(true);
+        miniContainer.setOnClickListener(v -> openFullMiniPlayer());
 
         miniPlayerView = new PlayerView(this);
         miniPlayerView.setUseController(false);
@@ -380,6 +382,9 @@ public final class MainActivity extends Activity {
     }
 
     private void resizeMiniPlayerBounds(double leftCss, double topCss, double widthCss, double heightCss, double scale) {
+        // O WebView atualiza os limites do quadro em vários callbacks. Nunca deixe
+        // esse callback reduzir o player depois que ele já foi ampliado.
+        if (miniExpanded) return;
         if (miniContainer == null || root == null || widthCss <= 0 || heightCss <= 0) return;
         if (scale <= 0.1 || scale > 8.0) scale = 1.0;
         int left = Math.max(0, (int) Math.round(leftCss * scale));
