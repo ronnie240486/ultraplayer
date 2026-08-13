@@ -1650,15 +1650,10 @@ function playVoiceExact(hit) {
             playViaNative({ kind: 'live', url: streamUrl('live', id), title: item.name || 'Canal', resume: 0, zxKind: 'live', zxId: id, name: item.name || 'Canal', zap: liveFullZapList(id) || liveZapList(id) });
             return true;
         }
-        if (kind === 'movies') {
-            id = parseInt(item.stream_id || 0, 10); if (!id) return false;
-            S.playName = item.name || 'Filme'; S.playExt = item.container_extension || item.container || 'mp4'; S.playPoster = item.stream_icon || '';
-            renderPlayerMovie(id, ''); return true;
-        }
-        if (kind === 'series') {
-            id = parseInt(item.series_id || item.stream_id || 0, 10); if (!id) return false;
-            renderDetailSeries(id); return true;
-        }
+        // Filmes e séries nunca são iniciados automaticamente pela voz: uma busca
+        // como "The Walking Dead" precisa mostrar todos os títulos encontrados para
+        // o usuário escolher o filme ou a série correta. A abertura direta fica
+        // reservada ao canal ao vivo com nome específico, como "Space HD".
     } catch (e) {}
     return false;
 }
@@ -3740,7 +3735,7 @@ function renderPlayerMovie(id, query) {
     var resumeAt = qs.restart ? 0 : (parseInt(qs.t || '0', 10) || ((getProgress('movie', id) || {}).pos || 0));
     if (nativeAvail()) {
         playViaNative({ kind: 'vod', url: streamUrl('movie', id, ext), title: name, resume: resumeAt, zxKind: 'movie', zxId: id, name: name, poster: poster });
-        history.back(); return;                   // volta pro detalhe; ExoPlayer abre por cima
+        return;                                   // mantém o detalhe atrás do player; não re-renderiza e não chama miniStop
     }
     setHtml(playerShell('vod', name, true));
     showLoading(false);
@@ -3771,7 +3766,7 @@ function renderPlayerEpisode(seriesId, epId, query) {
     if (nativeAvail()) {
         playViaNative({ kind: 'vod', url: streamUrl('series', epId, ext), title: name, resume: resumeAt,
             zxKind: 'series', zxId: epId, name: name, ext: ext, seriesId: ps.id || seriesId, series: ps, nextEp: nextEp });
-        history.back(); return;                   // volta pro detalhe; ExoPlayer abre por cima (auto-next via __zxNativeDone)
+        return;                                   // mantém o detalhe atrás do player; não chama miniStop
     }
     setHtml(playerShell('vod', name, true));
     showLoading(false);
