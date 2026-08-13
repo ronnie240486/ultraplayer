@@ -318,7 +318,7 @@ public final class MainActivity extends Activity {
         if (miniContainer == null || root == null) return;
         boolean large = tvMode;
         int screenWidth = getResources().getDisplayMetrics().widthPixels;
-        int width = large ? Math.max(dp(420), Math.round(screenWidth * 0.52f)) : dp(300);
+        int width = large ? Math.max(dp(360), Math.round(screenWidth * 0.40f)) : dp(300);
         int height = large ? Math.round(width * 0.5625f) : dp(185);
         FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(width, height, android.view.Gravity.TOP | android.view.Gravity.RIGHT);
         p.rightMargin = large ? dp(24) : dp(12);
