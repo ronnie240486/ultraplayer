@@ -2467,6 +2467,16 @@ function liveStyles() {
         + '.channel-tile-tv:focus .ct-num{color:#cfe8df;}'
         + '.channel-tile-tv:focus .ct-name{color:#fff;}'
         // ---- painel de EPG ----
+        + '.live-right-column{display:flex;flex-direction:column;min-width:0;min-height:0;gap:14px;}'
+        + '.live-video-slot{height:clamp(180px,28vh,340px);flex:0 0 auto;display:flex;align-items:center;justify-content:center;border:1px solid ' + a + '28;border-radius:16px;background:linear-gradient(145deg,#08120e,#13251d);overflow:hidden;color:#8fa39a;font-size:14px;text-align:center;}'
+        + '.live-video-hint{padding:16px;}'
+        + 'body.zx-ff-tv .live-split{display:grid;grid-template-columns:minmax(300px,44%) minmax(360px,56%);gap:18px;align-items:stretch;}'
+        + 'body.zx-ff-tv .live-right-column{min-height:calc(100vh - 150px);}'
+        + 'body.zx-ff-tv .live-video-slot{height:clamp(220px,31vh,380px);}'
+        + 'body.zx-ff-tv .live-epg{flex:1;min-height:180px;max-height:none;overflow:hidden;}'
+        + 'body.zx-ff-tv .live-epg .epg-body{max-height:calc(100% - 72px);}'
+        + 'body.zx-ff-mobile .live-split{display:flex;flex-direction:column;gap:12px;}'
+        + 'body.zx-ff-mobile .live-video-slot{height:180px;}'
         + '.live-epg{background:rgba(255,255,255,.028);border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:18px 20px;box-sizing:border-box;}'
         + '.live-epg .epg-item{border-top:1px solid rgba(255,255,255,.06);}'
         + '.live-epg .epg-time{color:#8fa39a;}'
@@ -2517,8 +2527,9 @@ function renderLiveSection(cat, opts) {
         setHtml('<div class="sidebar-screen">' + sidebar()
             + '<div class="sidebar-content" id="sidebar-content"><div class="sc-title" id="sc-title">' + esc(selName || 'TV ao vivo') + '</div>'
             + '<div id="grid-empty" style="color:#aaa;padding:40px;text-align:center;' + (tiles ? 'display:none;' : '') + '">Selecione uma categoria para ver os canais.</div>'
-            + '<div class="live-split"><div class="channel-grid-tv" id="content-grid">' + tiles + '</div>'
-            + '<div class="live-epg" id="live-epg"><div class="epg-empty">Passe num canal para ver a programação.</div></div></div>'
+                        + '<div class="live-split"><div class="channel-grid-tv" id="content-grid">' + tiles + '</div>'
+            + '<div class="live-right-column"><div class="live-video-slot" id="live-video-slot"><div class="live-video-hint">Selecione um canal para iniciar o mini player</div></div>'
+            + '<div class="live-epg" id="live-epg"><div class="epg-empty">Passe num canal para ver a programação.</div></div></div></div>'
             + '<div class="grid-loadmore" id="grid-loadmore" style="display:none">Carregando…</div></div></div>' + liveStyles());
         // Globais DIRETO em JS (script no innerHTML não executa — ver renderVodSection).
         global.__catKind = 'live'; global.__catId = (selCat || 0); global.__catPage = 1;
@@ -3808,6 +3819,7 @@ function applyFormFactor() {
             b.className = cl + (cl ? ' ' : '') + (mob ? 'zx-ff-mobile' : 'zx-ff-tv');
         }
     } catch (e) {}
+    try { if (global.HdxNative && global.HdxNative.setFormFactor) global.HdxNative.setFormFactor(mob ? 'mobile' : 'tv'); } catch (e) {}
     var st = $('zx-ff-css');
     if (!st) { st = document.createElement('style'); st.id = 'zx-ff-css'; (document.head || document.documentElement).appendChild(st); st.textContent = ffMobileCss(); }
     // re-ajusta grids visíveis + nav do catálogo na hora

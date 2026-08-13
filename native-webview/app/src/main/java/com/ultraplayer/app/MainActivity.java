@@ -210,6 +210,11 @@ public final class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void setFormFactor(String mode) {
+            runOnUiThread(() -> resizeMiniPlayer("tv".equalsIgnoreCase(mode)));
+        }
+
+        @JavascriptInterface
         public void fetchText(String url, String requestId) {
             final String target = url == null ? "" : url;
             final String id = requestId == null ? "" : requestId;
@@ -301,12 +306,24 @@ public final class MainActivity extends Activity {
         closeParams.topMargin = 4; closeParams.rightMargin = 4;
         miniContainer.addView(close, closeParams);
 
-        int width = isTv ? 430 : 300;
-        int height = isTv ? 245 : 185;
-        FrameLayout.LayoutParams miniParams = new FrameLayout.LayoutParams(width, height, android.view.Gravity.BOTTOM | android.view.Gravity.RIGHT);
-        miniParams.rightMargin = isTv ? 24 : 12;
-        miniParams.bottomMargin = isTv ? 24 : 76;
-        root.addView(miniContainer, miniParams);
+        root.addView(miniContainer);
+        resizeMiniPlayer(isTv);
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    private void resizeMiniPlayer(boolean tvMode) {
+        if (miniContainer == null || root == null) return;
+        boolean large = tvMode;
+        int screenWidth = getResources().getDisplayMetrics().widthPixels;
+        int width = large ? Math.max(dp(420), Math.round(screenWidth * 0.52f)) : dp(300);
+        int height = large ? Math.round(width * 0.5625f) : dp(185);
+        FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(width, height, android.view.Gravity.TOP | android.view.Gravity.RIGHT);
+        p.rightMargin = large ? dp(24) : dp(12);
+        p.topMargin = large ? dp(74) : dp(78);
+        miniContainer.setLayoutParams(p);
     }
 
     private android.graphics.drawable.Drawable makeRoundBackground(int fill, int stroke, int strokeWidth, int radius) {
