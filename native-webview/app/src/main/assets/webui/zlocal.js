@@ -1452,14 +1452,32 @@ function voiceMatchScore(item, q, kind) {
     for (var i = 0; i < words.length; i++) if (words[i] && n.indexOf(words[i]) >= 0) score += 50;
     return score;
 }
+function voiceResultsStyles() {
+    var a = S.accent || '#10b981';
+    return '<style>'
+        + '.voice-search-screen{position:fixed;inset:0;display:flex;flex-direction:column;overflow:hidden;background:var(--zx-bg,#06130f);color:var(--zx-text,#f4fff9);}'
+        + '.voice-search-screen .voice-result-query{padding:14px 22px 8px;color:var(--zx-muted,#9db0a7);font-size:18px;flex:none;}.voice-search-screen .voice-result-query strong{color:var(--zx-text,#f4fff9);}'
+        + '.voice-search-screen #voice-results{flex:1;min-height:0;overflow:auto;padding:12px 22px 26px;box-sizing:border-box;}'
+        + '.voice-search-screen #voice-results.live-channels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:start;gap:12px;}'
+        + '.voice-search-screen .channel-tile-tv{position:relative;display:flex;align-items:center;min-height:88px;padding:10px 52px 10px 12px;box-sizing:border-box;border:1px solid ' + a + '35;border-radius:16px;background:linear-gradient(145deg,var(--zx-panel,#0d241a),rgba(255,255,255,.04));color:var(--zx-text,#f4fff9);text-decoration:none;overflow:hidden;}'
+        + '.voice-search-screen .channel-tile-tv:hover,.voice-search-screen .channel-tile-tv:focus{border-color:' + a + ';box-shadow:0 0 0 3px ' + a + '33;outline:none;}'
+        + '.voice-search-screen .ct-logo{width:62px;height:62px;flex:0 0 62px;margin-right:12px;border-radius:12px;background:' + a + '18;display:flex;align-items:center;justify-content:center;overflow:hidden;}'
+        + '.voice-search-screen .ct-logo img{display:block;width:100%;height:100%;object-fit:contain;}.voice-search-screen .ct-fallback{font-size:25px;}'
+        + '.voice-search-screen .ct-info{min-width:0;display:flex;flex-direction:column;gap:5px;}.voice-search-screen .ct-num{font-size:11px;color:var(--zx-muted,#9db0a7);}.voice-search-screen .ct-name{font-size:16px;font-weight:800;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
+        + '.voice-search-screen .ct-fav{position:absolute;right:12px;top:50%;transform:translateY(-50%);width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.3);color:#fff;}.voice-search-screen .ct-fav svg{width:21px;height:21px;fill:none;stroke:currentColor;}'
+        + '.voice-search-screen #voice-results.poster-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:18px 12px;align-content:start;}.voice-search-screen #voice-results.poster-grid .poster-tile-tv{display:block;width:auto!important;margin:0!important;padding:0!important;color:var(--zx-text,#f4fff9);text-decoration:none;}.voice-search-screen .poster-tile-tv .pt-img{position:relative;width:100%;aspect-ratio:2/3;border-radius:12px;overflow:hidden;background:linear-gradient(145deg,' + a + '28,#101a16);}.voice-search-screen .poster-tile-tv .pt-img img{display:block;width:100%;height:100%;object-fit:cover;}.voice-search-screen .poster-tile-tv .pt-fallback{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:28px;font-weight:900;background:linear-gradient(145deg,' + a + '55,#111a18);}.voice-search-screen .poster-tile-tv .pt-name{margin-top:7px;font-size:14px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
+        + '.voice-search-screen .zx-empty{padding:42px 20px;text-align:center;color:var(--zx-muted,#9db0a7);font-size:18px;}'
+        + '@media (max-width:800px){.voice-search-screen .voice-result-query{padding:10px 14px 6px;font-size:15px;}.voice-search-screen #voice-results{padding:8px 14px 20px;}.voice-search-screen #voice-results.live-channels{grid-template-columns:1fr;gap:9px;}.voice-search-screen .channel-tile-tv{min-height:76px;padding:8px 48px 8px 10px;border-radius:13px;}.voice-search-screen .ct-logo{width:52px;height:52px;flex-basis:52px;margin-right:10px;}.voice-search-screen .ct-name{font-size:14px;}.voice-search-screen #voice-results.poster-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:14px 9px;}.voice-search-screen .poster-tile-tv .pt-name{font-size:12px;}}'
+        + '</style>';
+}
 function renderVoiceResults(kind, query, list) {
     var title = kind === 'live' ? 'Canais encontrados' : kind === 'movies' ? 'Filmes encontrados' : 'Séries encontradas';
     var body = kind === 'live' ? channelTiles(list) : posterTiles(list, kind);
-    setHtml('<div class="search-screen"><div class="search-topbar"><a href="/home" class="gt-back" autofocus>← Voltar</a><div class="search-title">' + esc(title) + '</div></div><div class="voice-result-query">Comando: <strong>' + esc(query) + '</strong></div><div id="voice-results" class="' + (kind === 'live' ? 'live-channels' : 'poster-grid') + '">' + (body || '<div class="zx-empty">Nenhum resultado encontrado.</div>') + '</div></div>' + flatStyles());
+    setHtml('<div class="search-screen voice-search-screen"><div class="search-topbar"><a href="/home" class="gt-back" autofocus>← Voltar</a><div class="search-title">' + esc(title) + '</div></div><div class="voice-result-query">Comando: <strong>' + esc(query) + '</strong></div><div id="voice-results" class="' + (kind === 'live' ? 'live-channels' : 'poster-grid') + '">' + (body || '<div class="zx-empty">Nenhum resultado encontrado.</div>') + '</div></div>' + flatStyles() + voiceResultsStyles());
     if (kind === 'live') {
         loadChannelLogos();
         var grid = $('voice-results'); if (grid) grid.addEventListener('click', function (e) { var row = e.target; while (row && row !== grid && !((' ' + (row.className || '') + ' ').indexOf(' channel-tile-tv ') >= 0)) row = row.parentNode; if (!row || row === grid) return; e.preventDefault(); var sid = row.getAttribute('data-sid'), name = row.getAttribute('data-name') || ''; if (sid) playViaNative({ kind: 'live', url: streamUrl('live', sid), title: name, resume: 0, zxKind: 'live', zxId: sid, name: name, zap: liveZapList(sid) }); });
-    } else { var pg = $('voice-results'); if (pg) { fitPosterGrid(pg); afterRender(); } }
+    } else { var pg = $('voice-results'); if (pg) { afterRender(); } }
     focusHomeStart();
 }
 function voiceSearchKind(kind, q) {
@@ -1470,6 +1488,22 @@ function voiceSearchKind(kind, q) {
         return { kind: kind, scored: scored };
     });
 }
+function chooseVoiceResult(found, q) {
+    if (!found.length) return { kind: voiceKind(q), scored: [] };
+    found.sort(function (a, b) { return (b.scored[0].score || 0) - (a.scored[0].score || 0); });
+    var words = normVoiceText(q).split(' ').filter(function (x) { return x.length > 1; });
+    var live = null, nonLive = [];
+    for (var i = 0; i < found.length; i++) { if (found[i].kind === 'live') live = found[i]; else nonLive.push(found[i]); }
+    /* Títulos com duas ou mais palavras — como The Walking Dead — devem usar o
+       catálogo de filmes/séries quando houver correspondência, mesmo que o
+       servidor tenha canais com palavras soltas parecidas. */
+    if (words.length >= 2 && nonLive.length) {
+        nonLive.sort(function (a, b) { return (b.scored[0].score || 0) - (a.scored[0].score || 0); });
+        var topNonLive = nonLive[0], topLive = live && live.scored[0] ? live.scored[0].score : 0;
+        if ((topNonLive.scored[0].score || 0) >= 500 && (topNonLive.scored[0].score || 0) >= topLive - 100) return topNonLive;
+    }
+    return found[0];
+}
 function runVoiceCommand(text) {
     var raw = String(text || '').trim(), normalized = normVoiceText(raw), q = voiceCleanQuery(raw), explicitKind = /\b(filme|filmes|movie|movies|cinema|vod|serie|series|novela|novelas|temporada|episodio|episodios|anime)\b/.test(normalized), preferred = voiceKind(raw);
     if (!q) { renderVoiceResults(preferred, raw, []); return; }
@@ -1479,14 +1513,13 @@ function runVoiceCommand(text) {
     function next(i) {
         if (i >= order.length) {
             showLoading(false);
-            var best = found.length ? found[0] : { kind: preferred, scored: [] };
+            var best = chooseVoiceResult(found, q);
             renderVoiceResults(best.kind, raw, best.scored.slice(0, 80).map(function (x) { return x.item; }));
             return;
         }
         voiceSearchKind(order[i], q).then(function (res) {
             if (res.scored.length) found.push(res);
-            if (res.scored.length && (!found.length || res.scored[0].score >= 500)) { found.sort(function (a, b) { return (b.scored[0].score || 0) - (a.scored[0].score || 0); }); }
-            if (explicitKind || res.scored.length >= 8 || (res.scored.length && res.scored[0].score >= 650)) { showLoading(false); var best = res; renderVoiceResults(best.kind, raw, best.scored.slice(0, 80).map(function (x) { return x.item; })); return; }
+            if (explicitKind) { showLoading(false); renderVoiceResults(res.kind, raw, res.scored.slice(0, 80).map(function (x) { return x.item; })); return; }
             next(i + 1);
         }).catch(function () { next(i + 1); });
     }
