@@ -266,9 +266,16 @@ function getDid() {
     try { var d = localStorage.getItem('zx_did'); if (!d) { d = 'win-' + Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem('zx_did', d); } return d; }
     catch (e) { return 'win-anon'; }
 }
-function saveCreds() { try { localStorage.setItem('zx_creds', JSON.stringify({ code: S.code, user: S.user, pass: S.pass, playlistUrl: S.playlistUrl || '', playlistType: S.playlistType || '' })); } catch (e) {} }
+function loadDirectPlaylists() {
+    try { var list = JSON.parse(localStorage.getItem('zx_direct_playlists') || '[]'); return Array.isArray(list) ? list : []; } catch (e) { return []; }
+}
+function saveDirectPlaylists(list) {
+    try { localStorage.setItem('zx_direct_playlists', JSON.stringify((list || []).map(function (p) { return { id: String(p.id), name: p.name || 'Lista', url: p.url || '', type: p.type || '', server: p.server || '' }; }))); } catch (e) {}
+}
+function activeListIndex() { var n = 0; try { n = parseInt(localStorage.getItem('zx_list_index') || '0', 10) || 0; } catch (e) {} return n < 0 ? 0 : n; }
+function saveCreds() { try { localStorage.setItem('zx_creds', JSON.stringify({ code: S.code, user: S.user, pass: S.pass, playlistUrl: S.playlistUrl || '', playlistType: S.playlistType || '', listIndex: S.listIndex || 0 })); } catch (e) {} }
 function loadCreds() { try { return JSON.parse(localStorage.getItem('zx_creds') || 'null'); } catch (e) { return null; } }
-function clearCreds() { try { localStorage.removeItem('zx_creds'); } catch (e) {} }
+function clearCreds() { try { localStorage.removeItem('zx_creds'); localStorage.removeItem('zx_direct_playlists'); localStorage.removeItem('zx_list_index'); } catch (e) {} }
 function platform() {
     // Plataforma REAL do aparelho (vira o &plat= que o servidor usa no painel).
     // Android = ponte HdxNative; Samsung = webapis.avplay; senão PC (WebView2).
@@ -656,7 +663,7 @@ function appThemeCss(th) {
     return ':root{--zx-accent:' + th.accent + ';--zx-bg:' + th.bg + ';--zx-panel:' + th.panel + ';--zx-text:' + th.text + ';--zx-muted:' + th.muted + ';}'
         + 'html,body,#app-root{background-color:' + th.bg + ';color:' + th.text + ';}'
         + 'body{--zx-accent:' + th.accent + ';--zx-bg:' + th.bg + ';--zx-panel:' + th.panel + ';--zx-text:' + th.text + ';--zx-muted:' + th.muted + ';}'
-        + '.brand-lockup{display:inline-flex;align-items:center;gap:9px;vertical-align:middle}.brand-mark{width:34px;height:34px;object-fit:contain;display:block}.brand-logo{color:' + th.text + ';}.brand-logo .accent,.brand-logo .accent{color:' + th.accent + ';}'
+        + '.brand-lockup{display:inline-flex;align-items:center;gap:9px;vertical-align:middle}.brand-mark{width:42px;height:42px;object-fit:contain;display:block;border-radius:6px}.brand-logo{color:' + th.text + ';}.brand-logo .accent,.brand-logo .accent{color:' + th.accent + ';}'
         + '.settings-screen,.zx-login-screen,.search-screen,.zx-home2,.home-screen{background-color:' + th.bg + ' !important;color:' + th.text + ' !important;}'
         + '.settings-content,.settings-menu .sm-item,.info-card,.opt-btn,.action-btn,.zx-pf-kids{background-color:' + th.panel + ';color:' + th.text + ';}'
         + '.settings-screen .settings-sub,.settings-pane .pane-sub,.settings-pane .pane-section-title,.zx-pf-kids-sub{color:' + th.muted + ';}'
@@ -682,7 +689,7 @@ function applyAppTheme(id, rerender) {
     if (rerender && location.pathname.indexOf('/settings') === 0) renderSettings();
 }
 function brandLogoHtmlStyles() {
-    return '<style>.brand-lockup{display:inline-flex;align-items:center;gap:9px;vertical-align:middle}.brand-mark{width:34px;height:34px;object-fit:contain;display:block}.brand-logo-img{max-height:42px;max-width:190px;object-fit:contain}</style>';
+    return '<style>.brand-lockup{display:inline-flex;align-items:center;gap:9px;vertical-align:middle}.brand-mark{width:42px;height:42px;object-fit:contain;display:block;border-radius:6px}.brand-logo-img{max-height:42px;max-width:190px;object-fit:contain}</style>';
 }
 function applyAccent(accent) {
     S.accent = accent || '#10b981';
@@ -944,14 +951,46 @@ function epgText(v) {
     try { var decoded = b64(raw); if (decoded && decoded !== raw && /[A-Za-zÀ-ÿ]/.test(decoded) && !/[\u0000-\u0008]/.test(decoded)) return decoded; } catch (e) {}
     return raw;
 }
+function epgTimestamp(raw) {
+    var s = String(raw || '').trim(); if (!s) return 0;
+    var n = Number(s); if (isFinite(n) && n > 1000000000) return n < 100000000000 ? n * 1000 : n;
+    var d = new Date(s); if (!isNaN(d.getTime())) return d.getTime();
+    var m = s.match(/(?:^|T|\s)(\d{1,2}):(\d{2})/); if (!m) return 0;
+    var now = new Date(); now.setHours(parseInt(m[1], 10), parseInt(m[2], 10), 0, 0); return now.getTime();
+}
 function epgItemsFromResponse(d) {
     var listings = [];
     if (Array.isArray(d)) listings = d;
     else if (d) listings = d.epg_listings || d.epg || d.programs || d.data || [];
     if (!Array.isArray(listings)) listings = [];
     var out = [];
-    for (var i = 0; i < listings.length; i++) { var p = listings[i] || {}; out.push({ title: epgText(p.title || p.name || p.programme || p.description), start: hhmm(p.start || p.start_time || p.start_datetime), end: hhmm(p.end || p.end_time || p.stop_datetime) }); }
+    for (var i = 0; i < listings.length; i++) { var p = listings[i] || {}, rawStart = p.start || p.start_time || p.start_datetime || p.start_timestamp || '', rawEnd = p.end || p.end_time || p.stop_datetime || p.stop_timestamp || ''; out.push({ title: epgText(p.title || p.name || p.programme || p.description), start: hhmm(rawStart), end: hhmm(rawEnd), rawStart: String(rawStart || '') }); }
     return out.filter(function (p) { return p.title || p.start; });
+}
+function epgAlarms() { try { var a = JSON.parse(localStorage.getItem('zx_epg_alarms') || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+function saveEpgAlarms(a) { try { localStorage.setItem('zx_epg_alarms', JSON.stringify(a || [])); } catch (e) {} }
+function epgAlarmKey(when, title, channel) { return String(when || 0) + '|' + normVoiceText(title) + '|' + normVoiceText(channel); }
+function epgAlarmHas(when, title, channel) { var k = epgAlarmKey(when, title, channel), a = epgAlarms(); for (var i = 0; i < a.length; i++) if (a[i].key === k) return true; return false; }
+function toggleEpgAlarm(btn) {
+    var when = parseInt(btn.getAttribute('data-when') || '0', 10), title = btn.getAttribute('data-title') || '', channel = btn.getAttribute('data-channel') || '', now = Date.now();
+    if (!when || when <= now) { btn.title = 'Este programa já começou'; return; }
+    var key = epgAlarmKey(when, title, channel), a = epgAlarms(), found = -1;
+    for (var i = 0; i < a.length; i++) if (a[i].key === key) { found = i; break; }
+    if (found >= 0) { a.splice(found, 1); btn.className = btn.className.replace(/\s*is-on\b/g, ''); btn.textContent = '♧'; }
+    else { a.push({ key: key, when: when, title: title, channel: channel }); btn.className += ' is-on'; btn.textContent = '🔔'; }
+    saveEpgAlarms(a);
+}
+function showEpgAlarm(alarm) {
+    if (document.querySelector('.zx-epg-alarm-modal')) return;
+    var n = 10, ov = document.createElement('div'); ov.className = 'zx-epg-alarm-modal'; ov.innerHTML = '<div class="zx-epg-alarm-card"><div class="zx-epg-alarm-bell">🔔</div><div class="zx-epg-alarm-title">Vai começar</div><div class="zx-epg-alarm-name">' + esc(alarm.title || 'Programa') + '</div><div class="zx-epg-alarm-channel">' + esc(alarm.channel || '') + '</div><div class="zx-epg-alarm-count" id="zxEpgAlarmCount">10</div><button type="button" class="zx-epg-alarm-close">Fechar</button></div>';
+    document.body.appendChild(ov);
+    var close = function () { if (ov.parentNode) ov.parentNode.removeChild(ov); if (ov.__timer) clearInterval(ov.__timer); };
+    var b = ov.querySelector('.zx-epg-alarm-close'); if (b) b.addEventListener('click', close);
+    ov.__timer = setInterval(function () { n--; var c = ov.querySelector('#zxEpgAlarmCount'); if (c) c.textContent = String(n); if (n <= 0) close(); }, 1000);
+}
+function startEpgAlarmWatcher() {
+    if (global.__zxEpgAlarmTimer) return;
+    global.__zxEpgAlarmTimer = setInterval(function () { var now = Date.now(), a = epgAlarms(), keep = []; for (var i = 0; i < a.length; i++) { if (a[i].when <= now && a[i].when > now - 12000) showEpgAlarm(a[i]); else if (a[i].when > now) keep.push(a[i]); } if (keep.length !== a.length) saveEpgAlarms(keep); }, 1000);
 }
 function installShim() {
     if (S._shim) return; S._shim = true;
@@ -1162,18 +1201,34 @@ function playlistToXtream(p, fallbackName) {
         return { server: u.protocol + '//' + u.host, user: user, pass: pass, name: (p.playlist_name || p.name || fallbackName || 'Playlist') };
     } catch (e) { return null; }
 }
+function directListModels(j) {
+    if (!j || j.success === false || j.authorized === false) return [];
+    var list = Array.isArray(j.playlists) ? j.playlists : (Array.isArray(j.lists) ? j.lists : (j.data && Array.isArray(j.data.playlists) ? j.data.playlists : []));
+    if (!list.length && j.playlist_url) list = [{ playlist_url: j.playlist_url, playlist_name: j.playlist_name || 'Playlist' }];
+    var available = [];
+    for (var li = 0; li < list.length; li++) {
+        var lp = list[li] || {}, lu = String(lp.playlist_url || lp.url || ''); if (!lu) continue;
+        var lc = playlistToXtream(lp, 'Lista ' + (li + 1));
+        var lsrv = lc ? lc.server : ''; try { if (!lsrv) { var lpu = new URL(lu); lsrv = lpu.protocol + '//' + lpu.host; } } catch (e) {}
+        available.push({ id: String(li), name: String(lp.playlist_name || lp.name || lp.title || ('Lista ' + (li + 1))), url: lu, type: String(lp.type || (lu.indexOf('get.php') >= 0 ? 'm3u_plus' : 'xtream')).toLowerCase(), server: lsrv });
+    }
+    return available;
+}
+function syncDirectListCache(done) {
+    if (!S.directAuth || S.code !== '__mac__' || !S.user) { done(); return; }
+    fetchT(DIRECT_PANEL_BASE + '/check_mac.php?mac=' + enc(S.user), 10000).then(function (r) { return r.json(); }).then(function (j) { var fresh = directListModels(j); if (fresh.length) { saveDirectPlaylists(fresh); S.directPlaylists = fresh; } }).catch(function () {}).then(done);
+}
 function directResponseToState(j, mode, fallback) {
     if (!j || j.success === false || j.authorized === false) return null;
-    var list = Array.isArray(j.playlists) ? j.playlists : [];
-    if (!list.length && j.playlist_url) list = [{ playlist_url: j.playlist_url, playlist_name: j.playlist_name || 'Playlist' }];
-    var creds = null, chosen = null;
-    for (var i = 0; i < list.length && !chosen; i++) {
-        var candidate = list[i] || {}, candidateUrl = String(candidate.playlist_url || candidate.url || '');
-        if (!candidateUrl) continue;
-        chosen = candidate; creds = playlistToXtream(candidate, 'Playlist ' + (i + 1));
-    }
-    if (!chosen) return null;
-    var chosenUrl = String(chosen.playlist_url || chosen.url || '');
+    var available = directListModels(j);
+    if (!available.length) return null;
+    saveDirectPlaylists(available);
+    var pick = activeListIndex(); if (pick >= available.length) pick = 0;
+    var chosenInfo = available[pick], creds = null, chosen = null;
+    chosen = { playlist_url: chosenInfo.url, playlist_name: chosenInfo.name, type: chosenInfo.type };
+    creds = playlistToXtream(chosen, chosenInfo.name);
+    var chosenUrl = chosenInfo.url; S.listIndex = pick;
+    try { localStorage.setItem('zx_list_index', String(pick)); } catch (e) {}
     var server = creds ? creds.server : '';
     try { if (!server) { var pu = new URL(chosenUrl); server = pu.protocol + '//' + pu.host; } } catch (e) {}
     if (!server) return null;
@@ -1275,30 +1330,36 @@ function listsStyles() {
         + '.zx-list-form{margin:0 auto}'
         + '</style>';
 }
-function renderLists(query) {
-    var c = loadCreds();
-    var hasList = !!(c && c.code && c.user && c.pass);
-    var edit = (typeof query === 'string' && query.indexOf('edit') >= 0) || !hasList;
-    var header = '<div class="search-topbar"><a href="/home" class="gt-back">← Voltar</a><div class="search-title">Listas</div></div>';
-    if (!edit) {
-        setHtml('<div class="search-screen">' + header
-            + '<div class="search-body"><div class="zx-list-wrap"><div class="zx-list-card">'
-            + '<div class="zx-list-cap">Sua lista</div>'
-            + '<div class="zx-list-ico"><svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg></div>'
-            + '<div class="zx-list-code">' + esc(c.code) + '</div>'
-            + '<div class="zx-list-user">' + te('Usuário:') + ' ' + esc(c.user) + '</div>'
-            + '<a href="/lists?edit=1" class="zx-list-swap" autofocus>Trocar lista</a>'
-            + '</div></div></div></div>' + listsStyles() + flatStyles());
-        afterRender();
-        return;
-    }
-    setHtml('<div class="search-screen">' + header
-        + '<div class="zx-login-flat"><form class="zx-login-flat-inner" id="login-form" onsubmit="return false">'
-        + loginFieldsHtml(c && c.code, c && c.user)
-        + '</form></div></div>' + loginFormStyles() + flatStyles());
-    bindLoginForm(true);
-    afterRender();
+function switchDirectList(index) {
+    var lists = loadDirectPlaylists(), pick = parseInt(index, 10) || 0;
+    if (!lists.length || !lists[pick]) return;
+    var p = lists[pick], creds = playlistToXtream({ playlist_url: p.url, playlist_name: p.name, type: p.type }, p.name);
+    if (!creds && !p.server) return;
+    S.listIndex = pick; S.server = p.server || (creds && creds.server) || S.server; S.playlistUrl = p.url; S.playlistType = p.type || 'xtream'; S.xtreamDerived = creds; S.xtreamUnavailable = false; S.cat = { movies: null, series: null, live: null }; S.m3uCatalogPromise = null;
+    try { localStorage.setItem('zx_list_index', String(pick)); } catch (e) {}
+    saveCreds();
+    go('/home', true);
 }
+function renderListsNow(query) {
+    var c = loadCreds(), lists = loadDirectPlaylists();
+    var hasList = !!(c && c.code && c.user && c.pass);
+    var header = '<div class="search-topbar"><a href="/home" class="gt-back">← Voltar</a><div class="search-title">Servidor</div></div>';
+    if (hasList && lists.length) {
+        var h = '<div class="server-list-grid">';
+        for (var i = 0; i < lists.length; i++) {
+            var p = lists[i], active = (parseInt(c.listIndex || activeListIndex(), 10) || 0) === i;
+            h += '<button type="button" class="server-list-item' + (active ? ' is-active' : '') + '" data-list-index="' + i + '"><span class="server-list-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="6" rx="1"></rect><rect x="3" y="14" width="18" height="6" rx="1"></rect><circle cx="7" cy="7" r=".6" fill="currentColor"></circle><circle cx="7" cy="17" r=".6" fill="currentColor"></circle></svg></span><span class="server-list-text"><b>' + esc(p.name || ('Lista ' + (i + 1))) + '</b><small>' + esc(p.server || 'Lista autorizada') + '</small></span><span class="server-list-check">' + (active ? '✓' : '') + '</span></button>';
+        }
+        h += '</div><div class="server-list-note">As listas exibidas aqui são somente as cadastradas no painel para este aparelho.</div>';
+        setHtml('<div class="search-screen server-screen">' + header + '<div class="search-body server-list-body">' + h + '</div></div>' + listsStyles() + flatStyles());
+        var buttons = document.querySelectorAll('.server-list-item');
+        for (var bi = 0; bi < buttons.length; bi++) buttons[bi].addEventListener('click', function () { switchDirectList(this.getAttribute('data-list-index')); });
+        afterRender(); return;
+    }
+    setHtml('<div class="search-screen">' + header + '<div class="zx-login-flat"><form class="zx-login-flat-inner" id="login-form" onsubmit="return false">' + loginFieldsHtml(c && c.code, c && c.user) + '</form></div></div>' + loginFormStyles() + flatStyles());
+    bindLoginForm(true); afterRender();
+}
+function renderLists(query) { syncDirectListCache(function () { renderListsNow(query); }); }
 /* Tela cheia "Playlist não adicionada" — ao clicar numa seção sem ter lista. OK -> home. */
 function renderNoPlaylist() {
     setHtml('<div class="zx-np-wrap"><div class="zx-np-box">'
@@ -1354,7 +1415,7 @@ function normVoiceText(v) { return String(v || '').toLowerCase().normalize ? Str
 function voiceCleanQuery(text) {
     var q = normVoiceText(text);
     q = q.replace(/^(abrir|abra|abre|assistir|assista|tocar|toque|ver|veja|mostrar|mostre|buscar|procure|procurar)\s+/, '');
-    q = q.replace(/\b(um|uma|o|a|os|as|canal|canais|filme|filmes|serie|series|série|séries)\b/g, ' ');
+    q = q.replace(/\b(um|uma|o|a|os|as|de|do|da|dos|das|canal|canais|filme|filmes|serie|series|série|séries)\b/g, ' ');
     return q.replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
 }
 function voiceKind(text) {
@@ -1384,20 +1445,35 @@ function renderVoiceResults(kind, query, list) {
     } else { var pg = $('voice-results'); if (pg) { fitPosterGrid(pg); afterRender(); } }
     focusHomeStart();
 }
-function runVoiceCommand(text) {
-    var raw = String(text || '').trim(), kind = voiceKind(raw), q = voiceCleanQuery(raw);
-    if (!q) { renderVoiceResults(kind, raw, []); return; }
-    showLoading(true);
-    ensureCatalog(kind).then(function (cat) {
+function voiceSearchKind(kind, q) {
+    return ensureCatalog(kind).then(function (cat) {
         var all = (cat && cat.all) || [], scored = [];
         for (var i = 0; i < all.length; i++) { var sc = voiceMatchScore(all[i], q, kind); if (sc > 0) scored.push({ item: all[i], score: sc }); }
         scored.sort(function (a, b) { return b.score - a.score; });
-        var best = scored.length ? scored[0].item : null;
-        showLoading(false);
-        if (kind === 'live' && scored.length === 1 && scored[0].score >= 650) { var sid = best.stream_id; playViaNative({ kind: 'live', url: streamUrl('live', sid), title: best.name || q, resume: 0, zxKind: 'live', zxId: sid, name: best.name || q, zap: liveZapList(sid) }); return; }
-        if (kind !== 'live' && scored.length === 1 && scored[0].score >= 1000) { go('/' + kind + '/' + (kind === 'series' ? (best.series_id || best.stream_id) : best.stream_id)); return; }
-        renderVoiceResults(kind, raw, scored.slice(0, 80).map(function (x) { return x.item; }));
-    }).catch(function () { showLoading(false); renderVoiceResults(kind, raw, []); });
+        return { kind: kind, scored: scored };
+    });
+}
+function runVoiceCommand(text) {
+    var raw = String(text || '').trim(), normalized = normVoiceText(raw), q = voiceCleanQuery(raw), explicitKind = /\b(filme|filmes|movie|movies|cinema|vod|serie|series|novela|novelas|temporada|episodio|episodios|anime)\b/.test(normalized), preferred = voiceKind(raw);
+    if (!q) { renderVoiceResults(preferred, raw, []); return; }
+    showLoading(true);
+    var order = explicitKind ? [preferred] : ['live', 'movies', 'series'];
+    var found = [];
+    function next(i) {
+        if (i >= order.length) {
+            showLoading(false);
+            var best = found.length ? found[0] : { kind: preferred, scored: [] };
+            renderVoiceResults(best.kind, raw, best.scored.slice(0, 80).map(function (x) { return x.item; }));
+            return;
+        }
+        voiceSearchKind(order[i], q).then(function (res) {
+            if (res.scored.length) found.push(res);
+            if (res.scored.length && (!found.length || res.scored[0].score >= 500)) { found.sort(function (a, b) { return (b.scored[0].score || 0) - (a.scored[0].score || 0); }); }
+            if (explicitKind || res.scored.length >= 8 || (res.scored.length && res.scored[0].score >= 650)) { showLoading(false); var best = res; renderVoiceResults(best.kind, raw, best.scored.slice(0, 80).map(function (x) { return x.item; })); return; }
+            next(i + 1);
+        }).catch(function () { next(i + 1); });
+    }
+    next(0);
 }
 function startVoiceCommand() {
     var btn = $('zxVoiceBtn'); if (btn) { btn.className += ' is-listening'; btn.setAttribute('aria-label', 'Ouvindo'); }
@@ -2011,6 +2087,15 @@ function homeStyles(ac) {
         + '.zx-home2.zx-phone .zh-status{font-size:10px;gap:8px;margin-top:14px;white-space:nowrap;overflow:hidden;}'
         + '.zx-home2.zx-phone .zh-status span{gap:3px;}'
         + '.zx-home2.zx-phone .zh-badge{font-size:8px;padding:3px 6px;}'
+        /* telefone: cabeçalho em duas linhas e cards com altura fixa; não herda o card alto de TV */
+        + '.zx-home2.zx-phone .zh-top{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;column-gap:8px;row-gap:4px;align-items:center;}'
+        + '.zx-home2.zx-phone .zh-logo{min-width:0;grid-column:1;grid-row:1;overflow:hidden;}.zx-home2.zx-phone .zh-logo .brand-lockup{gap:6px;}.zx-home2.zx-phone .zh-logo .brand-mark{width:34px;height:34px;}.zx-home2.zx-phone .zh-logo .brand-logo{font-size:20px;letter-spacing:2px;white-space:nowrap;}'
+        + '.zx-home2.zx-phone .zh-icons{grid-column:2;grid-row:1;justify-self:end;}'
+        + '.zx-home2.zx-phone .zh-clockwrap{grid-column:1 / -1;grid-row:2;min-width:0;text-align:center;padding-top:2px;}'
+        + '.zx-home2.zx-phone .zh-clock{font-size:20px;}.zx-home2.zx-phone .zh-date{font-size:10px;}'
+        + '.zx-home2.zx-phone .zh-nav{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:116px;align-items:stretch;gap:9px;flex:none!important;height:auto!important;min-height:0!important;}'
+        + '.zx-home2.zx-phone .zh-nav>.zh-tile,.zx-home2.zx-phone .zh-navtop .zh-tile{height:116px!important;min-height:116px!important;max-height:116px!important;flex:none!important;}'
+        + '.zx-home2.zx-phone .zh-navr,.zx-home2.zx-phone .zh-navtop,.zx-home2.zx-phone .zh-navbot{display:contents!important;}'
         + '</style>';
 }
 /* Aviso de vencimento (só na HOME). Usa license do resolve (zero rede extra).
@@ -2329,6 +2414,15 @@ function liveStyles() {
         + '.live-epg .epg-item{border-top:1px solid rgba(255,255,255,.06);}'
         + '.live-epg .epg-time{color:#8fa39a;}'
         + '.live-epg .epg-sub{color:#8fa39a;}'
+        + '.live-epg .epg-item{position:relative;padding-right:42px;min-height:48px;box-sizing:border-box;}'
+        + '.epg-alarm{position:absolute;right:0;top:50%;transform:translateY(-50%);width:34px;height:34px;border:1px solid ' + a + '44;border-radius:10px;background:' + a + '12;color:#9fb4aa;font-size:18px;cursor:pointer;}'
+        + '.epg-alarm:hover,.epg-alarm:focus{border-color:' + a + ';color:#fff;outline:none;box-shadow:0 0 0 3px ' + a + '33;}'
+        + '.epg-alarm.is-on{background:' + a + '42;color:' + a + ';}'
+        + '.zx-epg-alarm-modal{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.78);padding:20px;box-sizing:border-box;}'
+        + '.zx-epg-alarm-card{width:min(460px,92vw);padding:30px 24px;border:2px solid ' + a + ';border-radius:22px;background:linear-gradient(145deg,#12261e,#07120d);box-shadow:0 18px 60px rgba(0,0,0,.7);text-align:center;color:#fff;}'
+        + '.zx-epg-alarm-bell{font-size:42px;margin-bottom:6px;}.zx-epg-alarm-title{font-size:26px;font-weight:900;color:' + a + ';}.zx-epg-alarm-name{font-size:21px;font-weight:800;margin-top:12px;}.zx-epg-alarm-channel{font-size:15px;color:#a7bbb1;margin-top:6px;}.zx-epg-alarm-count{font-size:64px;font-weight:900;margin:14px 0;color:#fff;}.zx-epg-alarm-close{border:0;border-radius:10px;padding:11px 28px;background:' + a + ';color:#04231a;font-weight:800;font-size:16px;}'
+        + '.server-list-body{padding:28px 22px;}.server-list-grid{max-width:760px;margin:0 auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}.server-list-item{display:flex;align-items:center;gap:14px;min-height:82px;padding:14px 16px;border:1px solid ' + a + '35;border-radius:16px;background:' + a + '0d;color:#f4f7f5;text-align:left;cursor:pointer;}.server-list-item:hover,.server-list-item:focus,.server-list-item.is-active{border-color:' + a + ';background:' + a + '26;outline:none;box-shadow:0 0 0 3px ' + a + '33;}.server-list-icon{width:34px;height:34px;display:flex;align-items:center;justify-content:center;color:' + a + ';flex:none;}.server-list-icon svg{width:30px;height:30px;}.server-list-text{display:flex;flex-direction:column;min-width:0;flex:1;}.server-list-text b{font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.server-list-text small{margin-top:4px;color:#9db0a7;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.server-list-check{font-size:22px;color:' + a + ';}.server-list-note{max-width:760px;margin:18px auto;text-align:center;color:#8fa39a;font-size:13px;}'
+        + '@media (max-width:600px) and (orientation:portrait){.server-list-grid{grid-template-columns:1fr;gap:10px;}.server-list-body{padding:18px 14px;}.server-list-item{min-height:70px;}.server-list-text b{font-size:14px;}.server-list-text small{font-size:10px;}}'
         + '.grid-loadmore{color:#8fa39a;}'
         + '</style>';
 }
@@ -2442,7 +2536,7 @@ function wireLiveEpg() {
             var body = $('epg-body'); if (!body) return;
             if (!epg || !epg.length) { body.innerHTML = '<div class="epg-empty">Sem programação para este canal.</div>'; return; }
             var h = '';
-            for (var i = 0; i < epg.length; i++) { var p = epg[i]; var t = esc(p.start || '') + (p.end ? (' - ' + esc(p.end)) : '') + (i === 0 ? ('  • ' + (currentLang() === 'en' ? 'NOW' : 'AGORA')) : ''); h += '<div class="epg-item' + (i === 0 ? ' is-now' : '') + '"><div class="epg-time">' + t + '</div><div class="epg-title">' + esc(p.title || '—') + '</div></div>'; }
+            for (var i = 0; i < epg.length; i++) { var p = epg[i], when = epgTimestamp(p.rawStart || p.start), armed = epgAlarmHas(when, p.title || '', selName); var t = esc(p.start || '') + (p.end ? (' - ' + esc(p.end)) : '') + (i === 0 ? ('  • ' + (currentLang() === 'en' ? 'NOW' : 'AGORA')) : ''); h += '<div class="epg-item' + (i === 0 ? ' is-now' : '') + '"><div class="epg-time">' + t + '</div><div class="epg-title">' + esc(p.title || '—') + '</div><button type="button" class="epg-alarm' + (armed ? ' is-on' : '') + '" data-when="' + attr(when) + '" data-title="' + attr(p.title || '') + '" data-channel="' + attr(selName) + '" onclick="toggleEpgAlarm(this)" aria-label="Alarme">' + (armed ? '🔔' : '♧') + '</button></div>'; }
             body.innerHTML = h;
         }
         xt('get_short_epg', '&stream_id=' + enc(sid) + '&limit=6').then(function (data) { paintEpg(epgItemsFromResponse(data)); }).catch(function () { paintEpg([]); });
@@ -4242,13 +4336,15 @@ function boot() {
     applyFormFactor();   // aplica a escolha salva (alvo de poster + classe) ANTES de renderizar
     injectAndroidCss();  // CSS só-Android (não-seleção de texto + estilo da busca)
     loadFav();   // favoritos persistidos → UI correta na hora, mesmo offline
+    startEpgAlarmWatcher();
     startBackgroundSync();   // cedo e SEMPRE: o timer/foco só agem depois de logado
                              // (bgRefresh checa S.code/S.server). Se ficasse no fim
                              // do boot, um login novo (sem creds salvas → renderLogin
                              // + return) nunca ligava o sync.
     var c = loadCreds();
     if (!(c && c.code && c.user && c.pass)) { renderMacActivation(); return; }
-    S.code = c.code; S.user = c.user; S.pass = c.pass; S.playlistUrl = c.playlistUrl || ''; S.playlistType = c.playlistType || '';
+    S.code = c.code; S.user = c.user; S.pass = c.pass; S.playlistUrl = c.playlistUrl || ''; S.playlistType = c.playlistType || ''; S.listIndex = parseInt(c.listIndex || activeListIndex(), 10) || 0; S.directPlaylists = loadDirectPlaylists();
+    if (S.playlistUrl && (S.playlistType || '').indexOf('m3u') === 0) { try { S.xtreamDerived = playlistToXtream({ playlist_url: S.playlistUrl }, 'Lista ativa'); } catch (e) {} }
 
     var snap = loadSnap();
     if (snap && snapAgeDays(snap) <= snapMaxDays(snap)) {
