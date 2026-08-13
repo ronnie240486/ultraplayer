@@ -1519,13 +1519,21 @@ function voiceKind(text) {
 function voiceMatchScore(item, q, kind) {
     var n = normVoiceText(item && (item.name || item.title));
     if (!n || !q) return 0;
+    var words = q.split(' ').filter(function (x) { return x.length > 0; });
+    // Frases longas são pesquisadas como expressão contínua. Isso impede que
+    // "The Big Bang Theory" vire uma busca por qualquer título que contenha só
+    // a palavra "Big". Uma palavra isolada continua sendo ampla de propósito.
+    if (words.length >= 2) {
+        if (n === q) return 1000;
+        if (n.indexOf(q) === 0) return kind === 'live' ? 950 : 900;
+        if (n.indexOf(q) >= 0) return 850;
+        return 0;
+    }
     if (n === q) return 1000;
     if (kind === 'live' && n.indexOf(q) === 0) return 700;
     if (n.indexOf(q) === 0) return 650;
     if (n.indexOf(q) >= 0) return 500;
-    var words = q.split(' '), score = 0;
-    for (var i = 0; i < words.length; i++) if (words[i] && n.indexOf(words[i]) >= 0) score += 50;
-    return score;
+    return 0;
 }
 function voiceResultsStyles() {
     var a = S.accent || '#10b981';
@@ -1544,11 +1552,12 @@ function voiceResultsStyles() {
         + '.voice-search-screen .zx-empty{padding:42px 20px;text-align:center;color:var(--zx-muted,#9db0a7);font-size:18px;}'
         + '@media (max-width:800px){.voice-search-screen .voice-result-query{padding:10px 14px 6px;font-size:15px;}.voice-search-screen #voice-results{padding:8px 14px 20px;}.voice-search-screen #voice-results.live-channels{grid-template-columns:1fr;gap:9px;}.voice-search-screen .channel-tile-tv{min-height:76px;padding:8px 48px 8px 10px;border-radius:13px;}.voice-search-screen .ct-logo{width:52px;height:52px;flex-basis:52px;margin-right:10px;}.voice-search-screen .ct-name{font-size:14px;}.voice-search-screen #voice-results.poster-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:14px 9px;}.voice-search-screen .poster-tile-tv .pt-name{font-size:12px;}}'
         + 'body.zx-ff-mobile .voice-search-screen #voice-results.live-channels{display:grid !important;grid-template-columns:repeat(2,minmax(280px,1fr)) !important;gap:14px !important;align-content:start !important;}'
-        + 'body.zx-ff-mobile .voice-search-screen #voice-results.poster-grid{display:grid !important;grid-template-columns:repeat(auto-fill,minmax(180px,1fr)) !important;gap:18px 14px !important;align-content:start !important;}'
+        + 'body.zx-ff-mobile .voice-search-screen #voice-results.poster-grid{display:grid !important;grid-template-columns:repeat(auto-fill,minmax(132px,1fr)) !important;gap:12px 10px !important;align-content:start !important;}'
         + 'body.zx-ff-mobile .voice-search-screen .channel-tile-tv{min-height:92px !important;padding:11px 56px 11px 14px !important;}'
         + 'body.zx-ff-mobile .voice-search-screen .ct-logo{width:66px !important;height:66px !important;flex-basis:66px !important;margin-right:12px !important;}'
         + 'body.zx-ff-mobile .voice-search-screen .ct-name{font-size:16px !important;}'
-        + 'body.zx-ff-mobile .voice-search-screen .poster-tile-tv .pt-name{font-size:14px !important;}'
+        + 'body.zx-ff-mobile .voice-search-screen .poster-tile-tv .pt-name{font-size:12px !important;line-height:1.15 !important;}'
+        + 'body.zx-ff-mobile .voice-search-screen .poster-tile-tv .pt-img{border-radius:9px !important;}'
         + '.voice-search-screen .voice-channel-card{position:relative;display:flex;align-items:center;min-height:104px;height:auto !important;padding:12px 58px 12px 14px;box-sizing:border-box;border:1px solid ' + a + '55;border-radius:16px;background:linear-gradient(145deg,var(--zx-panel,#0d241a),rgba(255,255,255,.04));color:var(--zx-text,#f4fff9);text-decoration:none;overflow:hidden;}'
         + '.voice-search-screen .voice-channel-logo{width:68px;height:68px;flex:0 0 68px;margin-right:14px;border-radius:12px;background:' + a + '18 center/contain no-repeat;display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:28px;}'
         + '.voice-search-screen .voice-channel-logo.is-loaded span{display:none;}'
@@ -1614,8 +1623,17 @@ function chooseVoiceResult(found, q) {
     if (!found.length) return { kind: voiceKind(q), scored: [] };
     found.sort(function (a, b) { return (b.scored[0].score || 0) - (a.scored[0].score || 0); });
     var words = normVoiceText(q).split(' ').filter(function (x) { return x.length > 1; });
-    var live = null, nonLive = [];
-    for (var i = 0; i < found.length; i++) { if (found[i].kind === 'live') live = found[i]; else nonLive.push(found[i]); }
+    var live = null, nonLive = [], exactSeries = null, exactMovie = null;
+    for (var i = 0; i < found.length; i++) {
+        if (found[i].kind === 'live') live = found[i]; else nonLive.push(found[i]);
+        var topScore = found[i].scored && found[i].scored[0] ? (found[i].scored[0].score || 0) : 0;
+        if (topScore >= 900 && found[i].kind === 'series') exactSeries = found[i];
+        if (topScore >= 900 && found[i].kind === 'movies') exactMovie = found[i];
+    }
+    // Frase completa de série ganha prioridade quando a voz não pediu filme.
+    // Assim "The Big Bang Theory" mostra somente as séries com esse título;
+    // uma consulta de uma palavra, como "Big", continua ampla.
+    if (words.length >= 2 && exactSeries && (!exactMovie || (exactSeries.scored[0].score || 0) >= (exactMovie.scored[0].score || 0))) return exactSeries;
     /* Títulos com duas ou mais palavras — como The Walking Dead — devem usar o
        catálogo de filmes/séries quando houver correspondência, mesmo que o
        servidor tenha canais com palavras soltas parecidas. */
