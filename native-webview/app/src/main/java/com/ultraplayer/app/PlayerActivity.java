@@ -43,7 +43,7 @@ public final class PlayerActivity extends Activity {
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         getWindow().setNavigationBarColor(Color.BLACK);
-        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR);
+        applySavedOrientation();
         hideSystemUi();
 
         parsePayload(getIntent().getStringExtra("payload"));
@@ -83,6 +83,15 @@ public final class PlayerActivity extends Activity {
         setContentView(root);
         title.setText(mediaTitle);
         preparePlayer();
+    }
+
+    private void applySavedOrientation() {
+        try {
+            String mode = getSharedPreferences("ultraplayer", MODE_PRIVATE).getString("form_factor", "mobile");
+            setRequestedOrientation("tv".equalsIgnoreCase(mode)
+                    ? ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                    : ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+        } catch (Throwable ignored) { }
     }
 
     private void preparePlayer() {

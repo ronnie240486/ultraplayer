@@ -2562,9 +2562,10 @@ function enforceLiveLayout() {
         var epg = document.querySelector('.live-epg');
         if (!split) return;
         var cls = document.body ? (' ' + document.body.className + ' ') : '';
-        var nativeTv = nativeAvail();
-        var tv = nativeTv || cls.indexOf(' ui-tv ') >= 0 || cls.indexOf(' zx-ff-tv ') >= 0;
-        var phone = !nativeTv && (!tv || (global.innerWidth || 0) < 760 || (global.innerHeight || 0) > (global.innerWidth || 0) * 1.15);
+        var ff = getFormFactor();
+        var nativeTv = nativeAvail() && ff !== 'mobile';
+        var tv = ff === 'tv' || (!ff && nativeTv) || (ff !== 'mobile' && cls.indexOf(' ui-tv ') >= 0) || cls.indexOf(' zx-ff-tv ') >= 0;
+        var phone = ff === 'mobile' || (!tv && !nativeTv) || (ff !== 'tv' && ((global.innerWidth || 0) < 760 || (global.innerHeight || 0) > (global.innerWidth || 0) * 1.15));
         if (tv && !phone) {
             var ww = Math.max(720, global.innerWidth || document.documentElement.clientWidth || 1280);
             var sidebarW = Math.round(ww * 0.15), rightW = Math.round(ww * 0.55);
@@ -3911,22 +3912,25 @@ function renderOfflineFirst() {
    (nativeAvail); PC/Samsung nunca setam zx:ff → padrão TV 100% intacto. */
 function getFormFactor() { try { var v = localStorage.getItem('zx:ff'); return (v === 'mobile' || v === 'tv') ? v : ''; } catch (e) { return ''; } }
 function applyFormFactor() {
-    var mob = getFormFactor() === 'mobile';
+    var ff = getFormFactor();
+    var known = ff === 'mobile' || ff === 'tv';
+    var mob = ff === 'mobile';
+    var tvMode = ff === 'tv' || (!known && nativeAvail() && (function(){ try { return !!(global.HdxNative && global.HdxNative.isTv && global.HdxNative.isTv()); } catch(e) { return false; } })());
     // TV: alvo PROPORCIONAL à tela (16.4% da largura ≈ 210px numa tela de 1280
     // CSS px). TVs Android têm DENSIDADES diferentes → o WebView enxerga 960/
     // 1280/1920 px CSS na mesma tela 1080p; com alvo FIXO em px dava 3 colunas
     // numa TV e 4 na outra. Proporcional = SEMPRE ~4 colunas. Celular mantém 100.
     var tvTarget = 210;
     try { tvTarget = Math.max(140, Math.round(window.innerWidth * 0.164)); } catch (e) {}
-    global.__ZX_TILE_TARGET = mob ? 100 : tvTarget;
+    global.__ZX_TILE_TARGET = mob ? 100 : (tvMode ? tvTarget : 100);
     try {
         var b = document.body;
         if (b) {
-            var cl = (' ' + b.className + ' ').replace(' zx-ff-mobile ', ' ').replace(' zx-ff-tv ', ' ').replace(/^\s+|\s+$/g, '');
-            b.className = cl + (cl ? ' ' : '') + (mob ? 'zx-ff-mobile' : 'zx-ff-tv');
+            var cl = (' ' + b.className + ' ').replace(' zx-ff-mobile ', ' ').replace(' zx-ff-tv ', ' ').replace(' ui-tv ', ' ').replace(/^\s+|\s+$/g, '');
+            b.className = cl + (cl && (mob || tvMode) ? ' ' : '') + (mob ? 'zx-ff-mobile' : (tvMode ? 'zx-ff-tv' : ''));
         }
     } catch (e) {}
-    try { if (global.HdxNative && global.HdxNative.setFormFactor) global.HdxNative.setFormFactor(mob ? 'mobile' : 'tv'); } catch (e) {}
+    try { if (known && global.HdxNative && global.HdxNative.setFormFactor) global.HdxNative.setFormFactor(tvMode ? 'tv' : 'mobile'); } catch (e) {}
     var st = $('zx-ff-css');
     if (!st) { st = document.createElement('style'); st.id = 'zx-ff-css'; (document.head || document.documentElement).appendChild(st); st.textContent = ffMobileCss(); }
     // re-ajusta grids visíveis + nav do catálogo na hora

@@ -55,6 +55,7 @@ public final class MainActivity extends Activity {
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
 
         isTv = detectTv();
+        applySavedOrientation();
         root = new FrameLayout(this);
         root.setBackgroundColor(android.graphics.Color.rgb(11, 15, 26));
 
@@ -73,6 +74,23 @@ public final class MainActivity extends Activity {
         } else {
             webView.loadUrl("file:///android_asset/webui/index.html");
         }
+    }
+
+    private void applySavedOrientation() {
+        try {
+            String saved = getSharedPreferences("ultraplayer", MODE_PRIVATE).getString("form_factor", "");
+            if ("tv".equalsIgnoreCase(saved)) applyOrientation("tv");
+            else if ("mobile".equalsIgnoreCase(saved)) applyOrientation("mobile");
+            else if (isTv) applyOrientation("tv");
+        } catch (Throwable ignored) { }
+    }
+
+    private void applyOrientation(String mode) {
+        try {
+            setRequestedOrientation("tv".equalsIgnoreCase(mode)
+                    ? android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                    : android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+        } catch (Throwable ignored) { }
     }
 
     private boolean detectTv() {
@@ -218,7 +236,12 @@ public final class MainActivity extends Activity {
 
         @JavascriptInterface
         public void setFormFactor(String mode) {
-            runOnUiThread(() -> resizeMiniPlayer("tv".equalsIgnoreCase(mode)));
+            runOnUiThread(() -> {
+                String normalized = "tv".equalsIgnoreCase(mode) ? "tv" : "mobile";
+                try { getSharedPreferences("ultraplayer", MODE_PRIVATE).edit().putString("form_factor", normalized).apply(); } catch (Throwable ignored) { }
+                applyOrientation(normalized);
+                resizeMiniPlayer("tv".equalsIgnoreCase(normalized));
+            });
         }
 
         @JavascriptInterface
