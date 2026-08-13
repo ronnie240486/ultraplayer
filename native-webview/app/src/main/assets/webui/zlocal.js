@@ -638,10 +638,24 @@ function streamUrl(kind, id, ext) {
 /* ---------- branding (logo/nome/cor/fundo) ---------- */
 function brandLogoHtml() {
     var b = S.branding || {};
-    var name = b.brand_name || 'UltraPlayer';
-    var mark = '<img src="assets/branding/ultraplayer_launcher.png" alt="UltraPlayer" class="brand-mark" draggable="false">';
+    var name = b.brand_name || b.app_title || 'UltraPlayer';
+    var remote = b.logo_url || b.logo || '';
+    var fallback = 'assets/branding/ultraplayer_launcher.png';
+    var mark = '<img src="' + attr(remote || fallback) + '" alt="UltraPlayer" class="brand-mark" draggable="false" onerror="this.onerror=null;this.src=\'' + fallback + '\'">';
     var word = name.length >= 2 ? esc(name.slice(0, -1)) + '<span class="accent">' + esc(name.slice(-1)) + '</span>' : '<span class="accent">' + esc(name) + '</span>';
     return '<div class="brand-lockup">' + mark + '<span class="brand-logo">' + word + '</span></div>';
+}
+function homeRemoteIconHtml(key, fallbackHtml) {
+    try {
+        var b = S.branding || {}, icons = b.icons || {}, u = icons[key] || '';
+        if (u) return '<span class="home-remote-icon-wrap"><img class="home-remote-icon" src="' + attr(u) + '" alt="" draggable="false" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'block\'"><span class="home-remote-fallback" style="display:none">' + fallbackHtml + '</span></span>';
+    } catch (e) {}
+    return fallbackHtml;
+}
+function homeRemoteBannerHtml() {
+    var b = S.branding || {}, img = b.banner_url || b.background_url || '', title = b.message_title || b.impact_phrase || '', text = b.message_text || '';
+    if (!img && !title && !text) return '';
+    return '<div class="zx-remote-banner">' + (img ? '<img src="' + attr(img) + '" alt="" onerror="this.parentNode.removeChild(this)">' : '') + ((title || text) ? '<div class="zx-remote-banner-copy">' + (title ? '<b>' + esc(title) + '</b>' : '') + (text ? '<span>' + esc(text) + '</span>' : '') + '</div>' : '') + '</div>';
 }
 var APP_THEMES = [
     { id: 'verde', name: 'Verde esmeralda', accent: '#10b981', bg: '#06130f', panel: '#0d241a', text: '#f4fff9', muted: '#9db0a7' },
@@ -689,7 +703,7 @@ function applyAppTheme(id, rerender) {
     if (rerender && location.pathname.indexOf('/settings') === 0) renderSettings();
 }
 function brandLogoHtmlStyles() {
-    return '<style>.brand-lockup{display:inline-flex;align-items:center;gap:9px;vertical-align:middle}.brand-mark{width:42px;height:42px;object-fit:contain;display:block;border-radius:6px}.brand-logo-img{max-height:42px;max-width:190px;object-fit:contain}</style>';
+    return '<style>.brand-lockup{display:inline-flex;align-items:center;gap:9px;vertical-align:middle}.brand-mark{width:42px;height:42px;object-fit:contain;display:block;border-radius:6px}.brand-logo-img{max-height:42px;max-width:190px;object-fit:contain}.home-remote-icon-wrap{width:68px;height:68px;display:flex;align-items:center;justify-content:center}.home-remote-icon{width:68px;height:68px;object-fit:contain;border-radius:12px;display:block}.home-remote-fallback,.home-remote-fallback svg{width:68px;height:68px;display:block}.zx-remote-banner{position:relative;display:flex;align-items:center;gap:18px;max-width:1180px;margin:0 auto 14px;padding:12px 16px;border:1px solid rgba(255,255,255,.14);border-radius:16px;background:rgba(0,0,0,.24);overflow:hidden}.zx-remote-banner img{width:100%;max-height:180px;object-fit:cover;border-radius:11px}.zx-remote-banner-copy{position:absolute;left:28px;bottom:22px;display:flex;flex-direction:column;gap:4px;max-width:70%;padding:10px 14px;border-radius:10px;background:rgba(0,0,0,.58);color:#fff}.zx-remote-banner-copy b{font-size:18px}.zx-remote-banner-copy span{font-size:13px;color:#e6eee9}</style>';
 }
 function applyAccent(accent) {
     S.accent = accent || '#10b981';
@@ -725,7 +739,39 @@ function applyBranding(b) {
     try { document.title = title; } catch (e) {}
     var saved = appThemeId();
     if (saved && saved !== 'verde') applyAppTheme(saved, false); else applyAccent(b.accent || '#10b981');
-    applyWallpaper(b.wallpaper_url || '');
+    applyWallpaper(b.wallpaper_url || b.background_url || b.background || '');
+}
+var ULTRA_CONFIG_ENDPOINT = 'https://renciaapp.manus.space/api/v5/ultra-config?mac=';
+function applyUltraConfig(j, rerender) {
+    if (!j) return;
+    if (j.registered === false || j.allowed === false) { S.ultraDenied = true; S.remoteConfig = j; return; }
+    S.ultraDenied = false;
+    var old = S.branding || {}, icons = j.icons || {}, hasMsg = !!(j.message_title || j.message_text || j.message_image_url || j.impact_phrase);
+    var b = {};
+    for (var k in old) b[k] = old[k];
+    b.app_title = j.app_name || b.app_title || 'UltraPlayer';
+    b.brand_name = j.app_name || b.brand_name || 'UltraPlayer';
+    b.logo_url = j.logo_url || b.logo_url || '';
+    b.banner_url = j.banner_url || b.banner_url || '';
+    b.background_url = j.background_url || b.background_url || '';
+    b.message_image_url = j.message_image_url || b.message_image_url || '';
+    b.impact_phrase = j.impact_phrase || b.impact_phrase || '';
+    b.message_title = j.message_title || b.message_title || '';
+    b.message_text = j.message_text || b.message_text || '';
+    b.server_api_url = j.server_api_url || b.server_api_url || '';
+    b.apk_download_url = j.apk_download_url || b.apk_download_url || '';
+    b.apk_version = j.apk_version || b.apk_version || '';
+    b.icons = { live_tv: icons.live_tv || (b.icons && b.icons.live_tv) || '', movies: icons.movies || (b.icons && b.icons.movies) || '', series: icons.series || (b.icons && b.icons.series) || '' };
+    if (hasMsg) b.announce = { ver: String(j.apk_version || Date.now()), banner: true, popup: false, title: b.message_title || b.impact_phrase, text: b.message_text || '' };
+    S.branding = b; S.remoteConfig = j; S.configServerApiUrl = b.server_api_url;
+    try { lsSet('zx_ultra_config', j); } catch (e) {}
+    applyBranding(b);
+    if (rerender && document.querySelector('.zx-home2')) { renderHome(); }
+}
+function fetchUltraConfig() {
+    var mac = getAppMac();
+    if (!mac) return Promise.resolve(null);
+    return fetchT(ULTRA_CONFIG_ENDPOINT + enc(mac), 10000, { credentials: 'omit', headers: { 'Accept': 'application/json' } }).then(function (r) { return r.json(); }).then(function (j) { applyUltraConfig(j, true); return j; }).catch(function () { var cached = lsGet('zx_ultra_config'); if (cached) applyUltraConfig(cached, false); return null; });
 }
 function loadCss() {
     // ⚠️ Android WebView BLOQUEIA fetch() de file:// — MAS o XMLHttpRequest
@@ -1251,6 +1297,7 @@ function directResponseToState(j, mode, fallback) {
     S.xtreamDerived = creds || playlistToXtream({ playlist_url: chosenUrl }, 'Playlist');
     S.xtreamUnavailable = false;
     S.playlistUrl = chosenUrl; S.playlistType = String(chosen.type || (chosenUrl.indexOf('get.php') >= 0 ? 'm3u_plus' : 'xtream')).toLowerCase();
+    fetchUltraConfig();
     try { localStorage.setItem('zx_direct_mode', mode); if (mode === 'mac') localStorage.setItem('zx_mac', S.user); } catch (e) {}
     var d = { ok: true, dns: { base: server, name: j.dns_titulo || '' }, license: { mac: j.mac || fallback || '', exp_date: expTs }, branding: { app_name: j.app_name || 'UltraPlayer', logo: j.logo_url || '', background: j.bg_url || '', banner: j.banner_url || '' } };
     S.cat = { movies: null, series: null, live: null }; S.m3uCatalogPromise = null; S.xtreamUnavailable = false; S.favDirty = { live: [], movie: [], series: [] };
@@ -1613,9 +1660,9 @@ function renderHome() {
     var svSer = '<rect x="3" y="7" width="18" height="13" rx="2"></rect><path d="M8 7 5 3M16 7l3-4M12 7 12 3"></path>';
     var svPl = '<line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="16" y2="18"></line><circle cx="18.5" cy="18.5" r="3.2"></circle><path d="M18.5 17.1v2.8M17.1 18.5h2.8"></path>';
     var svHeart = '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 1 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8z"></path>';
-    function tile(href, ic, label, subTxt, subId, atf, elId) {
+    function tile(href, ic, label, subTxt, subId, atf, elId, remoteKey) {
         return '<a href="' + href + '" class="zh-tile"' + (elId ? ' id="' + elId + '"' : '') + (atf ? ' autofocus' : '') + '>'
-            + '<span class="zh-ico">' + svg(ic) + '</span>'
+            + '<span class="zh-ico">' + (remoteKey ? homeRemoteIconHtml(remoteKey, svg(ic)) : svg(ic)) + '</span>'
             + '<span class="zh-tx"><b class="zh-tl">' + label + '</b>'
             + '<small class="zh-tsub"' + (subId ? ' id="' + subId + '"' : '') + '>' + subTxt + '</small></span></a>';
     }
@@ -1639,11 +1686,11 @@ function renderHome() {
     var frPending = false;
     try { frPending = nativeAvail() && (!langChosen() || !piracyAck() || !getFormFactor()); } catch (e) {}
     var nav = '<nav class="zh-nav">'
-        + tile(dest('/live'), svTv, 'TV ao Vivo', homeCountLabel('live', 'canais'), 'zhSubLive', !frPending, 'zhLive')
+        + tile(dest('/live'), svTv, 'TV ao Vivo', homeCountLabel('live', 'canais'), 'zhSubLive', !frPending, 'zhLive', 'live_tv')
         + '<div class="zh-navr">'
         + '<div class="zh-navtop">'
-        + tile(dest('/movies'), svMov, 'Filmes', homeCountLabel('movies', 'filmes'), 'zhSubMovies')
-        + tile(dest('/series'), svSer, 'Séries', homeCountLabel('series', 'séries'), 'zhSubSeries')
+        + tile(dest('/movies'), svMov, 'Filmes', homeCountLabel('movies', 'filmes'), 'zhSubMovies', false, '', 'movies')
+        + tile(dest('/series'), svSer, 'Séries', homeCountLabel('series', 'séries'), 'zhSubSeries', false, '', 'series')
         + '</div>'
         + '<div class="zh-navbot">'
         + stile(dest('/favorites'), svHeart, 'Favoritos', favN + ' ' + t('itens'))
@@ -1661,7 +1708,7 @@ function renderHome() {
 
     // announceStyles: SEM ele a faixa/pop-up de aviso do painel renderiza CRUA no
     // canto (o redesign da home tinha deixado a função órfã — bug 19/07).
-    setHtml('<div class="zx-home2">' + bannerHtml + '<div class="zh-amb"></div><div class="zh-wm" aria-hidden="true">ULTRA</div><div class="zh-ui">'
+    setHtml('<div class="zx-home2">' + homeRemoteBannerHtml() + bannerHtml + '<div class="zh-amb"></div><div class="zh-wm" aria-hidden="true">ULTRA</div><div class="zh-ui">'
         + top + nav + recent + status + '</div>' + popHtml + '</div>' + homeStyles(ac) + announceStyles(ac));
     applyPhoneHomeLayout();
     if (!srvName) startHomeClock();   // com nome de parceiro no topo não há relógio pra atualizar
@@ -3391,7 +3438,8 @@ global.__zxZapTrack = function (id) {
     } catch (e) {}
 };
 function playViaNative(opts) {
-    S.nativePlaying = opts;                       // contexto p/ salvar local ao voltar
+    if (S.ultraDenied) return;
+    S.nativePlaying = opts;                       // contexto p/ salvar local
     try {
         global.HdxNative.play(JSON.stringify({
             kind: opts.kind, url: opts.url, title: opts.title || opts.name || '',
@@ -4418,6 +4466,7 @@ function boot() {
     applyAppTheme(appThemeId(), false);
     S.directAuth = !!directModeStored();
     S.did = getDid();
+    fetchUltraConfig();
     try { S.profNs = profActive().ns; } catch (e) { S.profNs = ''; }   // PERFIS: antes de qualquer leitura
     patchHistory();
     installShim();
