@@ -41,6 +41,7 @@ public final class MainActivity extends Activity {
     private PlayerView miniPlayerView;
     private ExoPlayer miniPlayer;
     private TextView miniTitle;
+    private String miniPayload = "";
     private static final int VOICE_REQUEST = 7412;
     private static final int VOICE_PERMISSION_REQUEST = 7413;
 
@@ -304,6 +305,8 @@ public final class MainActivity extends Activity {
         miniPlayerView.setUseController(true);
         miniPlayerView.setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING);
         miniPlayerView.setBackgroundColor(android.graphics.Color.BLACK);
+        miniPlayerView.setContentDescription("Abrir player em tela cheia");
+        miniPlayerView.setOnClickListener(v -> openFullMiniPlayer());
         miniContainer.addView(miniPlayerView, new FrameLayout.LayoutParams(-1, -1));
 
         miniTitle = new TextView(this);
@@ -380,6 +383,7 @@ public final class MainActivity extends Activity {
             String url = json.optString("url", "");
             String title = json.optString("title", "Canal selecionado");
             if (url.isEmpty()) return;
+            miniPayload = json.toString();
             if (miniPlayer == null) {
                 miniPlayer = new ExoPlayer.Builder(this).build();
                 miniPlayerView.setPlayer(miniPlayer);
@@ -397,11 +401,21 @@ public final class MainActivity extends Activity {
         } catch (Throwable ignored) { }
     }
 
+    private void openFullMiniPlayer() {
+        if (miniPayload == null || miniPayload.isEmpty()) return;
+        try {
+            Intent intent = new Intent(MainActivity.this, PlayerActivity.class);
+            intent.putExtra("payload", miniPayload);
+            startActivity(intent);
+        } catch (Throwable ignored) { }
+    }
+
     private void hideMiniPlayer() {
         if (miniPlayer != null) miniPlayer.pause();
         if (miniContainer != null) {
             miniContainer.setVisibility(View.GONE);
             miniContainer.setTag(null);
+            miniPayload = "";
         }
     }
 
