@@ -2554,14 +2554,15 @@ function enforceLiveLayout() {
         var epg = document.querySelector('.live-epg');
         if (!split) return;
         var cls = document.body ? (' ' + document.body.className + ' ') : '';
-        var tv = cls.indexOf(' ui-tv ') >= 0 || cls.indexOf(' zx-ff-tv ') >= 0;
-        var phone = !tv || (global.innerWidth || 0) < 760 || (global.innerHeight || 0) > (global.innerWidth || 0) * 1.15;
+        var nativeTv = nativeAvail();
+        var tv = nativeTv || cls.indexOf(' ui-tv ') >= 0 || cls.indexOf(' zx-ff-tv ') >= 0;
+        var phone = !nativeTv && (!tv || (global.innerWidth || 0) < 760 || (global.innerHeight || 0) > (global.innerWidth || 0) * 1.15);
         if (tv && !phone) {
             var ww = Math.max(720, global.innerWidth || document.documentElement.clientWidth || 1280);
-            var sidebarW = Math.round(ww * 0.16), rightW = Math.round(ww * 0.38);
-            if (side) { side.style.width = sidebarW + 'px'; side.style.maxWidth = sidebarW + 'px'; side.style.padding = '8px 5px'; }
-            if (content) { content.style.left = sidebarW + 'px'; content.style.padding = '8px 12px 12px'; }
-            split.style.display = 'grid'; split.style.gridTemplateColumns = 'minmax(300px,1fr) ' + rightW + 'px'; split.style.gap = '12px'; split.style.alignItems = 'stretch';
+            var sidebarW = Math.round(ww * 0.15), rightW = Math.round(ww * 0.38);
+            if (side) { side.style.width = sidebarW + 'px'; side.style.maxWidth = sidebarW + 'px'; side.style.padding = '6px 4px'; }
+            if (content) { content.style.left = sidebarW + 'px'; content.style.padding = '6px 10px 10px'; }
+            split.style.display = 'grid'; split.style.gridTemplateColumns = 'minmax(280px,1fr) ' + rightW + 'px'; split.style.gap = '10px'; split.style.alignItems = 'stretch';
             if (right) { right.style.display = 'flex'; right.style.flexDirection = 'column'; right.style.height = 'calc(100vh - 110px)'; right.style.minHeight = '520px'; right.style.gap = '10px'; }
             if (slot) { slot.style.height = 'clamp(190px,28vh,300px)'; slot.style.flex = '0 0 auto'; }
             if (epg) { epg.style.display = 'block'; epg.style.flex = '1 1 auto'; epg.style.minHeight = '220px'; epg.style.height = 'auto'; epg.style.maxHeight = 'none'; epg.style.overflowY = 'auto'; epg.style.overflowX = 'hidden'; }
