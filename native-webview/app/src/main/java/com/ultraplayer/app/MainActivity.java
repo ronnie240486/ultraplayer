@@ -41,7 +41,10 @@ public final class MainActivity extends Activity {
     private PlayerView miniPlayerView;
     private ExoPlayer miniPlayer;
     private TextView miniTitle;
+    private ImageButton miniCloseButton;
     private String miniPayload = "";
+    private boolean miniExpanded = false;
+    private FrameLayout.LayoutParams miniLayoutBeforeExpand;
     private static final int VOICE_REQUEST = 7412;
     private static final int VOICE_PERMISSION_REQUEST = 7413;
 
@@ -77,19 +80,13 @@ public final class MainActivity extends Activity {
     }
 
     private void applySavedOrientation() {
-        try {
-            String saved = getSharedPreferences("ultraplayer", MODE_PRIVATE).getString("form_factor", "");
-            if ("tv".equalsIgnoreCase(saved)) applyOrientation("tv");
-            else if ("mobile".equalsIgnoreCase(saved)) applyOrientation("mobile");
-            else if (isTv) applyOrientation("tv");
-        } catch (Throwable ignored) { }
+        // Os dois modos usam sempre paisagem. O form_factor controla apenas a escala visual.
+        applyOrientation("landscape");
     }
 
     private void applyOrientation(String mode) {
         try {
-            setRequestedOrientation("tv".equalsIgnoreCase(mode)
-                    ? android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-                    : android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+            setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
         } catch (Throwable ignored) { }
     }
 
@@ -239,8 +236,8 @@ public final class MainActivity extends Activity {
             runOnUiThread(() -> {
                 String normalized = "tv".equalsIgnoreCase(mode) ? "tv" : "mobile";
                 try { getSharedPreferences("ultraplayer", MODE_PRIVATE).edit().putString("form_factor", normalized).apply(); } catch (Throwable ignored) { }
-                applyOrientation(normalized);
-                resizeMiniPlayer("tv".equalsIgnoreCase(normalized));
+                        applyOrientation(normalized);
+                        resizeMiniPlayer("tv".equalsIgnoreCase(normalized));
             });
         }
 
@@ -309,9 +306,8 @@ public final class MainActivity extends Activity {
                 try {
                     JSONObject json = new JSONObject(payload == null ? "{}" : payload);
                     if (!json.optString("url", "").isEmpty()) {
-                        Intent intent = new Intent(MainActivity.this, PlayerActivity.class);
-                        intent.putExtra("payload", json.toString());
-                        startActivity(intent);
+                        showMiniPlayer(json.toString());
+                        openFullMiniPlayer();
                     }
                 } catch (Throwable ignored) { }
             });
@@ -344,6 +340,7 @@ public final class MainActivity extends Activity {
         miniContainer.addView(miniTitle, titleParams);
 
         ImageButton close = new ImageButton(this);
+        miniCloseButton = close;
         close.setImageDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
         close.setContentDescription("Fechar mini player");
         close.setOnClickListener(v -> hideMiniPlayer());
@@ -363,7 +360,7 @@ public final class MainActivity extends Activity {
     }
 
     private void resizeMiniPlayer(boolean tvMode) {
-        if (miniContainer == null || root == null) return;
+        if (miniContainer == null || root == null || miniExpanded) return;
         boolean large = tvMode;
         int screenWidth = getResources().getDisplayMetrics().widthPixels;
         int width = large ? Math.max(dp(360), Math.round(screenWidth * 0.32f)) : dp(300);
@@ -425,17 +422,58 @@ public final class MainActivity extends Activity {
     }
 
     private void openFullMiniPlayer() {
-        if (miniPayload == null || miniPayload.isEmpty()) return;
+        if (miniPayload == null || miniPayload.isEmpty() || miniContainer == null || miniPlayerView == null) return;
         try {
-            String payload = miniPayload;
-            hideMiniPlayer();
-            Intent intent = new Intent(MainActivity.this, PlayerActivity.class);
-            intent.putExtra("payload", payload);
-            startActivity(intent);
+            if (miniExpanded) return;
+            ViewGroup.LayoutParams current = miniContainer.getLayoutParams();
+            if (current instanceof FrameLayout.LayoutParams) {
+                FrameLayout.LayoutParams old = (FrameLayout.LayoutParams) current;
+                miniLayoutBeforeExpand = new FrameLayout.LayoutParams(old);
+            }
+            miniExpanded = true;
+            miniContainer.setBackgroundColor(android.graphics.Color.BLACK);
+            miniContainer.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            miniContainer.setVisibility(View.VISIBLE);
+            if (miniTitle != null) miniTitle.setVisibility(View.GONE);
+            if (miniCloseButton != null) {
+                miniCloseButton.setContentDescription("Voltar para o mini player");
+                miniCloseButton.setImageResource(android.R.drawable.ic_menu_revert);
+                miniCloseButton.setOnClickListener(v -> collapseFullMiniPlayer());
+            }
+            getWindow().getDecorView().setSystemUiVisibility(
+                    View.SYSTEM_UI_FLAG_FULLSCREEN
+                            | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                            | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                            | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                            | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+            if (miniPlayer != null && !miniPlayer.isPlaying()) miniPlayer.play();
         } catch (Throwable ignored) { }
     }
 
+    private void collapseFullMiniPlayer() {
+        if (!miniExpanded || miniContainer == null) return;
+        miniExpanded = false;
+        if (miniLayoutBeforeExpand != null) {
+            miniContainer.setLayoutParams(miniLayoutBeforeExpand);
+            miniLayoutBeforeExpand = null;
+        } else {
+            resizeMiniPlayer(isTv);
+        }
+        miniContainer.setBackgroundColor(android.graphics.Color.rgb(4, 12, 9));
+        miniContainer.setVisibility(View.VISIBLE);
+        if (miniTitle != null) miniTitle.setVisibility(View.VISIBLE);
+        if (miniCloseButton != null) {
+            miniCloseButton.setContentDescription("Fechar mini player");
+            miniCloseButton.setImageResource(android.R.drawable.ic_menu_close_clear_cancel);
+            miniCloseButton.setOnClickListener(v -> hideMiniPlayer());
+        }
+        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+        if (miniPlayer != null && !miniPlayer.isPlaying()) miniPlayer.play();
+    }
+
     private void hideMiniPlayer() {
+        if (miniExpanded) collapseFullMiniPlayer();
         if (miniPlayer != null) miniPlayer.pause();
         if (miniContainer != null) {
             miniContainer.setVisibility(View.GONE);
@@ -488,6 +526,10 @@ public final class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
+        if (miniExpanded) {
+            collapseFullMiniPlayer();
+            return;
+        }
         if (webView == null) { finish(); return; }
         webView.evaluateJavascript("window.__zxBackAction ? window.__zxBackAction() : 'na'", value -> {
             if (value == null || value.contains("na") || value.contains("null")) {

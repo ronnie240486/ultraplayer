@@ -87,10 +87,7 @@ public final class PlayerActivity extends Activity {
 
     private void applySavedOrientation() {
         try {
-            String mode = getSharedPreferences("ultraplayer", MODE_PRIVATE).getString("form_factor", "mobile");
-            setRequestedOrientation("tv".equalsIgnoreCase(mode)
-                    ? ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-                    : ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
         } catch (Throwable ignored) { }
     }
 

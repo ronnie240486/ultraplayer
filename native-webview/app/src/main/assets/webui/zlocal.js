@@ -2526,8 +2526,11 @@ function liveStyles() {
         + 'body.zx-ff-tv .live-video-slot,body.ui-tv .live-video-slot{height:clamp(180px,30vh,300px) !important;flex:0 0 auto !important;}'
         + 'body.zx-ff-tv .live-epg,body.ui-tv .live-epg{flex:1 1 0 !important;min-height:0 !important;max-height:none !important;height:auto !important;overflow-y:auto !important;overflow-x:hidden !important;position:static !important;}'
         + 'body.zx-ff-tv .live-epg .epg-body,body.ui-tv .live-epg .epg-body{max-height:none !important;overflow-y:visible !important;}'
-        + 'body.zx-ff-mobile .live-split{display:flex;flex-direction:column;gap:12px;}'
-        + 'body.zx-ff-mobile .live-video-slot{height:180px;}'
+        + 'body.zx-ff-mobile .live-split{display:grid !important;grid-template-columns:minmax(260px,1fr) minmax(420px,50%) !important;gap:10px !important;align-items:stretch !important;height:calc(100vh - 55px) !important;min-height:0 !important;}'
+        + 'body.zx-ff-mobile .live-right-column{min-height:0 !important;height:100% !important;display:flex !important;flex-direction:column !important;overflow:hidden !important;}'
+        + 'body.zx-ff-mobile .live-video-slot{height:clamp(180px,28vh,320px) !important;flex:0 0 auto !important;}'
+        + 'body.zx-ff-mobile .live-epg{flex:1 1 0 !important;min-height:0 !important;max-height:none !important;height:auto !important;overflow-y:auto !important;overflow-x:hidden !important;position:static !important;}'
+        + 'body.zx-ff-mobile .live-epg .epg-body{max-height:none !important;overflow-y:visible !important;}'
         + '.live-epg{background:rgba(255,255,255,.028);border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:18px 20px;box-sizing:border-box;}'
         + '.live-epg .epg-item{border-top:1px solid rgba(255,255,255,.06);}'
         + '.live-epg .epg-time{color:#8fa39a;font-size:8px;line-height:1.05;}'
@@ -2565,17 +2568,20 @@ function enforceLiveLayout() {
         var ff = getFormFactor();
         var nativeTv = nativeAvail() && ff !== 'mobile';
         var tv = ff === 'tv' || (!ff && nativeTv) || (ff !== 'mobile' && cls.indexOf(' ui-tv ') >= 0) || cls.indexOf(' zx-ff-tv ') >= 0;
-        var phone = ff === 'mobile' || (!tv && !nativeTv) || (ff !== 'tv' && ((global.innerWidth || 0) < 760 || (global.innerHeight || 0) > (global.innerWidth || 0) * 1.15));
-        if (tv && !phone) {
+        var androidLandscape = nativeAvail() && (ff === 'mobile' || ff === 'tv' || !ff);
+        var landscapeLayout = tv || androidLandscape;
+        if (landscapeLayout) {
             var ww = Math.max(720, global.innerWidth || document.documentElement.clientWidth || 1280);
-            var sidebarW = Math.round(ww * 0.15), rightW = Math.round(ww * 0.55);
+            var mobileMode = ff === 'mobile' || (androidLandscape && !tv);
+            var sidebarW = Math.round(ww * (mobileMode ? 0.20 : 0.15));
+            var rightW = Math.round(ww * (mobileMode ? 0.50 : 0.55));
             if (screen) { screen.style.height = '100vh'; screen.style.overflow = 'hidden'; }
             if (side) { side.style.width = sidebarW + 'px'; side.style.maxWidth = sidebarW + 'px'; side.style.height = '100vh'; side.style.overflowY = 'auto'; side.style.overflowX = 'hidden'; side.style.padding = '6px 4px'; }
             if (content) { content.style.left = sidebarW + 'px'; content.style.height = '100vh'; content.style.overflow = 'hidden'; content.style.padding = '6px 10px 10px'; }
             split.style.display = 'grid'; split.style.gridTemplateColumns = 'minmax(250px,1fr) ' + rightW + 'px'; split.style.gap = '8px'; split.style.alignItems = 'stretch'; split.style.height = 'calc(100vh - 55px)'; split.style.minHeight = '0';
             if (grid) { grid.style.height = '100%'; grid.style.minHeight = '0'; grid.style.overflowY = 'auto'; grid.style.overflowX = 'hidden'; grid.style.paddingBottom = '24px'; }
             if (right) { right.style.display = 'flex'; right.style.flexDirection = 'column'; right.style.height = 'calc(100vh - 55px)'; right.style.minHeight = '0'; right.style.overflow = 'hidden'; right.style.gap = '6px'; }
-            if (slot) { slot.style.height = 'clamp(160px,24vh,240px)'; slot.style.flex = '0 0 auto'; }
+            if (slot) { slot.style.height = mobileMode ? 'clamp(180px,28vh,320px)' : 'clamp(160px,24vh,240px)'; slot.style.flex = '0 0 auto'; }
             if (epg) { epg.style.display = 'block'; epg.style.flex = '1 1 0'; epg.style.minHeight = '0'; epg.style.height = 'auto'; epg.style.maxHeight = 'none'; epg.style.overflowY = 'auto'; epg.style.overflowX = 'hidden'; }
         } else {
             if (screen) { screen.style.height = ''; screen.style.overflow = ''; }
@@ -3905,24 +3911,22 @@ function renderOfflineFirst() {
 }
 
 /* ===== FORMATO DA TELA (Celular x TV/Caixa) — SÓ Android (UI empacotada) =====
-   O catálogo é desenhado pra TV; num celular RETRATO os posters ficam grandes
-   (3 colunas largas). O usuário escolhe na 1ª abertura: "Celular" usa um alvo
-   de poster MENOR (→ ~4 colunas, posters menores) e encolhe a home; "TV/Caixa"
-   mantém o padrão. Fica em localStorage 'zx:ff'. SÓ aparece no Android
-   (nativeAvail); PC/Samsung nunca setam zx:ff → padrão TV 100% intacto. */
+   Os dois modos Android ficam sempre em PAISAGEM. A escolha controla apenas a
+   escala: Celular usa controles, cards e textos maiores para toque; TV/Caixa
+   usa uma composição mais compacta para visualização à distância. Fica em
+   localStorage 'zx:ff'. PC/Samsung não setam zx:ff. */
 function getFormFactor() { try { var v = localStorage.getItem('zx:ff'); return (v === 'mobile' || v === 'tv') ? v : ''; } catch (e) { return ''; } }
 function applyFormFactor() {
     var ff = getFormFactor();
     var known = ff === 'mobile' || ff === 'tv';
     var mob = ff === 'mobile';
     var tvMode = ff === 'tv' || (!known && nativeAvail() && (function(){ try { return !!(global.HdxNative && global.HdxNative.isTv && global.HdxNative.isTv()); } catch(e) { return false; } })());
-    // TV: alvo PROPORCIONAL à tela (16.4% da largura ≈ 210px numa tela de 1280
-    // CSS px). TVs Android têm DENSIDADES diferentes → o WebView enxerga 960/
-    // 1280/1920 px CSS na mesma tela 1080p; com alvo FIXO em px dava 3 colunas
-    // numa TV e 4 na outra. Proporcional = SEMPRE ~4 colunas. Celular mantém 100.
+    // TV: alvo proporcional à tela para manter cards compactos e previsíveis.
+    // Celular usa alvo maior para exibir menos cards, porém maiores e mais fáceis
+    // de tocar na orientação horizontal.
     var tvTarget = 210;
     try { tvTarget = Math.max(140, Math.round(window.innerWidth * 0.164)); } catch (e) {}
-    global.__ZX_TILE_TARGET = mob ? 100 : (tvMode ? tvTarget : 100);
+    global.__ZX_TILE_TARGET = mob ? 250 : (tvMode ? tvTarget : 210);
     try {
         var b = document.body;
         if (b) {
@@ -3937,33 +3941,49 @@ function applyFormFactor() {
     try { var g = $('content-grid') || $('search-grid'); if (g) fitPosterGrid(g); } catch (e) {}
     try { if (global.__zxReindexGrid) global.__zxReindexGrid(); } catch (e) {}
 }
-/* CSS só do modo Celular (escopo body.zx-ff-mobile → nunca toca TV/PC/Samsung).
-   Encolhe os ícones da home, rótulos e logo — "tudo menor". */
+    /* Escala dos dois modos Android. A orientação é sempre paisagem; apenas
+       os tamanhos mudam. Celular é maior para toque e TV Box é compacto. */
 function ffMobileCss() {
-    return 'body.zx-ff-mobile .tile-icon svg{width:42px;height:42px}'
-        + 'body.zx-ff-mobile .home-tile{padding:14px 6px}'
-        + 'body.zx-ff-mobile .home-tile span{font-size:12px}'
-        + 'body.zx-ff-mobile .home-logo{transform:scale(.72);transform-origin:center}'
-        + 'body.zx-ff-mobile .poster-tile-tv .pt-title,body.zx-ff-mobile .poster-tile-tv .pt-name{font-size:12px;line-height:1.2}'
-        + 'body.zx-ff-mobile .channel-tile-tv .ch-name{font-size:13px}'
-        // DETALHE de filme/série (telas internas) — encolhe hero, sinopse e botões
-        + 'body.zx-ff-mobile .detail-hero .dh-content{padding:46px 16px 12px;max-width:100%}'
-        + 'body.zx-ff-mobile .detail-hero h1{font-size:22px;margin-bottom:8px}'
-        + 'body.zx-ff-mobile .detail-hero .dh-meta{margin-bottom:10px}'
-        + 'body.zx-ff-mobile .detail-hero .dh-badge{font-size:12px;padding:3px 9px}'
-        + 'body.zx-ff-mobile .detail-hero .dh-genre{font-size:12px}'
-        + 'body.zx-ff-mobile .detail-hero .dh-plot{font-size:12px;line-height:1.4;margin-bottom:16px;max-width:100%}'
-        + 'body.zx-ff-mobile .detail-hero .dh-back{font-size:12px;padding:5px 11px}'
-        + 'body.zx-ff-mobile .detail-hero .dh-buttons{max-width:300px}'
-        + 'body.zx-ff-mobile .btn-tv{padding:10px 16px;font-size:13px;border-width:2px}'
-        + 'body.zx-ff-mobile .btn-tv .btn-icon svg{width:16px;height:16px}'
-        // TEMPORADAS + EPISÓDIOS (só série) — episódio era clamp 180-280px (gigante)
-        + 'body.zx-ff-mobile .detail-seasons{padding:16px 16px 34px}'
-        + 'body.zx-ff-mobile .detail-seasons h2{font-size:18px;margin-bottom:12px}'
-        + 'body.zx-ff-mobile .season-pill{font-size:13px;padding:8px 16px;margin-right:8px}'
-        + 'body.zx-ff-mobile .episode-tile{width:132px;margin-right:10px}'
-        + 'body.zx-ff-mobile .episode-tile .ep-label{font-size:11px;margin-top:6px}'
-        + 'body.zx-ff-mobile .episode-tile .ep-img .ep-fallback{font-size:20px}';
+    return 'body.zx-ff-mobile .tile-icon svg{width:58px;height:58px}'
+        + 'body.zx-ff-mobile .home-tile{padding:20px 10px}'
+        + 'body.zx-ff-mobile .home-tile span{font-size:17px}'
+        + 'body.zx-ff-mobile .home-logo{transform:scale(1);transform-origin:center}'
+        + 'body.zx-ff-mobile .poster-tile-tv .pt-title,body.zx-ff-mobile .poster-tile-tv .pt-name{font-size:16px;line-height:1.25}'
+        + 'body.zx-ff-mobile .channel-tile-tv .ch-name{font-size:17px}'
+        + 'body.zx-ff-mobile .detail-hero .dh-content{padding:30px 22px 18px;max-width:100%}'
+        + 'body.zx-ff-mobile .detail-hero h1{font-size:28px;margin-bottom:10px}'
+        + 'body.zx-ff-mobile .detail-hero .dh-badge{font-size:14px;padding:4px 10px}'
+        + 'body.zx-ff-mobile .detail-hero .dh-genre{font-size:14px}'
+        + 'body.zx-ff-mobile .detail-hero .dh-plot{font-size:15px;line-height:1.45;margin-bottom:18px;max-width:100%}'
+        + 'body.zx-ff-mobile .detail-hero .dh-back{font-size:14px;padding:7px 14px}'
+        + 'body.zx-ff-mobile .btn-tv{padding:12px 18px;font-size:15px;border-width:2px}'
+        + 'body.zx-ff-mobile .btn-tv .btn-icon svg{width:18px;height:18px}'
+        + 'body.zx-ff-mobile .detail-seasons{padding:18px 22px 34px}'
+        + 'body.zx-ff-mobile .detail-seasons h2{font-size:22px;margin-bottom:14px}'
+        + 'body.zx-ff-mobile .season-pill{font-size:15px;padding:10px 18px;margin-right:10px}'
+        + 'body.zx-ff-mobile .episode-tile{width:170px;margin-right:12px}'
+        + 'body.zx-ff-mobile .episode-tile .ep-label{font-size:13px;margin-top:7px}'
+        + 'body.zx-ff-mobile .episode-tile .ep-img .ep-fallback{font-size:24px}'
+        + 'body.zx-ff-tv .tile-icon svg{width:40px;height:40px}'
+        + 'body.zx-ff-tv .home-tile{padding:8px 5px}'
+        + 'body.zx-ff-tv .home-tile span{font-size:12px}'
+        + 'body.zx-ff-tv .home-logo{transform:scale(.72);transform-origin:center}'
+        + 'body.zx-ff-tv .poster-tile-tv .pt-title,body.zx-ff-tv .poster-tile-tv .pt-name{font-size:11px;line-height:1.1}'
+        + 'body.zx-ff-tv .channel-tile-tv .ch-name{font-size:12px}'
+        + 'body.zx-ff-tv .detail-hero .dh-content{padding:20px 12px 8px;max-width:760px}'
+        + 'body.zx-ff-tv .detail-hero h1{font-size:20px;margin-bottom:6px}'
+        + 'body.zx-ff-tv .detail-hero .dh-badge{font-size:11px;padding:3px 7px}'
+        + 'body.zx-ff-tv .detail-hero .dh-genre{font-size:11px}'
+        + 'body.zx-ff-tv .detail-hero .dh-plot{font-size:11px;line-height:1.25;margin-bottom:10px;max-width:680px}'
+        + 'body.zx-ff-tv .detail-hero .dh-back{font-size:11px;padding:5px 10px}'
+        + 'body.zx-ff-tv .btn-tv{padding:8px 12px;font-size:12px;border-width:1px}'
+        + 'body.zx-ff-tv .btn-tv .btn-icon svg{width:14px;height:14px}'
+        + 'body.zx-ff-tv .detail-seasons{padding:12px 12px 24px}'
+        + 'body.zx-ff-tv .detail-seasons h2{font-size:16px;margin-bottom:8px}'
+        + 'body.zx-ff-tv .season-pill{font-size:11px;padding:6px 12px;margin-right:6px}'
+        + 'body.zx-ff-tv .episode-tile{width:120px;margin-right:8px}'
+        + 'body.zx-ff-tv .episode-tile .ep-label{font-size:10px;margin-top:4px}'
+        + 'body.zx-ff-tv .episode-tile .ep-img .ep-fallback{font-size:18px}';
 }
 function injectFfAskCss() {
     if ($('zx-ffa-css')) return;
