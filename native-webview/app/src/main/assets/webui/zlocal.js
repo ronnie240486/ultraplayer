@@ -1031,15 +1031,30 @@ function showEpgToast(message, enabled) {
     setTimeout(function () { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 3600);
 }
 function toggleEpgAlarm(btn) {
-    var when = parseInt(btn.getAttribute('data-when') || '0', 10), title = btn.getAttribute('data-title') || '', channel = btn.getAttribute('data-channel') || '', now = Date.now();
+    var when = parseInt(btn.getAttribute('data-when') || '0', 10), title = btn.getAttribute('data-title') || '', channel = btn.getAttribute('data-channel') || '', sid = parseInt(btn.getAttribute('data-sid') || '0', 10), now = Date.now();
     if (!when || when <= now) { btn.title = 'Este programa já começou'; showEpgToast('Este programa já começou.', false); return; }
     var key = epgAlarmKey(when, title, channel), a = epgAlarms(), found = -1;
     for (var i = 0; i < a.length; i++) if (a[i].key === key) { found = i; break; }
     if (found >= 0) { a.splice(found, 1); btn.className = btn.className.replace(/\s*is-on\b/g, ''); btn.textContent = '🔕'; showEpgToast('Alerta removido.', false); }
-    else { a.push({ key: key, when: when, title: title, channel: channel }); btn.className += ' is-on'; btn.textContent = '🔔'; showEpgToast('Te avisaremos quando sua programação começar.', true); }
+    else { a.push({ key: key, when: when, title: title, channel: channel, sid: sid }); btn.className += ' is-on'; btn.textContent = '🔔'; showEpgToast('Te avisaremos quando sua programação começar.', true); }
     saveEpgAlarms(a);
 }
+function openScheduledEpgChannel(alarm) {
+    try {
+        if (getFormFactor() !== 'mobile') return;
+        var sid = parseInt(alarm && alarm.sid || 0, 10), all = S.cat.live && S.cat.live.all || [];
+        if (!sid && alarm && alarm.channel) {
+            var wanted = norm(String(alarm.channel));
+            for (var i = 0; i < all.length; i++) if (norm(String(all[i].name || '')) === wanted) { sid = parseInt(all[i].stream_id || 0, 10); break; }
+        }
+        if (!sid || !nativeAvail() || !global.HdxNative || !global.HdxNative.miniPlay) return;
+        var item = null; for (var j = 0; j < all.length; j++) if (parseInt(all[j].stream_id || 0, 10) === sid) { item = all[j]; break; }
+        var z = liveFullZapList(sid) || liveZapList(sid) || {};
+        global.HdxNative.miniPlay(JSON.stringify({ kind: 'live', url: streamUrl('live', sid), title: (item && item.name) || alarm.channel || 'Canal', resume: 0, zxKind: 'live', zxId: sid, name: (item && item.name) || alarm.channel || 'Canal', zap: z.list || null, zap_index: z.index || 0 }));
+    } catch (e) {}
+}
 function showEpgAlarm(alarm) {
+    openScheduledEpgChannel(alarm);
     if (document.querySelector('.zx-epg-alarm-modal')) { global.__zxEpgAlarmQueue = global.__zxEpgAlarmQueue || []; global.__zxEpgAlarmQueue.push(alarm); return; }
     var n = 10, ov = document.createElement('div'); ov.className = 'zx-epg-alarm-modal'; ov.innerHTML = '<div class="zx-epg-alarm-card"><div class="zx-epg-alarm-bell">🔔</div><div class="zx-epg-alarm-title">Vai começar</div><div class="zx-epg-alarm-name">' + esc(alarm.title || 'Programa') + '</div><div class="zx-epg-alarm-channel">' + esc(alarm.channel || '') + '</div><div class="zx-epg-alarm-count" id="zxEpgAlarmCount">10</div><button type="button" class="zx-epg-alarm-close">Fechar</button></div>';
     document.body.appendChild(ov);
@@ -2544,10 +2559,10 @@ function liveStyles() {
         + '.live-epg .epg-sub{color:#8fa39a;font-size:9px;line-height:1.05;}'
         + '.live-epg{max-height:calc(100vh - 92px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;}'
         + '.live-epg .epg-body{max-height:calc(100vh - 190px);overflow-y:auto;overscroll-behavior:contain;padding-right:4px;scrollbar-width:thin;}'
-        + '.live-epg .epg-item{display:flex;align-items:center;gap:4px;position:relative;padding:8px 0;min-height:46px;box-sizing:border-box;overflow:hidden;}'
-        + '.live-epg .epg-copy{min-width:0;flex:1 1 auto;overflow:hidden;}'
-        + '.live-epg .epg-title{font-size:10px;line-height:1.05;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
-        + '.epg-alarm{position:static;flex:0 0 30px;width:30px;height:30px;z-index:5;pointer-events:auto;touch-action:manipulation;transform:none;border:1px solid ' + a + '44;border-radius:8px;background:' + a + '12;color:#9fb4aa;font-size:15px;cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center;}'
+        + '.live-epg .epg-item{position:relative;padding:8px 46px 8px 0;min-height:46px;box-sizing:border-box;}'
+        + '.live-epg .epg-copy{display:block;min-width:0;}'
+        + '.live-epg .epg-title{font-size:10px;line-height:1.05;font-weight:650;}'
+        + '.epg-alarm{position:absolute;right:0;top:50%;z-index:5;pointer-events:auto;touch-action:manipulation;transform:translateY(-50%);width:38px;height:38px;border:1px solid ' + a + '44;border-radius:10px;background:' + a + '12;color:#9fb4aa;font-size:18px;cursor:pointer;}'
         + '.epg-alarm:hover,.epg-alarm:focus{border-color:' + a + ';color:#fff;outline:none;box-shadow:0 0 0 3px ' + a + '33;}'
         + '.epg-alarm.is-on{background:' + a + '42;color:' + a + ';}'
         + '.zx-epg-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:100001;display:flex;align-items:center;gap:10px;max-width:min(560px,88vw);padding:14px 20px;border:1px solid rgba(255,255,255,.18);border-radius:16px;background:rgba(9,20,15,.96);box-shadow:0 14px 36px rgba(0,0,0,.45);color:#f4fff9;font-size:16px;font-weight:700;text-align:center;line-height:1.25;}'
@@ -2729,7 +2744,7 @@ function wireLiveEpg() {
             var body = $('epg-body'); if (!body) return;
             if (!epg || !epg.length) { body.innerHTML = '<div class="epg-empty">Sem programação para este canal.</div>'; return; }
 var h = '';
-             for (var i = 0; i < epg.length; i++) { var p = epg[i], when = epgTimestamp(p.rawStart || p.start), armed = epgAlarmHas(when, p.title || '', selName); var t = esc(p.start || '') + (p.end ? (' - ' + esc(p.end)) : '') + (i === 0 ? ('  • ' + (currentLang() === 'en' ? 'NOW' : 'AGORA')) : ''); h += '<div class="epg-item' + (i === 0 ? ' is-now' : '') + '"><div class="epg-copy"><div class="epg-time">' + t + '</div><div class="epg-title">' + esc(p.title || '—') + '</div></div><button type="button" class="epg-alarm' + (armed ? ' is-on' : '') + '" data-when="' + attr(when) + '" data-title="' + attr(p.title || '') + '" data-channel="' + attr(selName) + '" aria-label="Ativar aviso da programação">🔔</button></div>'; }
+             for (var i = 0; i < epg.length; i++) { var p = epg[i], when = epgTimestamp(p.rawStart || p.start), armed = epgAlarmHas(when, p.title || '', selName); var t = esc(p.start || '') + (p.end ? (' - ' + esc(p.end)) : '') + (i === 0 ? ('  • ' + (currentLang() === 'en' ? 'NOW' : 'AGORA')) : ''); h += '<div class="epg-item' + (i === 0 ? ' is-now' : '') + '"><div class="epg-copy"><div class="epg-time">' + t + '</div><div class="epg-title">' + esc(p.title || '—') + '</div></div><button type="button" class="epg-alarm' + (armed ? ' is-on' : '') + '" data-when="' + attr(when) + '" data-title="' + attr(p.title || '') + '" data-channel="' + attr(selName) + '" data-sid="' + attr(sid) + '" aria-label="Ativar aviso da programação">🔔</button></div>'; }
             body.innerHTML = h;
         }
         xt('get_short_epg', '&stream_id=' + enc(sid) + '&limit=50').then(function (data) { paintEpg(epgItemsFromResponse(data)); }).catch(function () { paintEpg([]); });
@@ -3990,7 +4005,7 @@ function ffMobileCss() {
         + 'body.zx-ff-mobile .live-epg .epg-copy{min-width:0 !important;flex:1 1 auto !important;overflow:hidden !important}'
         + 'body.zx-ff-mobile .live-epg .epg-title{font-size:8px !important;line-height:1.05 !important;white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important}'
         + 'body.zx-ff-mobile .live-epg .epg-time{font-size:7px !important;line-height:1 !important}'
-        + 'body.zx-ff-mobile .live-epg .epg-alarm{position:static !important;flex:0 0 22px !important;width:22px !important;height:22px !important;font-size:11px !important;border-radius:5px !important;margin:0 !important;padding:0 !important}'
+        + 'body.zx-ff-mobile .live-epg .epg-alarm{position:static !important;display:flex !important;visibility:visible !important;opacity:1 !important;flex:0 0 22px !important;width:22px !important;min-width:22px !important;height:22px !important;font-size:11px !important;border-radius:5px !important;margin:0 !important;padding:0 !important}'
         + 'body.zx-ff-mobile .live-split .channel-tile-tv .ct-logo{width:36px !important;height:36px !important;line-height:36px !important;margin-right:5px !important}'
         + 'body.zx-ff-mobile .live-split .channel-tile-tv .ct-logo img{width:100%;height:100%;object-fit:contain}'
         + 'body.zx-ff-mobile .live-split .channel-tile-tv .ct-fallback{font-size:17px !important}'
