@@ -971,13 +971,20 @@ function epgAlarms() { try { var a = JSON.parse(localStorage.getItem('zx_epg_ala
 function saveEpgAlarms(a) { try { localStorage.setItem('zx_epg_alarms', JSON.stringify(a || [])); } catch (e) {} }
 function epgAlarmKey(when, title, channel) { return String(when || 0) + '|' + normVoiceText(title) + '|' + normVoiceText(channel); }
 function epgAlarmHas(when, title, channel) { var k = epgAlarmKey(when, title, channel), a = epgAlarms(); for (var i = 0; i < a.length; i++) if (a[i].key === k) return true; return false; }
+function showEpgToast(message, enabled) {
+    var old = document.querySelector('.zx-epg-toast'); if (old && old.parentNode) old.parentNode.removeChild(old);
+    var toast = document.createElement('div'); toast.className = 'zx-epg-toast' + (enabled ? ' is-enabled' : '');
+    toast.innerHTML = '<span class="zx-epg-toast-icon">' + (enabled ? '🔔' : '🔕') + '</span><span>' + esc(message) + '</span>';
+    document.body.appendChild(toast);
+    setTimeout(function () { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 3600);
+}
 function toggleEpgAlarm(btn) {
     var when = parseInt(btn.getAttribute('data-when') || '0', 10), title = btn.getAttribute('data-title') || '', channel = btn.getAttribute('data-channel') || '', now = Date.now();
-    if (!when || when <= now) { btn.title = 'Este programa já começou'; return; }
+    if (!when || when <= now) { btn.title = 'Este programa já começou'; showEpgToast('Este programa já começou.', false); return; }
     var key = epgAlarmKey(when, title, channel), a = epgAlarms(), found = -1;
     for (var i = 0; i < a.length; i++) if (a[i].key === key) { found = i; break; }
-    if (found >= 0) { a.splice(found, 1); btn.className = btn.className.replace(/\s*is-on\b/g, ''); btn.textContent = '🔕'; }
-    else { a.push({ key: key, when: when, title: title, channel: channel }); btn.className += ' is-on'; btn.textContent = '🔔'; }
+    if (found >= 0) { a.splice(found, 1); btn.className = btn.className.replace(/\s*is-on\b/g, ''); btn.textContent = '🔕'; showEpgToast('Alerta removido.', false); }
+    else { a.push({ key: key, when: when, title: title, channel: channel }); btn.className += ' is-on'; btn.textContent = '🔔'; showEpgToast('Te avisaremos quando sua programação começar.', true); }
     saveEpgAlarms(a);
 }
 function showEpgAlarm(alarm) {
@@ -2468,6 +2475,9 @@ function liveStyles() {
         + '.epg-alarm{position:absolute;right:0;top:50%;transform:translateY(-50%);width:34px;height:34px;border:1px solid ' + a + '44;border-radius:10px;background:' + a + '12;color:#9fb4aa;font-size:18px;cursor:pointer;}'
         + '.epg-alarm:hover,.epg-alarm:focus{border-color:' + a + ';color:#fff;outline:none;box-shadow:0 0 0 3px ' + a + '33;}'
         + '.epg-alarm.is-on{background:' + a + '42;color:' + a + ';}'
+        + '.zx-epg-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:100001;display:flex;align-items:center;gap:10px;max-width:min(560px,88vw);padding:14px 20px;border:1px solid rgba(255,255,255,.18);border-radius:16px;background:rgba(9,20,15,.96);box-shadow:0 14px 36px rgba(0,0,0,.45);color:#f4fff9;font-size:16px;font-weight:700;text-align:center;line-height:1.25;}'
+        + '.zx-epg-toast.is-enabled{border-color:' + a + ';box-shadow:0 0 0 3px ' + a + '33,0 14px 36px rgba(0,0,0,.45);}'
+        + '.zx-epg-toast-icon{font-size:22px;flex:none;}'
         + '.zx-epg-alarm-modal{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.78);padding:20px;box-sizing:border-box;}'
         + '.zx-epg-alarm-card{width:min(460px,92vw);padding:30px 24px;border:2px solid ' + a + ';border-radius:22px;background:linear-gradient(145deg,#12261e,#07120d);box-shadow:0 18px 60px rgba(0,0,0,.7);text-align:center;color:#fff;}'
         + '.zx-epg-alarm-bell{font-size:42px;margin-bottom:6px;}.zx-epg-alarm-title{font-size:26px;font-weight:900;color:' + a + ';}.zx-epg-alarm-name{font-size:21px;font-weight:800;margin-top:12px;}.zx-epg-alarm-channel{font-size:15px;color:#a7bbb1;margin-top:6px;}.zx-epg-alarm-count{font-size:64px;font-weight:900;margin:14px 0;color:#fff;}.zx-epg-alarm-close{border:0;border-radius:10px;padding:11px 28px;background:' + a + ';color:#04231a;font-weight:800;font-size:16px;}'
