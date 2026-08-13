@@ -404,8 +404,10 @@ public final class MainActivity extends Activity {
     private void openFullMiniPlayer() {
         if (miniPayload == null || miniPayload.isEmpty()) return;
         try {
+            String payload = miniPayload;
+            hideMiniPlayer();
             Intent intent = new Intent(MainActivity.this, PlayerActivity.class);
-            intent.putExtra("payload", miniPayload);
+            intent.putExtra("payload", payload);
             startActivity(intent);
         } catch (Throwable ignored) { }
     }
