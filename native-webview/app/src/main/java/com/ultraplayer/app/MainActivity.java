@@ -42,6 +42,7 @@ public final class MainActivity extends Activity {
     private ExoPlayer miniPlayer;
     private TextView miniTitle;
     private ImageButton miniCloseButton;
+    private View miniExpandHit;
     private String miniPayload = "";
     private boolean miniExpanded = false;
     private FrameLayout.LayoutParams miniLayoutBeforeExpand;
@@ -321,12 +322,19 @@ public final class MainActivity extends Activity {
         miniContainer.setElevation(24f);
 
         miniPlayerView = new PlayerView(this);
-        miniPlayerView.setUseController(true);
+        miniPlayerView.setUseController(false);
         miniPlayerView.setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING);
         miniPlayerView.setBackgroundColor(android.graphics.Color.BLACK);
         miniPlayerView.setContentDescription("Abrir player em tela cheia");
+        miniPlayerView.setClickable(true);
         miniPlayerView.setOnClickListener(v -> openFullMiniPlayer());
         miniContainer.addView(miniPlayerView, new FrameLayout.LayoutParams(-1, -1));
+
+        miniExpandHit = new View(this);
+        miniExpandHit.setContentDescription("Abrir player em tela cheia");
+        miniExpandHit.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        miniExpandHit.setOnClickListener(v -> openFullMiniPlayer());
+        miniContainer.addView(miniExpandHit, new FrameLayout.LayoutParams(-1, -1));
 
         miniTitle = new TextView(this);
         miniTitle.setTextColor(android.graphics.Color.WHITE);
@@ -439,6 +447,9 @@ public final class MainActivity extends Activity {
             miniContainer.requestLayout();
             if (root != null) root.requestLayout();
             if (miniTitle != null) miniTitle.setVisibility(View.GONE);
+            if (miniExpandHit != null) miniExpandHit.setVisibility(View.GONE);
+            miniPlayerView.setUseController(true);
+            miniPlayerView.setControllerAutoShow(true);
             if (miniCloseButton != null) {
                 miniCloseButton.setContentDescription("Voltar para o mini player");
                 miniCloseButton.setImageResource(android.R.drawable.ic_menu_revert);
@@ -470,6 +481,8 @@ public final class MainActivity extends Activity {
         miniContainer.bringToFront();
         miniContainer.requestLayout();
         if (miniTitle != null) miniTitle.setVisibility(View.VISIBLE);
+        if (miniExpandHit != null) miniExpandHit.setVisibility(View.VISIBLE);
+        miniPlayerView.setUseController(false);
         if (miniCloseButton != null) {
             miniCloseButton.setContentDescription("Fechar mini player");
             miniCloseButton.setImageResource(android.R.drawable.ic_menu_close_clear_cancel);
