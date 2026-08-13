@@ -2544,6 +2544,42 @@ function liveStyles() {
         + '.grid-loadmore{color:#8fa39a;}'
         + '</style>';
 }
+function enforceLiveLayout() {
+    try {
+        var split = document.querySelector('.live-split');
+        var side = document.querySelector('.cat-sidebar');
+        var content = document.querySelector('.sidebar-content');
+        var right = document.querySelector('.live-right-column');
+        var slot = document.querySelector('.live-video-slot');
+        var epg = document.querySelector('.live-epg');
+        if (!split) return;
+        var cls = document.body ? (' ' + document.body.className + ' ') : '';
+        var tv = cls.indexOf(' ui-tv ') >= 0 || cls.indexOf(' zx-ff-tv ') >= 0;
+        var phone = !tv || (global.innerWidth || 0) < 760 || (global.innerHeight || 0) > (global.innerWidth || 0) * 1.15;
+        if (tv && !phone) {
+            var ww = Math.max(720, global.innerWidth || document.documentElement.clientWidth || 1280);
+            var sidebarW = Math.round(ww * 0.16), rightW = Math.round(ww * 0.38);
+            if (side) { side.style.width = sidebarW + 'px'; side.style.maxWidth = sidebarW + 'px'; side.style.padding = '8px 5px'; }
+            if (content) { content.style.left = sidebarW + 'px'; content.style.padding = '8px 12px 12px'; }
+            split.style.display = 'grid'; split.style.gridTemplateColumns = 'minmax(300px,1fr) ' + rightW + 'px'; split.style.gap = '12px'; split.style.alignItems = 'stretch';
+            if (right) { right.style.display = 'flex'; right.style.flexDirection = 'column'; right.style.height = 'calc(100vh - 110px)'; right.style.minHeight = '520px'; right.style.gap = '10px'; }
+            if (slot) { slot.style.height = 'clamp(190px,28vh,300px)'; slot.style.flex = '0 0 auto'; }
+            if (epg) { epg.style.display = 'block'; epg.style.flex = '1 1 auto'; epg.style.minHeight = '220px'; epg.style.height = 'auto'; epg.style.maxHeight = 'none'; epg.style.overflowY = 'auto'; epg.style.overflowX = 'hidden'; }
+        } else {
+            split.style.display = 'flex'; split.style.flexDirection = 'column'; split.style.gap = '12px';
+            if (side) { side.style.width = ''; side.style.maxWidth = ''; side.style.padding = ''; }
+            if (content) { content.style.left = ''; content.style.padding = ''; }
+            if (right) { right.style.height = 'auto'; right.style.minHeight = ''; }
+            if (slot) { slot.style.height = '180px'; }
+            if (epg) { epg.style.display = 'block'; epg.style.height = 'auto'; epg.style.maxHeight = 'none'; epg.style.overflowY = 'auto'; }
+        }
+        if (global.__zxSyncMiniVideoBounds) { setTimeout(global.__zxSyncMiniVideoBounds, 50); setTimeout(global.__zxSyncMiniVideoBounds, 350); }
+    } catch (e) {}
+}
+if (!global.__zxLiveResizeBound) {
+    global.__zxLiveResizeBound = true;
+    global.addEventListener('resize', function () { setTimeout(enforceLiveLayout, 50); });
+}
 function renderLiveSection(cat, opts) {
     var selCat = null, selName = '', tiles = '', virtual = opts.virtual || '';
     // PC: voltando de um canal (history.back → /live SEM categoria) → restaura a
@@ -2584,6 +2620,7 @@ function renderLiveSection(cat, opts) {
         wireLiveSearch();
         wireLiveEpg();
         loadChannelLogos();
+        setTimeout(enforceLiveLayout, 30); setTimeout(enforceLiveLayout, 420);
         afterRender();
     }
 
@@ -2639,6 +2676,7 @@ function wireLiveEpg() {
             global.HdxNative.setMiniBounds(JSON.stringify({ left: r.left, top: r.top, width: r.width, height: r.height, scale: global.devicePixelRatio || 1 }));
         } catch (e) {}
     }
+    global.__zxSyncMiniVideoBounds = syncMiniVideoBounds;
     function goPlay(href) {
         if (!href || href === '#') return;
         // PC + SAMSUNG: ao abrir um canal (vai pra página do player <video>/AVPlay),
