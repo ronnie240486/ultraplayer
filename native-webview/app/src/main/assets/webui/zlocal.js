@@ -2471,8 +2471,10 @@ function liveStyles() {
         + '.live-epg .epg-item{border-top:1px solid rgba(255,255,255,.06);}'
         + '.live-epg .epg-time{color:#8fa39a;}'
         + '.live-epg .epg-sub{color:#8fa39a;}'
-        + '.live-epg .epg-item{position:relative;padding-right:42px;min-height:48px;box-sizing:border-box;}'
-        + '.epg-alarm{position:absolute;right:0;top:50%;transform:translateY(-50%);width:34px;height:34px;border:1px solid ' + a + '44;border-radius:10px;background:' + a + '12;color:#9fb4aa;font-size:18px;cursor:pointer;}'
+        + '.live-epg{max-height:calc(100vh - 92px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;}'
+        + '.live-epg .epg-body{max-height:calc(100vh - 190px);overflow-y:auto;overscroll-behavior:contain;padding-right:4px;scrollbar-width:thin;}'
+        + '.live-epg .epg-item{position:relative;padding-right:52px;min-height:58px;box-sizing:border-box;}'
+        + '.epg-alarm{position:absolute;right:0;top:50%;z-index:5;pointer-events:auto;touch-action:manipulation;transform:translateY(-50%);width:38px;height:38px;border:1px solid ' + a + '44;border-radius:10px;background:' + a + '12;color:#9fb4aa;font-size:18px;cursor:pointer;}'
         + '.epg-alarm:hover,.epg-alarm:focus{border-color:' + a + ';color:#fff;outline:none;box-shadow:0 0 0 3px ' + a + '33;}'
         + '.epg-alarm.is-on{background:' + a + '42;color:' + a + ';}'
         + '.zx-epg-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:100001;display:flex;align-items:center;gap:10px;max-width:min(560px,88vw);padding:14px 20px;border:1px solid rgba(255,255,255,.18);border-radius:16px;background:rgba(9,20,15,.96);box-shadow:0 14px 36px rgba(0,0,0,.45);color:#f4fff9;font-size:16px;font-weight:700;text-align:center;line-height:1.25;}'
@@ -2596,10 +2598,10 @@ function wireLiveEpg() {
             var body = $('epg-body'); if (!body) return;
             if (!epg || !epg.length) { body.innerHTML = '<div class="epg-empty">Sem programação para este canal.</div>'; return; }
             var h = '';
-            for (var i = 0; i < epg.length; i++) { var p = epg[i], when = epgTimestamp(p.rawStart || p.start), armed = epgAlarmHas(when, p.title || '', selName); var t = esc(p.start || '') + (p.end ? (' - ' + esc(p.end)) : '') + (i === 0 ? ('  • ' + (currentLang() === 'en' ? 'NOW' : 'AGORA')) : ''); h += '<div class="epg-item' + (i === 0 ? ' is-now' : '') + '"><div class="epg-time">' + t + '</div><div class="epg-title">' + esc(p.title || '—') + '</div><button type="button" class="epg-alarm' + (armed ? ' is-on' : '') + '" data-when="' + attr(when) + '" data-title="' + attr(p.title || '') + '" data-channel="' + attr(selName) + '" onclick="toggleEpgAlarm(this)" aria-label="Alarme">' + (armed ? '🔔' : '🔕') + '</button></div>'; }
+            for (var i = 0; i < epg.length; i++) { var p = epg[i], when = epgTimestamp(p.rawStart || p.start), armed = epgAlarmHas(when, p.title || '', selName); var t = esc(p.start || '') + (p.end ? (' - ' + esc(p.end)) : '') + (i === 0 ? ('  • ' + (currentLang() === 'en' ? 'NOW' : 'AGORA')) : ''); h += '<div class="epg-item' + (i === 0 ? ' is-now' : '') + '"><div class="epg-time">' + t + '</div><div class="epg-title">' + esc(p.title || '—') + '</div><button type="button" class="epg-alarm' + (armed ? ' is-on' : '') + '" data-when="' + attr(when) + '" data-title="' + attr(p.title || '') + '" data-channel="' + attr(selName) + '" aria-label="Ativar aviso da programação">' + (armed ? '🔔' : '🔔') + '</button></div>'; }
             body.innerHTML = h;
         }
-        xt('get_short_epg', '&stream_id=' + enc(sid) + '&limit=6').then(function (data) { paintEpg(epgItemsFromResponse(data)); }).catch(function () { paintEpg([]); });
+        xt('get_short_epg', '&stream_id=' + enc(sid) + '&limit=50').then(function (data) { paintEpg(epgItemsFromResponse(data)); }).catch(function () { paintEpg([]); });
     }
     function preloadFirst() { var first = content.querySelector('.channel-tile-tv'); if (first) renderEpg(first); }
     var t = null;
@@ -2630,7 +2632,11 @@ function wireLiveEpg() {
         if (row === lastEl && (now - lastT) < 650) { goPlay(href); return; }
         lastEl = row; lastT = now; renderEpg(row);
     }, true);
-    panel.addEventListener('click', function (e) { if (closestCls(e.target, 'epg-play')) goPlay(selHref); });
+    panel.addEventListener('click', function (e) {
+        var bell = closestCls(e.target, 'epg-alarm');
+        if (bell) { e.preventDefault(); e.stopPropagation(); toggleEpgAlarm(bell); return; }
+        if (closestCls(e.target, 'epg-play')) { e.preventDefault(); e.stopPropagation(); goPlay(selHref); }
+    }, true);
     preloadFirst();
     if (global.__liveEpgMo) { try { global.__liveEpgMo.disconnect(); } catch (e) {} }
     if (global.MutationObserver) {
