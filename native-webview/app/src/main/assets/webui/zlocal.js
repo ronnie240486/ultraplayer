@@ -1543,7 +1543,27 @@ function voiceResultsStyles() {
         + '.voice-search-screen #voice-results.poster-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:18px 12px;align-content:start;}.voice-search-screen #voice-results.poster-grid .poster-tile-tv{display:block;width:auto!important;margin:0!important;padding:0!important;color:var(--zx-text,#f4fff9);text-decoration:none;}.voice-search-screen .poster-tile-tv .pt-img{position:relative;width:100%;aspect-ratio:2/3;border-radius:12px;overflow:hidden;background:linear-gradient(145deg,' + a + '28,#101a16);}.voice-search-screen .poster-tile-tv .pt-img img{display:block;width:100%;height:100%;object-fit:cover;}.voice-search-screen .poster-tile-tv .pt-fallback{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:28px;font-weight:900;background:linear-gradient(145deg,' + a + '55,#111a18);}.voice-search-screen .poster-tile-tv .pt-name{margin-top:7px;font-size:14px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
         + '.voice-search-screen .zx-empty{padding:42px 20px;text-align:center;color:var(--zx-muted,#9db0a7);font-size:18px;}'
         + '@media (max-width:800px){.voice-search-screen .voice-result-query{padding:10px 14px 6px;font-size:15px;}.voice-search-screen #voice-results{padding:8px 14px 20px;}.voice-search-screen #voice-results.live-channels{grid-template-columns:1fr;gap:9px;}.voice-search-screen .channel-tile-tv{min-height:76px;padding:8px 48px 8px 10px;border-radius:13px;}.voice-search-screen .ct-logo{width:52px;height:52px;flex-basis:52px;margin-right:10px;}.voice-search-screen .ct-name{font-size:14px;}.voice-search-screen #voice-results.poster-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:14px 9px;}.voice-search-screen .poster-tile-tv .pt-name{font-size:12px;}}'
+        + 'body.zx-ff-mobile .voice-search-screen #voice-results.live-channels{display:grid !important;grid-template-columns:repeat(2,minmax(280px,1fr)) !important;gap:14px !important;align-content:start !important;}'
+        + 'body.zx-ff-mobile .voice-search-screen #voice-results.poster-grid{display:grid !important;grid-template-columns:repeat(auto-fill,minmax(180px,1fr)) !important;gap:18px 14px !important;align-content:start !important;}'
+        + 'body.zx-ff-mobile .voice-search-screen .channel-tile-tv{min-height:92px !important;padding:11px 56px 11px 14px !important;}'
+        + 'body.zx-ff-mobile .voice-search-screen .ct-logo{width:66px !important;height:66px !important;flex-basis:66px !important;margin-right:12px !important;}'
+        + 'body.zx-ff-mobile .voice-search-screen .ct-name{font-size:16px !important;}'
+        + 'body.zx-ff-mobile .voice-search-screen .poster-tile-tv .pt-name{font-size:14px !important;}'
         + '</style>';
+}
+function loadVoicePosterImages() {
+    try {
+        var imgs = document.querySelectorAll('.voice-search-screen .pt-img[data-src]');
+        for (var i = 0; i < imgs.length; i++) (function (el) {
+            if (el.getAttribute('data-loaded')) return;
+            var src = el.getAttribute('data-src') || ''; if (!src) return;
+            el.setAttribute('data-loaded', '1');
+            var im = new Image();
+            im.onload = function () { el.style.backgroundImage = "url('" + src.replace(/'/g, "\\'") + "')"; el.className += ' is-loaded'; };
+            im.onerror = function () { el.removeAttribute('data-loaded'); };
+            im.src = src;
+        })(imgs[i]);
+    } catch (e) {}
 }
 function renderVoiceResults(kind, query, list) {
     var title = kind === 'live' ? 'Canais encontrados' : kind === 'movies' ? 'Filmes encontrados' : 'Séries encontradas';
@@ -1552,7 +1572,7 @@ function renderVoiceResults(kind, query, list) {
     if (kind === 'live') {
         loadChannelLogos();
         var grid = $('voice-results'); if (grid) grid.addEventListener('click', function (e) { var row = e.target; while (row && row !== grid && !((' ' + (row.className || '') + ' ').indexOf(' channel-tile-tv ') >= 0)) row = row.parentNode; if (!row || row === grid) return; e.preventDefault(); var sid = row.getAttribute('data-sid'), name = row.getAttribute('data-name') || ''; if (sid) playViaNative({ kind: 'live', url: streamUrl('live', sid), title: name, resume: 0, zxKind: 'live', zxId: sid, name: name, zap: liveZapList(sid) }); });
-    } else { var pg = $('voice-results'); if (pg) { afterRender(); } }
+    } else { var pg = $('voice-results'); if (pg) { afterRender(); loadVoicePosterImages(); setTimeout(loadVoicePosterImages, 250); } }
     focusHomeStart();
 }
 function voiceSearchKind(kind, q) {
@@ -1579,6 +1599,41 @@ function chooseVoiceResult(found, q) {
     }
     return found[0];
 }
+function voiceExactHit(found, q, preferredKind) {
+    var nq = normVoiceText(q), words = nq.split(' ').filter(function (x) { return x.length > 0; });
+    if (words.length < 2) return null;
+    var hits = [];
+    for (var i = 0; i < found.length; i++) {
+        if (preferredKind && found[i].kind !== preferredKind) continue;
+        var scored = found[i].scored || [];
+        for (var j = 0; j < scored.length; j++) {
+            var item = scored[j].item || {}, name = normVoiceText(item.name || item.title || '');
+            if (name === nq) hits.push({ kind: found[i].kind, item: item });
+        }
+    }
+    return hits.length === 1 ? hits[0] : null;
+}
+function playVoiceExact(hit) {
+    try {
+        if (!hit || !hit.item) return false;
+        var item = hit.item, kind = hit.kind, id;
+        if (kind === 'live') {
+            id = parseInt(item.stream_id || 0, 10); if (!id) return false;
+            playViaNative({ kind: 'live', url: streamUrl('live', id), title: item.name || 'Canal', resume: 0, zxKind: 'live', zxId: id, name: item.name || 'Canal', zap: liveFullZapList(id) || liveZapList(id) });
+            return true;
+        }
+        if (kind === 'movies') {
+            id = parseInt(item.stream_id || 0, 10); if (!id) return false;
+            S.playName = item.name || 'Filme'; S.playExt = item.container_extension || item.container || 'mp4'; S.playPoster = item.stream_icon || '';
+            renderPlayerMovie(id, ''); return true;
+        }
+        if (kind === 'series') {
+            id = parseInt(item.series_id || item.stream_id || 0, 10); if (!id) return false;
+            renderDetailSeries(id); return true;
+        }
+    } catch (e) {}
+    return false;
+}
 function runVoiceCommand(text) {
     var raw = String(text || '').trim(), normalized = normVoiceText(raw), q = voiceCleanQuery(raw), explicitKind = /\b(filme|filmes|movie|movies|cinema|vod|serie|series|novela|novelas|temporada|episodio|episodios|anime)\b/.test(normalized), preferred = voiceKind(raw);
     if (!q) { renderVoiceResults(preferred, raw, []); return; }
@@ -1588,13 +1643,18 @@ function runVoiceCommand(text) {
     function next(i) {
         if (i >= order.length) {
             showLoading(false);
-            var best = chooseVoiceResult(found, q);
-            renderVoiceResults(best.kind, raw, best.scored.slice(0, 80).map(function (x) { return x.item; }));
+            var best = chooseVoiceResult(found, q), exact = voiceExactHit(found, q, best.kind);
+            if (!playVoiceExact(exact)) renderVoiceResults(best.kind, raw, best.scored.slice(0, 80).map(function (x) { return x.item; }));
             return;
         }
         voiceSearchKind(order[i], q).then(function (res) {
             if (res.scored.length) found.push(res);
-            if (explicitKind) { showLoading(false); renderVoiceResults(res.kind, raw, res.scored.slice(0, 80).map(function (x) { return x.item; })); return; }
+            if (explicitKind) {
+                showLoading(false);
+                var exact = voiceExactHit([res], q, res.kind);
+                if (!playVoiceExact(exact)) renderVoiceResults(res.kind, raw, res.scored.slice(0, 80).map(function (x) { return x.item; }));
+                return;
+            }
             next(i + 1);
         }).catch(function () { next(i + 1); });
     }
@@ -4003,9 +4063,10 @@ function ffMobileCss() {
         + 'body.zx-ff-mobile .live-epg .epg-sub{font-size:8px !important;margin-bottom:5px !important}'
         + 'body.zx-ff-mobile .live-epg .epg-item{display:flex !important;align-items:center !important;gap:3px !important;padding:4px 0 !important;min-height:30px !important;overflow:hidden !important}'
         + 'body.zx-ff-mobile .live-epg .epg-copy{min-width:0 !important;flex:1 1 auto !important;overflow:hidden !important}'
-        + 'body.zx-ff-mobile .live-epg .epg-title{font-size:8px !important;line-height:1.05 !important;white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important}'
-        + 'body.zx-ff-mobile .live-epg .epg-time{font-size:7px !important;line-height:1 !important}'
-        + 'body.zx-ff-mobile .live-epg .epg-alarm{position:static !important;display:flex !important;visibility:visible !important;opacity:1 !important;flex:0 0 22px !important;width:22px !important;min-width:22px !important;height:22px !important;font-size:11px !important;border-radius:5px !important;margin:0 !important;padding:0 !important}'
+        + 'body.zx-ff-mobile .live-epg .epg-copy{display:block !important;min-width:0 !important;flex:1 1 auto !important;overflow:hidden !important}'
+        + 'body.zx-ff-mobile .live-epg .epg-title{font-size:10px !important;line-height:1.08 !important;white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important}'
+        + 'body.zx-ff-mobile .live-epg .epg-time{font-size:8px !important;line-height:1.05 !important}'
+        + 'body.zx-ff-mobile .live-epg .epg-alarm{position:static !important;display:flex !important;visibility:visible !important;opacity:1 !important;flex:0 0 26px !important;width:26px !important;min-width:26px !important;height:26px !important;font-size:14px !important;border-radius:6px !important;margin:0 0 0 3px !important;padding:0 !important;align-items:center !important;justify-content:center !important;z-index:50 !important}'
         + 'body.zx-ff-mobile .live-split .channel-tile-tv .ct-logo{width:36px !important;height:36px !important;line-height:36px !important;margin-right:5px !important}'
         + 'body.zx-ff-mobile .live-split .channel-tile-tv .ct-logo img{width:100%;height:100%;object-fit:contain}'
         + 'body.zx-ff-mobile .live-split .channel-tile-tv .ct-fallback{font-size:17px !important}'
