@@ -976,15 +976,15 @@ function toggleEpgAlarm(btn) {
     if (!when || when <= now) { btn.title = 'Este programa já começou'; return; }
     var key = epgAlarmKey(when, title, channel), a = epgAlarms(), found = -1;
     for (var i = 0; i < a.length; i++) if (a[i].key === key) { found = i; break; }
-    if (found >= 0) { a.splice(found, 1); btn.className = btn.className.replace(/\s*is-on\b/g, ''); btn.textContent = '♧'; }
+    if (found >= 0) { a.splice(found, 1); btn.className = btn.className.replace(/\s*is-on\b/g, ''); btn.textContent = '🔕'; }
     else { a.push({ key: key, when: when, title: title, channel: channel }); btn.className += ' is-on'; btn.textContent = '🔔'; }
     saveEpgAlarms(a);
 }
 function showEpgAlarm(alarm) {
-    if (document.querySelector('.zx-epg-alarm-modal')) return;
+    if (document.querySelector('.zx-epg-alarm-modal')) { global.__zxEpgAlarmQueue = global.__zxEpgAlarmQueue || []; global.__zxEpgAlarmQueue.push(alarm); return; }
     var n = 10, ov = document.createElement('div'); ov.className = 'zx-epg-alarm-modal'; ov.innerHTML = '<div class="zx-epg-alarm-card"><div class="zx-epg-alarm-bell">🔔</div><div class="zx-epg-alarm-title">Vai começar</div><div class="zx-epg-alarm-name">' + esc(alarm.title || 'Programa') + '</div><div class="zx-epg-alarm-channel">' + esc(alarm.channel || '') + '</div><div class="zx-epg-alarm-count" id="zxEpgAlarmCount">10</div><button type="button" class="zx-epg-alarm-close">Fechar</button></div>';
     document.body.appendChild(ov);
-    var close = function () { if (ov.parentNode) ov.parentNode.removeChild(ov); if (ov.__timer) clearInterval(ov.__timer); };
+    var close = function () { if (ov.parentNode) ov.parentNode.removeChild(ov); if (ov.__timer) clearInterval(ov.__timer); var q = global.__zxEpgAlarmQueue || []; if (q.length) setTimeout(function () { showEpgAlarm(q.shift()); }, 120); };
     var b = ov.querySelector('.zx-epg-alarm-close'); if (b) b.addEventListener('click', close);
     ov.__timer = setInterval(function () { n--; var c = ov.querySelector('#zxEpgAlarmCount'); if (c) c.textContent = String(n); if (n <= 0) close(); }, 1000);
 }
@@ -1139,6 +1139,9 @@ function installRouter() {
     // Nas demais telas → volta UMA página. Sem isto o Java dava goBack() cego no
     // histórico do WebView e a home "voltava" pras telas do boot (ex.: Listas).
     global.__zxBackAction = function () {
+        // Modais de perfil: Voltar sempre fecha e retorna à tela principal.
+        var profileOverlay = document.getElementById('zx-prof-gate') || document.getElementById('zx-prof-ed') || document.getElementById('zx-prof-intro');
+        if (profileOverlay) { try { profileOverlay.parentNode.removeChild(profileOverlay); } catch (e) {} try { document.body.classList.remove('tv-modal-open'); } catch (e2) {} try { go('/home', true); } catch (e3) {} return 'ok'; }
         // Modal do PIN adulto aberto? Voltar FECHA o modal (antes navegava a
         // página de trás com o modal ainda na tela).
         if (S.pinClose) { try { S.pinClose(); } catch (e) {} return 'ok'; }
@@ -1328,6 +1331,20 @@ function listsStyles() {
         + '.zx-list-swap{display:-webkit-inline-box;display:inline-flex;-webkit-box-align:center;align-items:center;-webkit-box-pack:center;justify-content:center;min-width:300px;padding:15px 36px;border-radius:10px;background:#10B981;color:#04231A;font-weight:800;font-size:20px;text-decoration:none}'
         + '.zx-list-swap:focus,.zx-list-swap.is-focus{outline:3px solid #fff}'
         + '.zx-list-form{margin:0 auto}'
+        + '.server-screen{background:linear-gradient(145deg,var(--zx-bg,#06130f),#081711)!important;color:var(--zx-text,#f4fff9);}'
+        + '.server-screen .search-topbar{background:transparent;border-bottom:1px solid rgba(255,255,255,.08);}'
+        + '.server-list-body{padding:28px 22px;box-sizing:border-box;overflow:auto;}'
+        + '.server-list-grid{width:min(920px,100%);margin:0 auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;}'
+        + '.server-list-item{appearance:none;-webkit-appearance:none;width:100%;min-height:108px;display:flex;align-items:center;gap:16px;padding:18px 20px;border:1px solid color-mix(in srgb,var(--zx-accent,#10b981) 35%,transparent);border-radius:20px;background:linear-gradient(145deg,var(--zx-panel,#0d241a),rgba(255,255,255,.035));color:var(--zx-text,#f4fff9);text-align:left;font:inherit;cursor:pointer;box-sizing:border-box;transition:transform .15s ease,box-shadow .15s ease,border-color .15s ease;}'
+        + '.server-list-item:hover,.server-list-item:focus,.server-list-item.is-active{border-color:var(--zx-accent,#10b981);background:linear-gradient(145deg,color-mix(in srgb,var(--zx-accent,#10b981) 20%,var(--zx-panel,#0d241a)),rgba(255,255,255,.05));outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--zx-accent,#10b981) 28%,transparent),0 12px 30px rgba(0,0,0,.22);transform:translateY(-1px);}'
+        + '.server-list-icon{width:54px;height:54px;flex:0 0 54px;display:flex;align-items:center;justify-content:center;border-radius:16px;background:color-mix(in srgb,var(--zx-accent,#10b981) 18%,transparent);color:var(--zx-accent,#10b981);}'
+        + '.server-list-icon svg{width:34px;height:34px;}'
+        + '.server-list-text{min-width:0;display:flex;flex-direction:column;gap:6px;flex:1;}'
+        + '.server-list-text b{font-size:18px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
+        + '.server-list-text small{font-size:12px;color:var(--zx-muted,#9db0a7);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
+        + '.server-list-check{width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid color-mix(in srgb,var(--zx-accent,#10b981) 45%,transparent);border-radius:50%;color:var(--zx-accent,#10b981);font-size:20px;font-weight:900;}'
+        + '.server-list-note{width:min(920px,100%);margin:18px auto 0;color:var(--zx-muted,#9db0a7);font-size:13px;text-align:center;}'
+        + '@media (max-width:800px){.server-list-grid{grid-template-columns:1fr;gap:12px;}.server-list-body{padding:18px 14px;}.server-list-item{min-height:86px;padding:14px 16px;border-radius:16px;}.server-list-icon{width:46px;height:46px;flex-basis:46px;border-radius:14px;}.server-list-icon svg{width:29px;height:29px;}.server-list-text b{font-size:15px;}.server-list-text small{font-size:11px;}}'
         + '</style>';
 }
 function switchDirectList(index) {
@@ -2536,7 +2553,7 @@ function wireLiveEpg() {
             var body = $('epg-body'); if (!body) return;
             if (!epg || !epg.length) { body.innerHTML = '<div class="epg-empty">Sem programação para este canal.</div>'; return; }
             var h = '';
-            for (var i = 0; i < epg.length; i++) { var p = epg[i], when = epgTimestamp(p.rawStart || p.start), armed = epgAlarmHas(when, p.title || '', selName); var t = esc(p.start || '') + (p.end ? (' - ' + esc(p.end)) : '') + (i === 0 ? ('  • ' + (currentLang() === 'en' ? 'NOW' : 'AGORA')) : ''); h += '<div class="epg-item' + (i === 0 ? ' is-now' : '') + '"><div class="epg-time">' + t + '</div><div class="epg-title">' + esc(p.title || '—') + '</div><button type="button" class="epg-alarm' + (armed ? ' is-on' : '') + '" data-when="' + attr(when) + '" data-title="' + attr(p.title || '') + '" data-channel="' + attr(selName) + '" onclick="toggleEpgAlarm(this)" aria-label="Alarme">' + (armed ? '🔔' : '♧') + '</button></div>'; }
+            for (var i = 0; i < epg.length; i++) { var p = epg[i], when = epgTimestamp(p.rawStart || p.start), armed = epgAlarmHas(when, p.title || '', selName); var t = esc(p.start || '') + (p.end ? (' - ' + esc(p.end)) : '') + (i === 0 ? ('  • ' + (currentLang() === 'en' ? 'NOW' : 'AGORA')) : ''); h += '<div class="epg-item' + (i === 0 ? ' is-now' : '') + '"><div class="epg-time">' + t + '</div><div class="epg-title">' + esc(p.title || '—') + '</div><button type="button" class="epg-alarm' + (armed ? ' is-on' : '') + '" data-when="' + attr(when) + '" data-title="' + attr(p.title || '') + '" data-channel="' + attr(selName) + '" onclick="toggleEpgAlarm(this)" aria-label="Alarme">' + (armed ? '🔔' : '🔕') + '</button></div>'; }
             body.innerHTML = h;
         }
         xt('get_short_epg', '&stream_id=' + enc(sid) + '&limit=6').then(function (data) { paintEpg(epgItemsFromResponse(data)); }).catch(function () { paintEpg([]); });
