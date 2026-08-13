@@ -2490,7 +2490,8 @@ function liveStyles() {
         // é % da tela, a conta continua dando 4 com a sidebar larga).
         + 'body.zx-ff-tv .cat-sidebar,body.ui-tv .cat-sidebar{width:15vw !important;max-width:15vw !important;padding:.7vw .35vw .7vw .55vw !important;}'
         + 'body.zx-ff-tv .sidebar-content,body.ui-tv .sidebar-content{left:15vw !important;padding:.7vw .9vw 1vw !important;}'
-        + 'body.zx-ff-tv .cat-sidebar .cat-pill,body.ui-tv .cat-sidebar .cat-pill{font-size:.9vw !important;padding:.5vw 2vw .5vw .65vw !important;margin-bottom:.28vw !important;border-radius:.5vw !important;line-height:1.15 !important;}'
+        + 'body.zx-ff-tv .cat-sidebar .cat-pill,body.ui-tv .cat-sidebar .cat-pill{font-size:.9vw !important;padding:.46vw 1.8vw .46vw .65vw !important;margin-bottom:.26vw !important;border-radius:.5vw !important;line-height:1.12 !important;}'
+        + 'body.zx-ff-tv .cat-sidebar .cat-pill>span:first-child,body.ui-tv .cat-sidebar .cat-pill>span:first-child{white-space:normal !important;overflow:visible !important;text-overflow:clip !important;line-height:1.12 !important;}'
         + 'body.zx-ff-tv .cat-sidebar .cat-pill .cat-count{font-size:.9vw;right:.8vw;margin-top:-.45vw;line-height:1vw;}'
         + 'body.zx-ff-tv .cat-sidebar .cat-lock{width:.8vw;height:.8vw;}'
         + 'body.zx-ff-tv .sidebar-content .sc-title{font-size:1.8vw;margin-bottom:1.1vw;}'
@@ -2546,7 +2547,9 @@ function liveStyles() {
 }
 function enforceLiveLayout() {
     try {
+        var screen = document.querySelector('.sidebar-screen');
         var split = document.querySelector('.live-split');
+        var grid = document.querySelector('#content-grid');
         var side = document.querySelector('.cat-sidebar');
         var content = document.querySelector('.sidebar-content');
         var right = document.querySelector('.live-right-column');
@@ -2560,17 +2563,21 @@ function enforceLiveLayout() {
         if (tv && !phone) {
             var ww = Math.max(720, global.innerWidth || document.documentElement.clientWidth || 1280);
             var sidebarW = Math.round(ww * 0.15), rightW = Math.round(ww * 0.38);
-            if (side) { side.style.width = sidebarW + 'px'; side.style.maxWidth = sidebarW + 'px'; side.style.padding = '6px 4px'; }
-            if (content) { content.style.left = sidebarW + 'px'; content.style.padding = '6px 10px 10px'; }
-            split.style.display = 'grid'; split.style.gridTemplateColumns = 'minmax(280px,1fr) ' + rightW + 'px'; split.style.gap = '10px'; split.style.alignItems = 'stretch';
-            if (right) { right.style.display = 'flex'; right.style.flexDirection = 'column'; right.style.height = 'calc(100vh - 110px)'; right.style.minHeight = '520px'; right.style.gap = '10px'; }
+            if (screen) { screen.style.height = '100vh'; screen.style.overflow = 'hidden'; }
+            if (side) { side.style.width = sidebarW + 'px'; side.style.maxWidth = sidebarW + 'px'; side.style.height = '100vh'; side.style.overflowY = 'auto'; side.style.overflowX = 'hidden'; side.style.padding = '6px 4px'; }
+            if (content) { content.style.left = sidebarW + 'px'; content.style.height = '100vh'; content.style.overflow = 'hidden'; content.style.padding = '6px 10px 10px'; }
+            split.style.display = 'grid'; split.style.gridTemplateColumns = 'minmax(280px,1fr) ' + rightW + 'px'; split.style.gap = '10px'; split.style.alignItems = 'stretch'; split.style.height = 'calc(100vh - 112px)'; split.style.minHeight = '0';
+            if (grid) { grid.style.height = '100%'; grid.style.minHeight = '0'; grid.style.overflowY = 'auto'; grid.style.overflowX = 'hidden'; grid.style.paddingBottom = '24px'; }
+            if (right) { right.style.display = 'flex'; right.style.flexDirection = 'column'; right.style.height = 'calc(100vh - 112px)'; right.style.minHeight = '0'; right.style.overflow = 'hidden'; right.style.gap = '10px'; }
             if (slot) { slot.style.height = 'clamp(190px,28vh,300px)'; slot.style.flex = '0 0 auto'; }
             if (epg) { epg.style.display = 'block'; epg.style.flex = '1 1 auto'; epg.style.minHeight = '220px'; epg.style.height = 'auto'; epg.style.maxHeight = 'none'; epg.style.overflowY = 'auto'; epg.style.overflowX = 'hidden'; }
         } else {
-            split.style.display = 'flex'; split.style.flexDirection = 'column'; split.style.gap = '12px';
-            if (side) { side.style.width = ''; side.style.maxWidth = ''; side.style.padding = ''; }
-            if (content) { content.style.left = ''; content.style.padding = ''; }
-            if (right) { right.style.height = 'auto'; right.style.minHeight = ''; }
+            if (screen) { screen.style.height = ''; screen.style.overflow = ''; }
+            split.style.display = 'flex'; split.style.flexDirection = 'column'; split.style.gap = '12px'; split.style.height = ''; split.style.minHeight = '';
+            if (grid) { grid.style.height = ''; grid.style.minHeight = ''; grid.style.overflowY = ''; grid.style.overflowX = ''; }
+            if (side) { side.style.width = ''; side.style.maxWidth = ''; side.style.height = ''; side.style.overflowY = ''; side.style.overflowX = ''; side.style.padding = ''; }
+            if (content) { content.style.left = ''; content.style.height = ''; content.style.overflow = ''; content.style.padding = ''; }
+            if (right) { right.style.height = 'auto'; right.style.minHeight = ''; right.style.overflow = ''; }
             if (slot) { slot.style.height = '180px'; }
             if (epg) { epg.style.display = 'block'; epg.style.height = 'auto'; epg.style.maxHeight = 'none'; epg.style.overflowY = 'auto'; }
         }
