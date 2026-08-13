@@ -727,10 +727,9 @@ function applyWallpaper(url) {
     var st = $('zx-wall');
     if (!url) { if (st) st.parentNode.removeChild(st); return; }
     if (!st) { st = document.createElement('style'); st.id = 'zx-wall'; document.head.appendChild(st); }
-    st.textContent = '.bg-diamonds{background-color:#080808;'
-        + "background-image:url('" + url + "');"
-        + "background-image:linear-gradient(rgba(8,8,8,0.60),rgba(8,8,8,0.82)),url('" + url + "');"
-        + 'background-position:center center;background-repeat:no-repeat;background-size:cover;}';
+    st.textContent = '.bg-diamonds,.sidebar-screen,.zx-home2,.home-screen{background-color:#080808 !important;'
+        + "background-image:linear-gradient(rgba(8,8,8,0.60),rgba(8,8,8,0.82)),url('" + url + "') !important;"
+        + 'background-position:center center;background-repeat:no-repeat;background-size:cover;background-attachment:fixed;}';
 }
 function applyBranding(b) {
     if (!b) return;
@@ -2489,11 +2488,11 @@ function liveStyles() {
         // pills mais LARGAS (pedido 19/07): sidebar larga (29vw) e altura/fonte
         // normais — cresce pro LADO, não pra cima. Capas seguem 4 colunas (alvo
         // é % da tela, a conta continua dando 4 com a sidebar larga).
-        + 'body.zx-ff-tv .cat-sidebar{width:22vw;padding:1.25vw .8vw 1.25vw 1.25vw;}'
-        + 'body.zx-ff-tv .sidebar-content{left:22vw;padding:1.25vw 1.6vw 1.5vw;}'
-        + 'body.zx-ff-tv .cat-sidebar .cat-pill{font-size:1.25vw;padding:.9vw 3.4vw .9vw 1.25vw;margin-bottom:.55vw;border-radius:.75vw;}'
-        + 'body.zx-ff-tv .cat-sidebar .cat-pill .cat-count{font-size:1.05vw;right:1.1vw;margin-top:-.55vw;line-height:1.2vw;}'
-        + 'body.zx-ff-tv .cat-sidebar .cat-lock{width:.9vw;height:.9vw;}'
+        + 'body.zx-ff-tv .cat-sidebar{width:18vw;padding:1vw .55vw 1vw .8vw;}'
+        + 'body.zx-ff-tv .sidebar-content{left:18vw;padding:1vw 1.2vw 1.2vw;}'
+        + 'body.zx-ff-tv .cat-sidebar .cat-pill{font-size:1.05vw;padding:.68vw 2.8vw .68vw .9vw;margin-bottom:.42vw;border-radius:.65vw;}'
+        + 'body.zx-ff-tv .cat-sidebar .cat-pill .cat-count{font-size:.9vw;right:.8vw;margin-top:-.45vw;line-height:1vw;}'
+        + 'body.zx-ff-tv .cat-sidebar .cat-lock{width:.8vw;height:.8vw;}'
         + 'body.zx-ff-tv .sidebar-content .sc-title{font-size:1.8vw;margin-bottom:1.1vw;}'
         + '.cat-sidebar .cat-pill:hover{border-color:' + a + '80;}'
         + '.cat-sidebar .cat-pill .cat-count{color:#8fa39a;}'
@@ -2517,11 +2516,11 @@ function liveStyles() {
         + '.live-right-column{display:flex;flex-direction:column;min-width:0;min-height:0;gap:14px;}'
         + '.live-video-slot{height:clamp(180px,28vh,340px);flex:0 0 auto;display:flex;align-items:center;justify-content:center;border:1px solid ' + a + '28;border-radius:16px;background:linear-gradient(145deg,#08120e,#13251d);overflow:hidden;color:#8fa39a;font-size:14px;text-align:center;}'
         + '.live-video-hint{padding:16px;}'
-        + 'body.zx-ff-tv .live-split{display:grid;grid-template-columns:minmax(300px,44%) minmax(360px,56%);gap:18px;align-items:stretch;}'
-        + 'body.zx-ff-tv .live-right-column{min-height:calc(100vh - 120px);}'
-        + 'body.zx-ff-tv .live-video-slot{height:clamp(190px,27vh,310px);}'
-        + 'body.zx-ff-tv .live-epg{flex:1;min-height:220px;max-height:none;overflow:hidden;}'
-        + 'body.zx-ff-tv .live-epg .epg-body{max-height:calc(100% - 72px);}'
+        + 'body.zx-ff-tv .live-split{display:grid;grid-template-columns:minmax(360px,1fr) minmax(360px,38%);gap:14px;align-items:stretch;}'
+        + 'body.zx-ff-tv .live-right-column{min-height:calc(100vh - 112px);height:calc(100vh - 112px);}'
+        + 'body.zx-ff-tv .live-video-slot{height:clamp(190px,28vh,300px);}'
+        + 'body.zx-ff-tv .live-epg{flex:1;min-height:220px;max-height:none;overflow-y:auto;overflow-x:hidden;}'
+        + 'body.zx-ff-tv .live-epg .epg-body{max-height:none;overflow-y:visible;}'
         + 'body.zx-ff-mobile .live-split{display:flex;flex-direction:column;gap:12px;}'
         + 'body.zx-ff-mobile .live-video-slot{height:180px;}'
         + '.live-epg{background:rgba(255,255,255,.028);border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:18px 20px;box-sizing:border-box;}'
@@ -2632,6 +2631,14 @@ function wireLiveEpg() {
     if (!content || !panel) return;
     function closestCls(el, cls) { while (el && el.nodeType === 1 && el !== document.body) { if ((' ' + (el.className || '') + ' ').indexOf(' ' + cls + ' ') !== -1) return el; el = el.parentNode; } return null; }
     var selSid = null, selName = '', selHref = '#';
+    function syncMiniVideoBounds() {
+        try {
+            if (!nativeAvail() || !global.HdxNative || !global.HdxNative.setMiniBounds) return;
+            var slot = document.getElementById('live-video-slot'); if (!slot) return;
+            var r = slot.getBoundingClientRect(); if (!r.width || !r.height) return;
+            global.HdxNative.setMiniBounds(JSON.stringify({ left: r.left, top: r.top, width: r.width, height: r.height, scale: global.devicePixelRatio || 1 }));
+        } catch (e) {}
+    }
     function goPlay(href) {
         if (!href || href === '#') return;
         // PC + SAMSUNG: ao abrir um canal (vai pra página do player <video>/AVPlay),
@@ -2690,6 +2697,7 @@ function wireLiveEpg() {
             if (nsid) {
                 try {
                     if (global.HdxNative && global.HdxNative.miniPlay) global.HdxNative.miniPlay(JSON.stringify({ kind: 'live', url: streamUrl('live', nsid), title: nnm }));
+                    setTimeout(syncMiniVideoBounds, 60); setTimeout(syncMiniVideoBounds, 260);
                 } catch (e) {}
             }
             return;

@@ -215,6 +215,22 @@ public final class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void setMiniBounds(String payload) {
+            runOnUiThread(() -> {
+                try {
+                    JSONObject json = new JSONObject(payload == null ? "{}" : payload);
+                    resizeMiniPlayerBounds(
+                            json.optDouble("left", 0),
+                            json.optDouble("top", 0),
+                            json.optDouble("width", 0),
+                            json.optDouble("height", 0),
+                            json.optDouble("scale", 1.0)
+                    );
+                } catch (Throwable ignored) { }
+            });
+        }
+
+        @JavascriptInterface
         public void fetchText(String url, String requestId) {
             final String target = url == null ? "" : url;
             final String id = requestId == null ? "" : requestId;
@@ -318,11 +334,28 @@ public final class MainActivity extends Activity {
         if (miniContainer == null || root == null) return;
         boolean large = tvMode;
         int screenWidth = getResources().getDisplayMetrics().widthPixels;
-        int width = large ? Math.max(dp(360), Math.round(screenWidth * 0.40f)) : dp(300);
+        int width = large ? Math.max(dp(360), Math.round(screenWidth * 0.32f)) : dp(300);
         int height = large ? Math.round(width * 0.5625f) : dp(185);
         FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(width, height, android.view.Gravity.TOP | android.view.Gravity.RIGHT);
-        p.rightMargin = large ? dp(24) : dp(12);
-        p.topMargin = large ? dp(74) : dp(78);
+        p.rightMargin = large ? dp(16) : dp(12);
+        p.topMargin = large ? dp(76) : dp(78);
+        miniContainer.setLayoutParams(p);
+    }
+
+    private void resizeMiniPlayerBounds(double leftCss, double topCss, double widthCss, double heightCss, double scale) {
+        if (miniContainer == null || root == null || widthCss <= 0 || heightCss <= 0) return;
+        if (scale <= 0.1 || scale > 8.0) scale = 1.0;
+        int left = Math.max(0, (int) Math.round(leftCss * scale));
+        int top = Math.max(0, (int) Math.round(topCss * scale));
+        int width = Math.max(dp(180), (int) Math.round(widthCss * scale));
+        int height = Math.max(dp(100), (int) Math.round(heightCss * scale));
+        int maxW = Math.max(dp(180), root.getWidth() - left - dp(4));
+        int maxH = Math.max(dp(100), root.getHeight() - top - dp(4));
+        width = Math.min(width, maxW);
+        height = Math.min(height, maxH);
+        FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(width, height, android.view.Gravity.TOP | android.view.Gravity.LEFT);
+        p.leftMargin = left;
+        p.topMargin = top;
         miniContainer.setLayoutParams(p);
     }
 
