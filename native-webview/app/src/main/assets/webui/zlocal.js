@@ -1127,7 +1127,8 @@ function render(path) {
     if (p === '/home' || p === '/' || p === '') return renderHome();
     if (p === '/reload') return doReload();
     if (p === '/logout') return doLogout();
-    if (p === '/settings') return renderSettings();
+        if (p === '/settings') return renderSettings();
+    if (p === '/radio') return renderRadioScreen();
     if (p === '/favorites') return renderFavHome();   // TODOS os favoritos (filmes+séries+canais)
     if (p === '/movies' || p === '/series' || p === '/live') return renderSection(p.slice(1), {});
     m = p.match(/^\/(movies|series)\/search$/); if (m) return renderSearch(m[1]);
@@ -1713,6 +1714,72 @@ function startVoiceCommand() {
     } catch (e) {}
     done();
 }
+var RADIO_CATEGORIES = [
+    { id: 'gospel', label: 'Gospel', tags: ['gospel','christian','worship','religious','praise','contemporary christian'] },
+    { id: 'rock', label: 'Rock', tags: ['rock','classic rock','alternative rock','hard rock'] },
+    { id: 'pop', label: 'Pop', tags: ['pop','dance','top 40','hits'] },
+    { id: 'sertanejo', label: 'Sertanejo', tags: ['sertanejo','brazilian','country'] },
+    { id: 'classical', label: 'Clássica', tags: ['classical','classic music','orchestral'] },
+    { id: 'blues', label: 'Blues', tags: ['blues'] },
+    { id: 'jazz', label: 'Jazz', tags: ['jazz','smooth jazz','bebop'] },
+    { id: 'metal', label: 'Metal', tags: ['metal','death metal','black metal','thrash metal'] },
+    { id: 'heavy-metal', label: 'Heavy Metal', tags: ['heavy metal','metalcore','hardcore'] }
+];
+function radioCategory(id) { for (var i = 0; i < RADIO_CATEGORIES.length; i++) if (RADIO_CATEGORIES[i].id === id) return RADIO_CATEGORIES[i]; return RADIO_CATEGORIES[0]; }
+function radioHttp(url) {
+    return new Promise(function (resolve, reject) {
+        try {
+            var x = new XMLHttpRequest(); x.open('GET', url, true); x.timeout = 18000; x.setRequestHeader('Accept', 'application/json');
+            x.onload = function () { if (x.status >= 200 && x.status < 300) { try { resolve(JSON.parse(x.responseText || '[]')); } catch (e) { reject(e); } } else reject(new Error('HTTP ' + x.status)); };
+            x.onerror = function () { reject(new Error('network')); }; x.ontimeout = function () { reject(new Error('timeout')); }; x.send();
+        } catch (e) { reject(e); }
+    });
+}
+function radioApiUrl(tag, host) { return 'https://' + (host || 'de1.api.radio-browser.info') + '/json/stations/search?tag=' + encodeURIComponent(tag) + '&limit=250&hidebroken=true&order=clickcount&reverse=true'; }
+function radioSafeUrl(v) { var s = String(v || ''); return /^https?:\/\//i.test(s) ? s : ''; }
+function radioMerge(list) {
+    var seen = {}, out = [];
+    for (var i = 0; i < (list || []).length; i++) {
+        var s = list[i] || {}, stream = radioSafeUrl(s.url_resolved || s.url); if (!stream || s.lastcheckok === 0) continue;
+        var key = String(s.stationuuid || '') || (stream + '|' + String(s.name || '').toLowerCase()); if (seen[key]) continue; seen[key] = 1;
+        out.push({ id: key, name: s.name || 'Rádio', stream: stream, homepage: radioSafeUrl(s.homepage), logo: radioSafeUrl(s.favicon), country: s.country || '', tags: s.tags || '', codec: s.codec || '', bitrate: s.bitrate || 0, clicks: s.clickcount || 0 });
+    }
+    out.sort(function (a, b) { return (b.clicks || 0) - (a.clicks || 0); }); return out.slice(0, 600);
+}
+function radioLoadCategory(cat) {
+    var tags = (cat && cat.tags) || [], hosts = ['de1.api.radio-browser.info','all.api.radio-browser.info'], req = [];
+    for (var i = 0; i < tags.length; i++) req.push(radioHttp(radioApiUrl(tags[i], hosts[0])).catch(function () { return []; }));
+    return Promise.all(req).then(function (chunks) { var all = []; for (var j = 0; j < chunks.length; j++) all = all.concat(chunks[j] || []); var merged = radioMerge(all); if (merged.length) return merged; return radioHttp(radioApiUrl((tags[0] || 'gospel'), hosts[1])).then(function (x) { return radioMerge(x); }).catch(function () { return []; }); });
+}
+function radioStyles() {
+    var a = S.accent || '#10b981';
+    return '<style>'
+        + '.radio-screen{position:fixed;inset:0;display:flex;flex-direction:column;overflow:hidden;background:radial-gradient(130% 100% at 50% 0%,#0e2019,#07120d 48%,#040907);color:#f4fff9;}'
+        + '.radio-top{display:flex;align-items:center;gap:12px;padding:14px 20px 8px;flex:none;}.radio-top .gt-back{color:#fff;text-decoration:none;border:1px solid ' + a + '66;border-radius:10px;padding:8px 14px;background:' + a + '16;}.radio-title{font-size:24px;font-weight:900;}.radio-search{margin-left:auto;width:min(340px,36vw);padding:10px 14px;border-radius:10px;border:1px solid ' + a + '55;background:#06130f;color:#fff;font-size:15px;outline:none;}.radio-search:focus{border-color:' + a + ';box-shadow:0 0 0 3px ' + a + '33;}'
+        + '.radio-cats{display:flex;gap:8px;overflow-x:auto;padding:6px 20px 12px;scrollbar-width:thin;flex:none;}.radio-cat{flex:none;border:1px solid ' + a + '55;border-radius:999px;background:' + a + '12;color:#cfe8df;padding:9px 15px;font-weight:800;cursor:pointer;}.radio-cat.is-active,.radio-cat:focus{background:' + a + '36;border-color:' + a + ';color:#fff;outline:none;}'
+        + '.radio-status{padding:0 20px 8px;color:#9db0a7;font-size:13px;flex:none;}.radio-grid{flex:1;min-height:0;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));align-content:start;gap:14px;padding:10px 20px 28px;}.radio-card{position:relative;display:flex;align-items:center;gap:12px;min-height:104px;padding:12px 42px 12px 12px;border:1px solid ' + a + '38;border-radius:15px;background:linear-gradient(145deg,' + a + '18,rgba(255,255,255,.04));color:#f4fff9;cursor:pointer;text-align:left;}.radio-card:hover,.radio-card:focus{border-color:' + a + ';box-shadow:0 0 0 3px ' + a + '33;outline:none;}.radio-logo{width:70px;height:70px;flex:0 0 70px;border-radius:10px;background:' + a + '1c center/contain no-repeat;display:flex;align-items:center;justify-content:center;font-size:28px;overflow:hidden;}.radio-logo.is-loaded span{display:none;}.radio-info{min-width:0;}.radio-name{display:block;font-size:16px;font-weight:900;line-height:1.15;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}.radio-meta{display:block;margin-top:6px;color:#9db0a7;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.radio-play{position:absolute;right:11px;top:50%;transform:translateY(-50%);width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:' + a + '36;color:#fff;font-size:13px;}'
+        + 'body.zx-ff-mobile .radio-grid{grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;padding:8px 12px 24px;}body.zx-ff-mobile .radio-top{padding:9px 12px 5px;}body.zx-ff-mobile .radio-title{font-size:19px;}body.zx-ff-mobile .radio-search{width:220px;padding:8px 10px;}body.zx-ff-mobile .radio-card{min-height:82px;padding:8px 38px 8px 8px;border-radius:11px;gap:8px;}body.zx-ff-mobile .radio-logo{width:52px;height:52px;flex-basis:52px;border-radius:8px;font-size:20px;}body.zx-ff-mobile .radio-name{font-size:13px;}body.zx-ff-mobile .radio-meta{font-size:9px;margin-top:3px;}'
+        + 'body.zx-ff-tv .radio-grid{grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;}body.zx-ff-tv .radio-card{min-height:88px;}body.zx-ff-tv .radio-logo{width:54px;height:54px;flex-basis:54px;}'
+        + '</style>';
+}
+function radioPaintLogo(el, src) { if (!el || !src || el.getAttribute('data-loaded')) return; el.setAttribute('data-loaded','1'); var im = new Image(); im.onload = function () { el.style.backgroundImage = "url('" + src.replace(/'/g, "\\'") + "')"; el.className += ' is-loaded'; }; im.onerror = function () { el.removeAttribute('data-loaded'); }; im.src = src; }
+function radioRenderStations(stations) {
+    var grid = document.getElementById('radio-grid'), query = String((document.getElementById('radio-q') || {}).value || '').toLowerCase().trim(); if (!grid) return;
+    var filtered = []; for (var i = 0; i < (stations || []).length; i++) { var s = stations[i], hay = (s.name + ' ' + s.country + ' ' + s.tags).toLowerCase(); if (!query || hay.indexOf(query) >= 0) filtered.push(s); }
+    grid.innerHTML = filtered.length ? filtered.map(function (s, idx) { return '<button type="button" class="radio-card" data-radio-index="' + idx + '"><div class="radio-logo"' + (s.logo ? ' data-logo="' + attr(s.logo) + '"' : '') + '><span>▣</span></div><span class="radio-info"><strong class="radio-name">' + esc(s.name) + '</strong><small class="radio-meta">' + esc((s.country || 'Internacional') + (s.codec ? ' · ' + s.codec : '')) + '</small></span><span class="radio-play">▶</span></button>'; }).join('') : '<div class="zx-empty">Nenhuma rádio encontrada nesta categoria.</div>';
+    var cards = grid.querySelectorAll('.radio-card'); for (var j = 0; j < cards.length; j++) { (function (card, station) { card.addEventListener('click', function () { if (station.stream) { try { if (global.HdxNative && global.HdxNative.miniPlay) global.HdxNative.miniPlay(JSON.stringify({ kind: 'radio', url: station.stream, title: station.name, zxKind: 'radio', zxId: station.id, name: station.name, poster: station.logo })); } catch (e) {} } else if (station.homepage) { try { global.open(station.homepage); } catch (e2) {} } }); radioPaintLogo(card.querySelector('.radio-logo'), station.logo); })(cards[j], filtered[j]); }
+    var st = document.getElementById('radio-status'); if (st) st.textContent = filtered.length + ' rádios disponíveis';
+}
+function renderRadioScreen() {
+    var cat = radioCategory(S.radioCategory || 'gospel');
+    var cats = ''; for (var i = 0; i < RADIO_CATEGORIES.length; i++) cats += '<button type="button" class="radio-cat' + (RADIO_CATEGORIES[i].id === cat.id ? ' is-active' : '') + '" data-radio-cat="' + RADIO_CATEGORIES[i].id + '">' + esc(RADIO_CATEGORIES[i].label) + '</button>';
+    setHtml('<div class="radio-screen"><div class="radio-top"><a href="/home" class="gt-back">← Voltar</a><strong class="radio-title">Rádios online</strong><input id="radio-q" class="radio-search" type="search" placeholder="Buscar rádio…" autocomplete="off"></div><div class="radio-cats">' + cats + '</div><div id="radio-status" class="radio-status">Carregando rádios…</div><div id="radio-grid" class="radio-grid"><div class="zx-empty">Consultando catálogo público…</div></div></div>' + flatStyles() + radioStyles());
+    var grid = document.getElementById('radio-grid'), q = document.getElementById('radio-q'), buttons = document.querySelectorAll('[data-radio-cat]');
+    if (q) q.addEventListener('input', function () { radioRenderStations(S.radioStations || []); });
+    for (var j = 0; j < buttons.length; j++) (function (b) { b.addEventListener('click', function () { S.radioCategory = b.getAttribute('data-radio-cat'); renderRadioScreen(); }); })(buttons[j]);
+    radioLoadCategory(cat).then(function (stations) { S.radioStations = stations; radioRenderStations(stations); }).catch(function () { if (grid) grid.innerHTML = '<div class="zx-empty">Não foi possível carregar as rádios agora. Tente novamente.</div>'; var st = document.getElementById('radio-status'); if (st) st.textContent = 'Catálogo indisponível no momento'; });
+    afterRender();
+}
 function renderHome() {
     injectProfCss();   // avatar do topo usa .zx-pf-av — sem isto a 1ª pintura sai QUADRADA/torta (o CSS só entrava quando o gate abria)
     // Passou pela TELA INICIAL → zera a memória das seções (categoria + rolagem +
@@ -1770,6 +1837,7 @@ function renderHome() {
         + '<div class="zh-icons">'
         + '<a href="/lists" class="zh-tbtn">' + svg(svSrv) + '<span>Servidor</span></a>'
         + '<button type="button" class="zh-tbtn ic zh-voice" id="zxVoiceBtn" aria-label="Comando de voz"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line><line x1="8" y1="22" x2="16" y2="22"></line></svg></button>'
+        + '<button type="button" class="zh-tbtn ic zh-radio" id="zxRadioBtn" aria-label="Rádios online"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M4.9 4.9a10 10 0 0 0 0 14.2M19.1 4.9a10 10 0 0 1 0 14.2M2 2l20 20"></path></svg></button>'
         + '<a href="/reload" class="zh-tbtn ic">' + svg(svRel) + '</a>'
         + '<a href="/settings" class="zh-tbtn ic">' + svg(svGer) + '</a>'
         + '<a href="#" class="zh-tbtn ic zh-profbtn" id="zxProfBtn" aria-label="' + te('Perfis') + '">' + profAvatarHtml(profActive().a, 34) + '</a>'
@@ -1859,6 +1927,7 @@ function renderHome() {
         var pb = document.getElementById('zxProfBtn');
         if (pb) pb.addEventListener('click', function (e) { if (e && e.preventDefault) e.preventDefault(); showProfGate('menu'); });
         var vb = document.getElementById('zxVoiceBtn'); if (vb) vb.addEventListener('click', function (e) { if (e && e.preventDefault) e.preventDefault(); startVoiceCommand(); });
+        var rb = document.getElementById('zxRadioBtn'); if (rb) rb.addEventListener('click', function (e) { if (e && e.preventDefault) e.preventDefault(); go('/radio'); });
     } catch (e) {}
     firstRunFlow();   // 1ª abertura no Android → idioma + aviso anti-pirataria + escolha Celular x TV
     maybeProfBootGate();   // 2+ perfis → pergunta quem está assistindo (1x por abertura)
