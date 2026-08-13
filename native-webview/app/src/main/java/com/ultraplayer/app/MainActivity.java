@@ -432,8 +432,12 @@ public final class MainActivity extends Activity {
             }
             miniExpanded = true;
             miniContainer.setBackgroundColor(android.graphics.Color.BLACK);
+            miniContainer.setElevation(1000f);
             miniContainer.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             miniContainer.setVisibility(View.VISIBLE);
+            miniContainer.bringToFront();
+            miniContainer.requestLayout();
+            if (root != null) root.requestLayout();
             if (miniTitle != null) miniTitle.setVisibility(View.GONE);
             if (miniCloseButton != null) {
                 miniCloseButton.setContentDescription("Voltar para o mini player");
@@ -461,7 +465,10 @@ public final class MainActivity extends Activity {
             resizeMiniPlayer(isTv);
         }
         miniContainer.setBackgroundColor(android.graphics.Color.rgb(4, 12, 9));
+        miniContainer.setElevation(24f);
         miniContainer.setVisibility(View.VISIBLE);
+        miniContainer.bringToFront();
+        miniContainer.requestLayout();
         if (miniTitle != null) miniTitle.setVisibility(View.VISIBLE);
         if (miniCloseButton != null) {
             miniCloseButton.setContentDescription("Fechar mini player");
