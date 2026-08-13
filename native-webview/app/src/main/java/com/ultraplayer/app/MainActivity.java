@@ -23,6 +23,12 @@ import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.ImageButton;
+import android.graphics.drawable.GradientDrawable;
+
+import androidx.media3.common.MediaItem;
+import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.ui.PlayerView;
 
 import org.json.JSONObject;
 
@@ -31,6 +37,10 @@ public final class MainActivity extends Activity {
     private FrameLayout root;
     private View splash;
     private boolean isTv;
+    private FrameLayout miniContainer;
+    private PlayerView miniPlayerView;
+    private ExoPlayer miniPlayer;
+    private TextView miniTitle;
     private static final int VOICE_REQUEST = 7412;
     private static final int VOICE_PERMISSION_REQUEST = 7413;
 
@@ -51,6 +61,7 @@ public final class MainActivity extends Activity {
         webView.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         configureWebView(webView);
         root.addView(webView);
+        setupMiniPlayer();
 
         splash = createSplash();
         root.addView(splash, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -189,6 +200,16 @@ public final class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void miniPlay(String payload) {
+            runOnUiThread(() -> showMiniPlayer(payload));
+        }
+
+        @JavascriptInterface
+        public void miniStop() {
+            runOnUiThread(() -> hideMiniPlayer());
+        }
+
+        @JavascriptInterface
         public void fetchText(String url, String requestId) {
             final String target = url == null ? "" : url;
             final String id = requestId == null ? "" : requestId;
@@ -243,6 +264,88 @@ public final class MainActivity extends Activity {
                     }
                 } catch (Throwable ignored) { }
             });
+        }
+    }
+
+    private void setupMiniPlayer() {
+        miniContainer = new FrameLayout(this);
+        miniContainer.setVisibility(View.GONE);
+        miniContainer.setBackgroundColor(android.graphics.Color.rgb(4, 12, 9));
+        miniContainer.setElevation(24f);
+
+        miniPlayerView = new PlayerView(this);
+        miniPlayerView.setUseController(true);
+        miniPlayerView.setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING);
+        miniPlayerView.setBackgroundColor(android.graphics.Color.BLACK);
+        miniContainer.addView(miniPlayerView, new FrameLayout.LayoutParams(-1, -1));
+
+        miniTitle = new TextView(this);
+        miniTitle.setTextColor(android.graphics.Color.WHITE);
+        miniTitle.setTextSize(12f);
+        miniTitle.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
+        miniTitle.setSingleLine(true);
+        miniTitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        miniTitle.setPadding(12, 6, 44, 6);
+        miniTitle.setBackgroundColor(0x99000000);
+        FrameLayout.LayoutParams titleParams = new FrameLayout.LayoutParams(-1, -2, android.view.Gravity.TOP);
+        miniContainer.addView(miniTitle, titleParams);
+
+        ImageButton close = new ImageButton(this);
+        close.setImageDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
+        close.setContentDescription("Fechar mini player");
+        close.setOnClickListener(v -> hideMiniPlayer());
+        close.setBackground(makeRoundBackground(0xAA000000, 0x99FFFFFF, 1, 18));
+        close.setImageResource(android.R.drawable.ic_menu_close_clear_cancel);
+        close.setColorFilter(android.graphics.Color.WHITE);
+        FrameLayout.LayoutParams closeParams = new FrameLayout.LayoutParams(42, 42, android.view.Gravity.TOP | android.view.Gravity.RIGHT);
+        closeParams.topMargin = 4; closeParams.rightMargin = 4;
+        miniContainer.addView(close, closeParams);
+
+        int width = isTv ? 430 : 300;
+        int height = isTv ? 245 : 185;
+        FrameLayout.LayoutParams miniParams = new FrameLayout.LayoutParams(width, height, android.view.Gravity.BOTTOM | android.view.Gravity.RIGHT);
+        miniParams.rightMargin = isTv ? 24 : 12;
+        miniParams.bottomMargin = isTv ? 24 : 76;
+        root.addView(miniContainer, miniParams);
+    }
+
+    private android.graphics.drawable.Drawable makeRoundBackground(int fill, int stroke, int strokeWidth, int radius) {
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(fill);
+        bg.setCornerRadius(radius);
+        bg.setStroke(strokeWidth, stroke);
+        return bg;
+    }
+
+    private void showMiniPlayer(String payload) {
+        if (miniContainer == null || miniPlayerView == null) return;
+        try {
+            JSONObject json = new JSONObject(payload == null ? "{}" : payload);
+            String url = json.optString("url", "");
+            String title = json.optString("title", "Canal selecionado");
+            if (url.isEmpty()) return;
+            if (miniPlayer == null) {
+                miniPlayer = new ExoPlayer.Builder(this).build();
+                miniPlayerView.setPlayer(miniPlayer);
+            }
+            if (!url.equals(miniContainer.getTag())) {
+                miniPlayer.setMediaItem(MediaItem.fromUri(url));
+                miniPlayer.prepare();
+                miniPlayer.play();
+                miniContainer.setTag(url);
+            } else if (!miniPlayer.isPlaying()) {
+                miniPlayer.play();
+            }
+            if (miniTitle != null) miniTitle.setText("Mini player • " + title + " • toque novamente para abrir");
+            miniContainer.setVisibility(View.VISIBLE);
+        } catch (Throwable ignored) { }
+    }
+
+    private void hideMiniPlayer() {
+        if (miniPlayer != null) miniPlayer.pause();
+        if (miniContainer != null) {
+            miniContainer.setVisibility(View.GONE);
+            miniContainer.setTag(null);
         }
     }
 
@@ -320,6 +423,7 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (miniPlayer != null) { miniPlayer.release(); miniPlayer = null; }
         if (webView != null) {
             webView.stopLoading();
             webView.loadUrl("about:blank");

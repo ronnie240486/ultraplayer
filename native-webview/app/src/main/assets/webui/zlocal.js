@@ -1010,7 +1010,7 @@ function installShim() {
 /* ============================================================
  * ROTEADOR (History API → tv.js history.back() funciona)
  * ============================================================ */
-function setHtml(html) { root().innerHTML = brandLogoHtmlStyles() + html; translateTree(root()); applyAppTheme(appThemeId(), false); }
+function setHtml(html) { try { if (global.HdxNative && global.HdxNative.miniStop) global.HdxNative.miniStop(); } catch (e) {} root().innerHTML = brandLogoHtmlStyles() + html; translateTree(root()); applyAppTheme(appThemeId(), false); }
 function afterRender() { try { if (global.__hdxTv && global.__hdxTv.afterSwap) global.__hdxTv.afterSwap(); } catch (e) {} }
 function runScript(src) { var s = document.createElement('script'); s.src = src; document.body.appendChild(s); }
 
@@ -2620,9 +2620,21 @@ function wireLiveEpg() {
         // (CASA DO PATRAO), perdendo a categoria/canal atual — na TV lenta dava pra
         // ver o "pulo". Agora o WebView fica parado no canal/categoria de onde saiu.
         if (nativeAvail()) {
-            var nsid = row.getAttribute('data-sid'), nnm = row.getAttribute('data-name') || '', nlogo = row.getAttribute('data-logo') || '';
-            if (nsid) { trackRecent(nsid, nnm, nlogo, 0); playViaNative({ kind: 'live', url: streamUrl('live', nsid), title: nnm, resume: 0, zxKind: 'live', zxId: nsid, name: nnm, zap: liveZapList(nsid) }); return; }
-            goPlay(href); return;
+            var nsid = row.getAttribute('data-sid'), nnm = row.getAttribute('data-name') || '', nlogo = row.getAttribute('data-logo') || '', nowNative = (new Date()).getTime();
+            if (nsid && row === lastEl) {
+                try { if (global.HdxNative && global.HdxNative.miniStop) global.HdxNative.miniStop(); } catch (e) {}
+                trackRecent(nsid, nnm, nlogo, 0);
+                playViaNative({ kind: 'live', url: streamUrl('live', nsid), title: nnm, resume: 0, zxKind: 'live', zxId: nsid, name: nnm, zap: liveZapList(nsid) });
+                return;
+            }
+            lastEl = row; lastT = nowNative;
+            renderEpg(row);
+            if (nsid) {
+                try {
+                    if (global.HdxNative && global.HdxNative.miniPlay) global.HdxNative.miniPlay(JSON.stringify({ kind: 'live', url: streamUrl('live', nsid), title: nnm }));
+                } catch (e) {}
+            }
+            return;
         }
         // SAMSUNG: 1 clique (OK do controle) JÁ abre o canal — sem 2 cliques, sem botão
         // "Assistir". O EPG já apareceu ao FOCAR (focusin). goPlay lembra a categoria
