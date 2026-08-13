@@ -643,7 +643,13 @@ var APP_THEMES = [
     { id: 'preto', name: 'Preto', accent: '#e5e7eb', bg: '#050505', panel: '#151515', text: '#ffffff', muted: '#a3a3a3' },
     { id: 'amarelo', name: 'Amarelo', accent: '#f59e0b', bg: '#171005', panel: '#2a1b07', text: '#fff8e7', muted: '#d4b77a' },
     { id: 'musgo', name: 'Verde-musgo', accent: '#8fa94b', bg: '#10170b', panel: '#1c2911', text: '#f4f8e9', muted: '#aebc8a' },
-    { id: 'azul', name: 'Azul oceano', accent: '#22d3ee', bg: '#06131d', panel: '#0d2230', text: '#effcff', muted: '#93b9c4' }
+    { id: 'azul', name: 'Azul oceano', accent: '#22d3ee', bg: '#06131d', panel: '#0d2230', text: '#effcff', muted: '#93b9c4' },
+    { id: 'lilas', name: 'Lilás', accent: '#a78bfa', bg: '#120d1e', panel: '#241941', text: '#fbf8ff', muted: '#b9abd4' },
+    { id: 'vermelho', name: 'Vermelho', accent: '#f43f5e', bg: '#1b080d', panel: '#35111a', text: '#fff5f6', muted: '#d4a2ac' },
+    { id: 'rosa', name: 'Rosa', accent: '#ec4899', bg: '#1b0b16', panel: '#35132b', text: '#fff6fc', muted: '#d4a9c2' },
+    { id: 'cinza', name: 'Cinza grafite', accent: '#94a3b8', bg: '#0f1217', panel: '#202631', text: '#f8fafc', muted: '#a9b4c4' },
+    { id: 'turquesa', name: 'Turquesa', accent: '#14b8a6', bg: '#061817', panel: '#0d2b29', text: '#effffc', muted: '#91c9c1' },
+    { id: 'dourado', name: 'Dourado', accent: '#fbbf24', bg: '#171105', panel: '#2b2008', text: '#fffbed', muted: '#d8bd79' }
 ];
 function appThemeId() { try { var v = localStorage.getItem('zx_app_theme'); if (v) return v; } catch (e) {} return 'verde'; }
 function appTheme() { var id = appThemeId(), i; for (i = 0; i < APP_THEMES.length; i++) if (APP_THEMES[i].id === id) return APP_THEMES[i]; return APP_THEMES[0]; }
@@ -811,7 +817,9 @@ function xtreamCatalog(kind) {
     var newKey = kind === 'series' ? 'last_modified' : 'added';
     return Promise.all([xt(catsAction), xt(listAction)]).then(function (res) {
         if (!tizenAvail() && (res[0] === null || res[1] === null)) throw { zxOffline: 1 };
-        var cats = arr1(res[0]), all = kidsFilterList(arr1(res[1])), byCat = {};
+        var cats = arr1(res[0]), rawAll = arr1(res[1]), adultCats = {}, all = rawAll, byCat = {};
+        for (var ac = 0; ac < cats.length; ac++) if (isAdultName(cats[ac].category_name)) adultCats[String(cats[ac].category_id || '')] = 1;
+        if (profKidsActive()) all = rawAll.filter(function (item) { return !adultCats[String(item.category_id || '')] && kidsAllows(item); });
         for (var i = 0; i < all.length; i++) {
             var cid = String(all[i].category_id || '');
             if (!byCat[cid]) byCat[cid] = [];
@@ -3864,8 +3872,16 @@ var PROF_AVS = [
     'assets/profiles/avatar_11_android.jpg',
     'assets/profiles/avatar_12_music_star.jpg'
 ];
-function profAvatarHtml(i, size) {
-    var src = PROF_AVS[(i >= 0 && i < PROF_AVS.length) ? i : 0];
+var PROF_KIDS = [
+    'assets/profiles/kids_avatar_01_space_kid.jpg',
+    'assets/profiles/kids_avatar_02_fairy_kid.jpg',
+    'assets/profiles/kids_avatar_03_dragon_friend.jpg',
+    'assets/profiles/kids_avatar_04_robot_kid.jpg',
+    'assets/profiles/kids_avatar_05_pirate_kid.jpg'
+];
+function profAvatarHtml(i, size, kids) {
+    var set = kids ? PROF_KIDS : PROF_AVS;
+    var src = set[(i >= 0 && i < set.length) ? i : 0];
     return '<span class="zx-pf-av" style="width:' + size + 'px;height:' + size + 'px;background:#101a28">'
         + '<img src="' + src + '" alt="" draggable="false" style="width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit">'
         + '</span>';
@@ -3948,7 +3964,7 @@ function showProfGate(reason) {
             + '<div class="zx-pf-cards">';
         for (i = 0; i < a.length; i++) {
             h += '<button type="button" class="zx-pf-card" data-i="' + i + '">'
-                + '<span class="zx-pf-avwrap">' + profAvatarHtml(a[i].a, 84)
+                + '<span class="zx-pf-avwrap">' + profAvatarHtml(a[i].a, 84, !!a[i].kids)
                 + (i === act ? '<span class="zx-pf-badge"><svg viewBox="0 0 24 24"><path d="M4.5 12.5l5 5L19.5 7.5" fill="none" stroke="#04231a" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>' : '')
                 + '</span>'
                 + '<span class="zx-pf-name' + (i === act ? ' zx-pf-act' : '') + '">' + esc(profName(a[i])) + '</span></button>';
@@ -3996,8 +4012,9 @@ function showProfEditor(idx, onDone) {
     injectFfAskCss(); injectProfCss();
     var a = profAll();
     var nome = (idx >= 0) ? a[idx].n : '';
-    var av = (idx >= 0) ? a[idx].a : (a.length % PROF_AVS.length);
     var kids = (idx >= 0) ? !!a[idx].kids : false;
+    var av = (idx >= 0) ? a[idx].a : (a.length % PROF_AVS.length);
+    if (kids && av >= PROF_KIDS.length) av = 0;
     var armDel = false;
     var ov = document.createElement('div'); ov.id = 'zx-prof-ed'; ov.className = 'zx-ff-ask tv-modal';
     document.body.appendChild(ov);
@@ -4007,14 +4024,15 @@ function showProfEditor(idx, onDone) {
     }
     function paint() {
         var canDel = (idx >= 0 && profAll().length > 1);
+        var avatarSet = kids ? PROF_KIDS : PROF_AVS;
         var h = '<div class="zx-ffa-card"><div class="zx-ffa-title">' + te(idx < 0 ? 'Novo perfil' : 'Editar perfil') + '</div>'
             + '<div class="zx-pf-kids"><div><div class="zx-pf-kids-title">' + te('Perfil infantil') + '</div><div class="zx-pf-kids-sub">' + te('Sem canais e filmes adultos — nem com PIN, o conteúdo simplesmente não aparece') + '</div></div><button type="button" class="zx-pf-switch' + (kids ? ' on' : '') + '" id="zxPfKidsSwitch" aria-label="' + te('Perfil infantil') + '"></button></div>'
-            + '<div class="zx-pf-prev" id="zxPfPrev" style="text-align:center;margin:4px 0 10px">' + profAvatarHtml(av, 74) + '</div>'
+            + '<div class="zx-pf-prev" id="zxPfPrev" style="text-align:center;margin:4px 0 10px">' + profAvatarHtml(av, 96, kids) + '</div>'
             + '<input type="text" class="zx-pf-input" id="zxPfName" maxlength="16" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="' + te('Nome do perfil') + '">'
             + '<div class="zx-ffa-sub" style="margin:8px 0 0">' + te('Escolha um avatar') + '</div>'
             + '<div class="zx-pf-grid">';
-        for (var i = 0; i < PROF_AVS.length; i++) {
-            h += '<button type="button" class="zx-pf-gbtn' + (i === av ? ' zx-pf-sel' : '') + '" data-av="' + i + '">' + profAvatarHtml(i, 52) + '</button>';
+        for (var i = 0; i < avatarSet.length; i++) {
+            h += '<button type="button" class="zx-pf-gbtn' + (i === av ? ' zx-pf-sel' : '') + '" data-av="' + i + '">' + profAvatarHtml(i, 72, kids) + '</button>';
         }
         h += '</div><div class="zx-pf-actions">'
             + '<button type="button" class="zx-pf-save" id="zxPfSave">' + te('Salvar') + '</button>'
@@ -4022,7 +4040,7 @@ function showProfEditor(idx, onDone) {
             + '</div></div>';
         ov.innerHTML = h;
         var kidsBtn = $('zxPfKidsSwitch');
-        if (kidsBtn) kidsBtn.addEventListener('click', function () { kids = !kids; kidsBtn.className = 'zx-pf-switch' + (kids ? ' on' : ''); });
+        if (kidsBtn) kidsBtn.addEventListener('click', function () { var nameEl = $('zxPfName'); if (nameEl) nome = nameEl.value; kids = !kids; if (kids && av >= PROF_KIDS.length) av = 0; paint(); var newName = $('zxPfName'); if (newName) { newName.value = nome; try { newName.focus(); } catch (e) {} } });
         var inp = $('zxPfName');
         if (inp) inp.value = nome;
         // escolher avatar: troca classes + preview EM-PLACE (o rebuild matava o
@@ -4033,7 +4051,7 @@ function showProfEditor(idx, onDone) {
                 av = parseInt(b.getAttribute('data-av'), 10) || 0;
                 for (var j = 0; j < gb.length; j++) gb[j].className = 'zx-pf-gbtn' + (gb[j] === b ? ' zx-pf-sel' : '');
                 var pv = $('zxPfPrev');
-                if (pv) pv.innerHTML = profAvatarHtml(av, 74);
+                if (pv) pv.innerHTML = profAvatarHtml(av, 96, kids);
                 if (armDel) { armDel = false; var d0 = $('zxPfDel'); if (d0) d0.innerHTML = te('Apagar perfil'); }
             });
         })(gb[g]);
