@@ -759,48 +759,34 @@ function applyBranding(b) {
     applyWallpaper(b.background_url || '');
 }
 var ULTRA_CONFIG_ENDPOINT = 'https://renciaapp.manus.space/api/v5/ultra-config?mac=';
-var PANEL_CONFIG_ENDPOINT = 'https://renciaapp.manus.space/api/v5/check_mac.php?mac=';
-function fetchPanelBackground() {
-    var mac = getAppMac();
-    if (!mac) return Promise.resolve(null);
-    return fetchT(PANEL_CONFIG_ENDPOINT + enc(mac), 10000, { credentials: 'omit', headers: { 'Accept': 'application/json' } }).then(function (r) { return r.json(); }).then(function (j) {
-        var url = String(j && (j.bg_url || (j.branding && j.branding.bg_url) || '') || '');
-        if (url) {
-            var b = S.branding || {};
-            b.background_url = url;
-            S.branding = b;
-            applyWallpaper(url);
-        }
-        return j;
-    }).catch(function () { return null; });
-}
 function applyUltraConfig(j, rerender) {
     if (!j) return;
     if (j.registered === false || j.allowed === false) { S.ultraDenied = true; S.remoteConfig = j; return; }
     S.ultraDenied = false;
-    var old = S.branding || {}, icons = j.icons || {}, hasMsg = !!(j.message_title || j.message_text || j.message_image_url || j.impact_phrase);
+    // Branding isolado do UltraPlayer: nenhuma chave genérica do OuroPro,
+    // check_mac ou do objeto raiz é lida aqui.
+    var old = S.branding || {};
     var b = {};
-    for (var k in old) b[k] = old[k];
-    b.app_title = j.app_name || b.app_title || 'UltraPlayer';
-    b.brand_name = j.app_name || b.brand_name || 'UltraPlayer';
-    b.logo_url = j.logo_url || b.logo_url || '';
-    // Limpa imagens antigas antes de aplicar a resposta atual do painel.
-    // background_url é o único campo aceito como fundo da tela principal.
-    b.banner_url = '';
+    b.app_title = 'UltraPlayer';
+    b.brand_name = 'UltraPlayer';
+    b.logo_url = j.ultra_logo_url || '';
+    b.banner_url = j.ultra_banner_url || '';
+    b.background_url = j.ultra_background_url || '';
     b.wallpaper_url = '';
     b.background = '';
-    // O endpoint ultra-config pode vir sem imagem; nesse caso preserva o
-    // background_url recebido do check_mac.php, que é o fundo selecionado no painel.
-    b.background_url = j.background_url || j.bg_url || b.background_url || '';
-    b.message_image_url = j.message_image_url || b.message_image_url || '';
-    b.impact_phrase = j.impact_phrase || b.impact_phrase || '';
-    b.message_title = j.message_title || b.message_title || '';
-    b.message_text = j.message_text || b.message_text || '';
-    b.server_api_url = j.server_api_url || b.server_api_url || '';
-    b.apk_download_url = j.apk_download_url || b.apk_download_url || '';
-    b.apk_version = j.apk_version || b.apk_version || '';
-    b.icons = { live_tv: icons.live_tv || (b.icons && b.icons.live_tv) || '', movies: icons.movies || (b.icons && b.icons.movies) || '', series: icons.series || (b.icons && b.icons.series) || '' };
-    if (hasMsg) b.announce = { ver: String(j.apk_version || Date.now()), banner: true, popup: false, title: b.message_title || b.impact_phrase, text: b.message_text || '' };
+    b.message_image_url = j.ultra_message_image_url || '';
+    b.message_title = '';
+    b.message_text = '';
+    b.impact_phrase = '';
+    b.server_api_url = old.server_api_url || '';
+    b.apk_download_url = old.apk_download_url || '';
+    b.apk_version = old.apk_version || '';
+    b.icons = {
+        live_tv: j.ultra_icon_live_tv_url || '',
+        movies: j.ultra_icon_movies_url || '',
+        series: j.ultra_icon_series_url || ''
+    };
+    if (j.ultra_message_image_url) b.announce = { ver: String(Date.now()), banner: false, popup: false, title: '', text: '' };
     S.branding = b; S.remoteConfig = j; S.configServerApiUrl = b.server_api_url;
     try { lsSet('zx_ultra_config', j); } catch (e) {}
     applyBranding(b);
@@ -809,9 +795,7 @@ function applyUltraConfig(j, rerender) {
 function fetchUltraConfig() {
     var mac = getAppMac();
     if (!mac) return Promise.resolve(null);
-    // Busca também o endpoint principal, que é a origem confirmada do bg_url
-    // escolhido no painel e usado pela interface de Filmes/Séries/Canais.
-    fetchPanelBackground();
+    // Única fonte de branding do UltraPlayer: /api/v5/ultra-config.
     return fetchT(ULTRA_CONFIG_ENDPOINT + enc(mac), 10000, { credentials: 'omit', headers: { 'Accept': 'application/json' } }).then(function (r) { return r.json(); }).then(function (j) { applyUltraConfig(j, true); return j; }).catch(function () { var cached = lsGet('zx_ultra_config'); if (cached) applyUltraConfig(cached, false); return null; });
 }
 function loadCss() {
@@ -1363,8 +1347,9 @@ function directResponseToState(j, mode, fallback) {
     S.playlistUrl = chosenUrl; S.playlistType = String(chosen.type || (chosenUrl.indexOf('get.php') >= 0 ? 'm3u_plus' : 'xtream')).toLowerCase();
     fetchUltraConfig();
     try { localStorage.setItem('zx_direct_mode', mode); if (mode === 'mac') localStorage.setItem('zx_mac', S.user); } catch (e) {}
-    // check_mac.php entrega o fundo selecionado pelo painel em bg_url.
-    var d = { ok: true, dns: { base: server, name: j.dns_titulo || '' }, license: { mac: j.mac || fallback || '', exp_date: expTs }, branding: { app_name: j.app_name || 'UltraPlayer', logo: j.logo_url || '', background_url: j.bg_url || '' } };
+    // check_mac.php é usado somente para autenticação e listas. O branding
+    // visual do UltraPlayer vem exclusivamente de ultra-config.
+    var d = { ok: true, dns: { base: server, name: j.dns_titulo || '' }, license: { mac: j.mac || fallback || '', exp_date: expTs } };
     S.cat = { movies: null, series: null, live: null }; S.m3uCatalogPromise = null; S.xtreamUnavailable = false; S.favDirty = { live: [], movie: [], series: [] };
     applyResolve(d, false); saveSnap(d); saveCreds(); go('/home', true); return true;
 }
@@ -1540,7 +1525,9 @@ function applyResolve(d, fromCache) {
     S.dnsName = (d.dns && typeof d.dns.name === 'string') ? d.dns.name.replace(/^\s+|\s+$/g, '') : '';
     S.info = d;
     try { global.__DNS = String((d.dns && (d.dns.host + ':' + d.dns.port)) || '0'); } catch (e) {}
-    if (d.branding) applyBranding(d.branding);
+    // O resolve de playlist não fornece branding do UltraPlayer. O branding é
+    // aplicado exclusivamente pela resposta ultra-config.
+    fetchUltraConfig();
     // Favoritos/continue/recentes são LOCAIS agora (modelo HDX) — o painel NÃO
     // manda mais nada disso; ignora d.favorites. O resolve serve só pra
     // DNS + licença + branding + aviso.
