@@ -53,6 +53,7 @@ public final class MainActivity extends Activity {
     private float fullZoom = 1.0f;
     private String miniPayload = "";
     private boolean miniExpanded = false;
+    private boolean keepMiniAfterFull = true;
     private FrameLayout.LayoutParams miniLayoutBeforeExpand;
     private static final int VOICE_REQUEST = 7412;
     private static final int VOICE_PERMISSION_REQUEST = 7413;
@@ -232,7 +233,7 @@ public final class MainActivity extends Activity {
 
         @JavascriptInterface
         public void miniPlay(String payload) {
-            runOnUiThread(() -> showMiniPlayer(payload));
+            runOnUiThread(() -> showMiniPlayer(payload, true));
         }
 
         @JavascriptInterface
@@ -315,7 +316,7 @@ public final class MainActivity extends Activity {
                 try {
                     JSONObject json = new JSONObject(payload == null ? "{}" : payload);
                     if (!json.optString("url", "").isEmpty()) {
-                        showMiniPlayer(json.toString());
+                        showMiniPlayer(json.toString(), false);
                         openFullMiniPlayer();
                     }
                 } catch (Throwable ignored) { }
@@ -568,7 +569,7 @@ public final class MainActivity extends Activity {
                     next.put("url", nextUrl);
                     next.put("title", nextName);
                     next.put("zap", new org.json.JSONArray(fullChannelItems));
-                    showMiniPlayer(next.toString());
+                    showMiniPlayer(next.toString(), true);
                     fullChannelMenu.setVisibility(View.GONE);
                 } catch (Throwable ignored) { }
             });
@@ -625,7 +626,12 @@ public final class MainActivity extends Activity {
     }
 
     private void showMiniPlayer(String payload) {
+        showMiniPlayer(payload, true);
+    }
+
+    private void showMiniPlayer(String payload, boolean keepAfterFull) {
         if (miniContainer == null || miniPlayerView == null) return;
+        keepMiniAfterFull = keepAfterFull;
         try {
             JSONObject json = new JSONObject(payload == null ? "{}" : payload);
             String url = json.optString("url", "");
@@ -720,6 +726,13 @@ public final class MainActivity extends Activity {
             miniCloseButton.setOnClickListener(v -> hideMiniPlayer());
         }
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+        if (!keepMiniAfterFull) {
+            if (miniPlayer != null) miniPlayer.pause();
+            miniContainer.setVisibility(View.GONE);
+            miniContainer.setTag(null);
+            miniPayload = "";
+            return;
+        }
         if (miniPlayer != null && !miniPlayer.isPlaying()) miniPlayer.play();
     }
 
