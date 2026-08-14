@@ -731,14 +731,17 @@ function applyWallpaper(url) {
     if (!st) { st = document.createElement('style'); st.id = 'zx-wall'; document.head.appendChild(st); }
     var safe = String(url || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     if (safe) {
-        // Uma única camada de imagem no fundo global. As telas internas ficam
-        // transparentes para não duplicar a mesma imagem sobre o .bg-diamonds.
-        st.textContent = ".bg-diamonds{background-color:#080808 !important;background-image:url('" + safe + "') !important;background-position:center center;background-repeat:no-repeat;background-size:cover;background-attachment:fixed;}"
-            + '.app-root,.sidebar-screen,.zx-home2,.home-screen,.radio-screen,.search-screen,.settings-screen{background-color:transparent !important;background-image:none !important;}';
+        // A imagem escolhida no painel precisa ficar no próprio root, que ocupa
+        // toda a tela. O .bg-diamonds fica transparente para não mostrar a arte
+        // antiga nem criar uma segunda camada por baixo.
+        st.textContent = ".bg-diamonds{background-color:transparent !important;background-image:none !important;}"
+            + "#app-root,.app-root{background-color:transparent !important;background-image:url('" + safe + "') !important;background-position:center center;background-repeat:no-repeat;background-size:cover;background-attachment:fixed;}"
+            + '.sidebar-screen,.zx-home2,.home-screen,.radio-screen,.search-screen,.settings-screen{background-color:transparent !important;background-image:none !important;}';
     } else {
-        // Sem branding: remove também o gradiente/imagem padrão do APK.
-        st.textContent = '.bg-diamonds{background-color:#080808 !important;background-image:none !important;}'
-            + '.app-root,.sidebar-screen,.zx-home2,.home-screen,.radio-screen,.search-screen,.settings-screen{background-color:transparent !important;background-image:none !important;}';
+        // Sem imagem do painel, remove a arte antiga do root e deixa apenas a
+        // cor do tema, sem fallback para bg_url/background/banner.
+        st.textContent = '.bg-diamonds{background-color:transparent !important;background-image:none !important;}#app-root,.app-root{background-color:#080808 !important;background-image:none !important;}'
+            + '.sidebar-screen,.zx-home2,.home-screen,.radio-screen,.search-screen,.settings-screen{background-color:transparent !important;background-image:none !important;}';
     }
 }
 function applyBranding(b) {
@@ -2718,8 +2721,8 @@ function liveStyles() {
         + 'body.zx-ff-tv .cat-sidebar{overflow-y:auto !important;scroll-behavior:auto !important;}'
         + 'body.zx-ff-tv .cat-sidebar .cat-pill:focus-visible{scroll-margin-top:12px;scroll-margin-bottom:12px;}'
         + 'body.zx-ff-tv .sidebar-content .sc-title{font-size:1.8vw;margin-bottom:1.1vw;}'
-        + 'body.zx-ff-tv .live-split .channel-tile-tv,body.ui-tv .live-split .channel-tile-tv{min-height:44px !important;height:50px !important;padding:4px 6px !important;margin-bottom:3px !important;border-radius:7px !important;}'
-        + 'body.zx-ff-tv .live-split .channel-tile-tv .ct-logo,body.ui-tv .live-split .channel-tile-tv .ct-logo{width:22px !important;height:22px !important;margin-right:4px !important;border-radius:4px !important;}'
+        + 'body.zx-ff-tv .live-split .channel-tile-tv,body.ui-tv .live-split .channel-tile-tv{min-height:64px !important;height:64px !important;padding:6px 7px !important;margin-bottom:4px !important;border-radius:8px !important;}'
+        + 'body.zx-ff-tv .live-split .channel-tile-tv .ct-logo,body.ui-tv .live-split .channel-tile-tv .ct-logo{width:36px !important;height:36px !important;min-width:36px !important;min-height:36px !important;margin-right:6px !important;border-radius:6px !important;background-size:contain !important;background-position:center !important;background-repeat:no-repeat !important;}'
         + 'body.zx-ff-tv .live-split .channel-tile-tv .ct-name,body.ui-tv .live-split .channel-tile-tv .ct-name{font-size:14px !important;line-height:1.12 !important;}'
         + 'body.zx-ff-tv .live-split .channel-tile-tv .ct-num,body.ui-tv .live-split .channel-tile-tv .ct-num{font-size:11px !important;margin-bottom:1px !important;}'
         + '.cat-sidebar .cat-pill:hover{border-color:' + a + '80;}'
@@ -4263,11 +4266,17 @@ function ffMobileCss() {
         + 'body.zx-ff-tv .home-tile span{font-size:12px}'
         + 'body.zx-ff-tv .zh-tbtn{height:34px;padding-top:0;padding-bottom:0}'
         + 'body.zx-ff-tv .zh-tile{padding-top:20px;padding-bottom:20px}'
+        + 'body.zx-ff-tv .zh-navtop .zh-tile{min-height:148px !important;height:148px !important;padding-top:18px !important;padding-bottom:18px !important;overflow:visible !important;justify-content:center !important;}'
+        + 'body.zx-ff-tv .zh-navtop .zh-ico{width:3.8vw !important;height:3.8vw !important;min-width:42px !important;min-height:42px !important;}'
+        + 'body.zx-ff-tv .zh-navtop .zh-ico svg{width:3.7vw !important;height:3.7vw !important;min-width:40px !important;min-height:40px !important;}'
+        + 'body.zx-ff-tv .zh-navtop .zh-tl{font-size:18px !important;line-height:1.15 !important;white-space:nowrap !important;}'
+        + 'body.zx-ff-tv .zh-navtop .zh-tsub{font-size:13px !important;line-height:1.15 !important;margin-top:5px !important;white-space:nowrap !important;}'
         + 'body.zx-ff-tv .zh-stile{padding-top:9px;padding-bottom:9px;min-height:64px}'
         + 'body.zx-ff-tv .opt-btn,body.zx-ff-tv .action-btn,body.zx-ff-tv .theme-btn{padding-top:12px;padding-bottom:12px;min-height:58px}'
         + 'body.zx-ff-tv .home-logo{transform:scale(.72);transform-origin:center}'
         + 'body.zx-ff-tv .poster-tile-tv .pt-title,body.zx-ff-tv .poster-tile-tv .pt-name{font-size:11px;line-height:1.1}'
-        + 'body.zx-ff-tv .channel-tile-tv .ch-name{font-size:12px}'
+        + 'body.zx-ff-tv .channel-tile-tv .ch-name{font-size:14px}'
+        + 'body.zx-ff-tv .channel-tile-tv .ct-logo.is-loaded .ct-fallback,body.ui-tv .channel-tile-tv .ct-logo.is-loaded .ct-fallback{display:none !important;}'
         + 'body.zx-ff-tv .detail-hero .dh-content{padding:20px 12px 8px;max-width:760px}'
         + 'body.zx-ff-tv .detail-hero h1{font-size:20px;margin-bottom:6px}'
         + 'body.zx-ff-tv .detail-hero .dh-badge{font-size:11px;padding:3px 7px}'
