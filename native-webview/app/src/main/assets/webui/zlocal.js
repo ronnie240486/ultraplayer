@@ -3481,7 +3481,8 @@ function renderDetailMovie(id) {
             + '<div class="dh-buttons">'
                         + playBtns
             + '<button type="button" class="btn-tv trailer-detail-btn" data-trailer-title="' + attr(name) + '" data-trailer-kind="movie" data-trailer-url="' + attr(info.youtube_trailer || md.youtube_trailer || info.trailer || '') + '"><span class="btn-icon">▶</span>Trailer</button>'
-            + '<button type="button" class="btn-tv" id="btn-favorite" data-kind="movie" data-id="' + attr(id) + '" data-name="' + attr(name) + '" data-poster="' + attr(cover) + '"><span class="btn-icon" id="fav-icon">' + (isFav ? '♥' : '+') + '</span><span id="fav-text">' + 'Favoritos' + '</span></button>'
+                        + '<button type="button" class="btn-tv" id="btn-favorite" data-kind="movie" data-id="' + attr(id) + '" data-name="' + attr(name) + '" data-poster="' + attr(cover) + '"><span class="btn-icon" id="fav-icon">' + (isFav ? '♥' : '+') + '</span><span id="fav-text">' + 'Favoritos' + '</span></button>'
+
             + '</div></div></div>'
             + '<div class="dh-similar-lazy" data-cat="' + attr(info.category_id || md.category_id || '') + '"></div></div>' + detailStyles());
         S.playExt = ext; S.playName = name; S.playPoster = cover; S.playSeries = null;
@@ -3569,7 +3570,8 @@ function renderDetailSeries(id) {
         setHtml('<div class="detail-screen" id="series-detail"><div class="detail-bg"' + (bg ? ' style="background-image:url(\'' + attr(bg) + '\')"' : '') + '></div>'
             + '<div class="detail-hero"><a href="javascript:history.back()" class="dh-back">← Voltar</a>'
             + '<div class="dh-content"><h1>' + esc(name) + '</h1><div class="dh-meta">' + badges + '</div><p class="dh-plot">' + esc(plot) + '</p>'
-            + '<div class="dh-buttons">' + playBtn + '<button type="button" class="btn-tv trailer-detail-btn" data-trailer-title="' + attr(name) + '" data-trailer-kind="series" data-trailer-url="' + attr(info.youtube_trailer || info.trailer || '') + '"><span class="btn-icon">▶</span>Trailer</button><button type="button" class="btn-tv" id="btn-favorite" data-kind="series" data-id="' + attr(id) + '" data-name="' + attr(name) + '" data-poster="' + attr(cover) + '"><span class="btn-icon" id="fav-icon">' + (isFav ? '♥' : '+') + '</span><span id="fav-text">' + 'Favoritos' + '</span></button></div>'
+                        + '<div class="dh-buttons">' + playBtn + '<button type="button" class="btn-tv trailer-detail-btn" data-trailer-title="' + attr(name) + '" data-trailer-kind="series" data-trailer-url="' + attr(info.youtube_trailer || info.trailer || '') + '"><span class="btn-icon">▶</span>Trailer</button><button type="button" class="btn-tv" id="btn-favorite" data-kind="series" data-id="' + attr(id) + '" data-name="' + attr(name) + '" data-poster="' + attr(cover) + '"><span class="btn-icon" id="fav-icon">' + (isFav ? '♥' : '+') + '</span><span id="fav-text">' + 'Favoritos' + '</span></button></div>'
+
             + '</div></div>' + seasonsBlock + '</div>' + detailStyles());
         // contexto da série p/ o "Continue Assistindo" do player de episódio
         // (o continue de série usa o series_id + nome/capa da SÉRIE, não do ep).
