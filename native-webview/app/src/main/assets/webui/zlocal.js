@@ -45,7 +45,9 @@ var S = {
     rawCss: '',
     cat: { movies: null, series: null, live: null },   // {cats, byCat:{id:[...]}, all:[...]}
     radioCache: {}, radioPromises: {},
-    catPromises: {}
+    catPromises: {},
+    listNotificationTimer: null,
+    listNotificationBusy: false
 };
 
 /* ---------- helpers ---------- */
@@ -445,7 +447,69 @@ function applyOfflineHint() {
         el.innerHTML = te('⚠ Sem conexão com o painel — usando dados salvos');
         if (document.body) document.body.appendChild(el);
     }
-    el.style.display = 'block';
+        el.style.display = 'block';
+}
+
+/* ---- notificações de listas por MAC (somente UltraPlayer) ---- */
+function listNotificationSeenKey(id) { return 'zx_list_notification_seen_' + String(id || ''); }
+function listNotificationWasSeen(id) { try { return localStorage.getItem(listNotificationSeenKey(id)) === '1'; } catch (e) { return false; } }
+function listNotificationMarkSeen(id) { try { localStorage.setItem(listNotificationSeenKey(id), '1'); } catch (e) {} }
+function listNotificationAck(mac, id) {
+    if (!mac || !id) return;
+    var body = JSON.stringify({ mac: mac, alert_id: Number(id) || id });
+    fetchT(apiBase() + '/api/v5/list-notifications/ack', 8000, {
+        method: 'POST', credentials: 'omit',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: body
+    }).catch(function () {});
+}
+function closeListNotification(ov) {
+    try { if (ov && ov.parentNode) ov.parentNode.removeChild(ov); } catch (e) {}
+    try { document.body.classList.remove('tv-modal-open'); } catch (e2) {}
+}
+function showListNotification(n, mac) {
+    if (!n || !n.id || $('zx-list-notification')) return;
+    var key = listNotificationSeenKey(n.id);
+    if (listNotificationWasSeen(n.id)) return;
+    listNotificationMarkSeen(n.id);
+    var ov = document.createElement('div'); ov.id = 'zx-list-notification';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,.52);font-family:system-ui,-apple-system,Segoe UI,sans-serif;';
+    var title = esc(n.title || 'Aviso da lista');
+    var message = esc(n.message || 'Foi confirmado um problema técnico na lista.');
+    ov.innerHTML = '<div role="alertdialog" aria-modal="true" style="width:min(680px,94vw);max-height:82vh;overflow:auto;background:rgba(9,20,15,.98);border:2px solid #f59e0b;border-radius:18px;padding:26px;color:#f8fff9;box-shadow:0 18px 70px rgba(0,0,0,.65);box-sizing:border-box;text-align:left;">'
+        + '<div style="font-size:30px;line-height:1;margin-bottom:14px;color:#fbbf24">⚠</div>'
+        + '<div style="font-size:22px;font-weight:800;margin-bottom:10px;">' + title + '</div>'
+        + '<div style="font-size:17px;line-height:1.5;color:#d4e1d9;white-space:pre-wrap;">' + message + '</div>'
+        + '<div style="text-align:right;margin-top:24px;"><button id="zx-list-notification-ok" autofocus type="button" style="min-width:140px;padding:12px 20px;border:0;border-radius:10px;background:#f59e0b;color:#1b1203;font-size:16px;font-weight:800;">OK</button></div></div>';
+    document.body.appendChild(ov);
+    try { document.body.classList.add('tv-modal-open'); } catch (e) {}
+    var ok = $('zx-list-notification-ok');
+    if (ok) ok.addEventListener('click', function () { closeListNotification(ov); });
+    try { if (ok) ok.focus(); } catch (e2) {}
+    listNotificationAck(mac, n.id);
+}
+function checkListNotifications() {
+    if (S.listNotificationBusy) return;
+    var mac = getAppMac(); if (!mac) return;
+    S.listNotificationBusy = true;
+    var url = apiBase() + '/api/v5/list-notifications?mac=' + enc(mac);
+    fetchT(url, 9000, { cache: 'no-store', credentials: 'omit', headers: { 'Accept': 'application/json', 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' } })
+        .then(function (r) { if (!r.ok) throw new Error('list_notifications_' + r.status); return r.json(); })
+        .then(function (d) {
+            var list = d && Array.isArray(d.notifications) ? d.notifications.slice() : [];
+            list.sort(function (a, b) { return String(b.created_at || '').localeCompare(String(a.created_at || '')); });
+            for (var i = 0; i < list.length; i++) {
+                var n = list[i];
+                if (n && n.status === 'failure' && n.acknowledged !== true && !listNotificationWasSeen(n.id)) { showListNotification(n, mac); break; }
+            }
+        })
+        .catch(function () {})
+        .then(function () { S.listNotificationBusy = false; });
+}
+function startListNotificationWatcher() {
+    if (S.listNotificationTimer) return;
+    checkListNotifications();
+    try { S.listNotificationTimer = setInterval(checkListNotifications, 60000); } catch (e) {}
 }
 
 /* ---- snapshot do resolve (dns/licença/branding/aviso) ---- */
@@ -4975,6 +5039,7 @@ function boot() {
     var c = loadCreds();
     if (!(c && c.code && c.user && c.pass)) { renderMacActivation(); return; }
     S.code = c.code; S.user = c.user; S.pass = c.pass; S.playlistUrl = c.playlistUrl || ''; S.playlistType = c.playlistType || ''; S.listIndex = parseInt(c.listIndex || activeListIndex(), 10) || 0; S.directPlaylists = loadDirectPlaylists();
+    startListNotificationWatcher();
     if (S.playlistUrl && (S.playlistType || '').indexOf('m3u') === 0) { try { S.xtreamDerived = playlistToXtream({ playlist_url: S.playlistUrl }, 'Lista ativa'); } catch (e) {} }
 
     var snap = loadSnap();
