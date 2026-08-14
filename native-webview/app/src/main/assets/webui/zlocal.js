@@ -1922,6 +1922,46 @@ function assistantToast(text) {
         setTimeout(function () { try { if (el.parentNode) el.parentNode.removeChild(el); } catch (e) {} }, 1800);
     } catch (e) {}
 }
+function assistantStyles() {
+    var a = S.accent || '#10b981';
+    return '<style id="zx-assistant-css">.zx-assistant-panel{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;background:rgba(1,8,6,.72);backdrop-filter:blur(8px);color:#f5fff9}.zx-assistant-card{width:min(760px,94vw);max-height:min(760px,88vh);display:flex;flex-direction:column;overflow:hidden;border:1px solid ' + a + '88;border-radius:24px;background:linear-gradient(145deg,rgba(10,38,27,.98),rgba(4,14,10,.98));box-shadow:0 24px 80px rgba(0,0,0,.65)}.zx-assistant-head{display:flex;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid rgba(255,255,255,.1)}.zx-assistant-head strong{font-size:clamp(18px,2vw,25px)}.zx-assistant-head small{display:block;margin-top:3px;color:#a9c2b4;font-size:12px}.zx-assistant-x{margin-left:auto;width:38px;height:38px;border:1px solid rgba(255,255,255,.18);border-radius:12px;background:transparent;color:#fff;font-size:22px;cursor:pointer}.zx-assistant-x:focus,.zx-assistant-mic:focus,.zx-assistant-send:focus,.zx-assistant-chip:focus{outline:3px solid #fff;box-shadow:0 0 0 5px ' + a + ';}.zx-assistant-messages{flex:1;min-height:150px;overflow:auto;padding:18px 20px;display:flex;flex-direction:column;gap:10px}.zx-assistant-msg{max-width:82%;padding:11px 14px;border-radius:15px;font-size:15px;line-height:1.35}.zx-assistant-msg.bot{align-self:flex-start;background:rgba(255,255,255,.08);color:#e7f5ed}.zx-assistant-msg.user{align-self:flex-end;background:' + a + '32;border:1px solid ' + a + '70;color:#fff}.zx-assistant-quick{display:flex;gap:8px;overflow-x:auto;padding:0 20px 12px}.zx-assistant-chip{flex:0 0 auto;padding:9px 12px;border:1px solid ' + a + '55;border-radius:999px;background:' + a + '16;color:#f5fff9;font-weight:700;font-size:12px;cursor:pointer}.zx-assistant-form{display:flex;gap:8px;padding:14px 20px 18px;border-top:1px solid rgba(255,255,255,.1)}.zx-assistant-input{flex:1;min-width:0;padding:13px 14px;border:1px solid ' + a + '66;border-radius:13px;background:#06130f;color:#fff;font-size:15px;outline:none}.zx-assistant-input:focus{border-color:#fff;box-shadow:0 0 0 3px ' + a + '55}.zx-assistant-mic,.zx-assistant-send{flex:0 0 auto;min-width:46px;padding:0 13px;border:1px solid ' + a + '77;border-radius:13px;background:' + a + '25;color:#fff;font-weight:800;cursor:pointer}.zx-assistant-mic.is-listening{background:' + a + '70;animation:zxVoicePulse 1s infinite}.zx-assistant-hint{padding:0 20px 12px;color:#91aa9d;font-size:12px}@media(max-width:700px){.zx-assistant-panel{align-items:flex-end;padding:8px}.zx-assistant-card{max-height:86vh;border-radius:20px}.zx-assistant-head{padding:13px 14px}.zx-assistant-messages{padding:14px}.zx-assistant-quick{padding:0 14px 10px}.zx-assistant-form{padding:10px 14px 14px}.zx-assistant-msg{font-size:14px;max-width:90%}}body.zx-ff-tv .zx-assistant-card{width:min(900px,82vw)}body.zx-ff-tv .zx-assistant-msg{font-size:18px}body.zx-ff-mobile .zx-assistant-card{width:min(700px,94vw)}body.zx-ff-mobile .zx-assistant-msg{font-size:15px}</style>';
+}
+function assistantAddMessage(text, who) {
+    var box = $('zxAssistantMessages'); if (!box) return;
+    var row = document.createElement('div'); row.className = 'zx-assistant-msg ' + (who === 'user' ? 'user' : 'bot'); row.textContent = String(text || ''); box.appendChild(row); box.scrollTop = box.scrollHeight;
+}
+function closeAssistantPanel() { var p = $('zx-assistant-panel'); if (p && p.parentNode) p.parentNode.removeChild(p); var st = $('zx-assistant-css'); if (st && st.parentNode) st.parentNode.removeChild(st); }
+function assistantQuickReply(text) {
+    var q = String(text || '').toLowerCase();
+    if (/recomend|o que posso|sugest/.test(q)) return 'Na Home, a faixa Para você mostra sugestões baseadas no seu perfil. Também posso procurar filmes, séries ou canais por nome.';
+    if (/paus/.test(q)) return 'Vou pausar o vídeo atual.';
+    if (/continu/.test(q)) return 'Vou continuar a reprodução atual.';
+    return 'Posso abrir Canais, Filmes, Séries, Rádios, Favoritos, Playlist, Configurações ou pesquisar um título.';
+}
+function assistantSubmit(text) {
+    var raw = String(text || '').replace(/^\s+|\s+$/g, ''); if (!raw) return;
+    assistantAddMessage(raw, 'user');
+    var normalized = normVoiceText(raw);
+    if (/^(o que posso assistir|me indique|recomendacoes|recomendacoes para mim|sugestoes)$/.test(normalized) || /\b(o que posso assistir|me indique algo|quero recomendacoes)\b/.test(normalized)) { assistantAddMessage(assistantQuickReply(raw), 'bot'); return; }
+    if (voiceEpgIntent(raw)) { assistantAddMessage('Vou procurar a próxima programação e criar o aviso se ela estiver disponível.', 'bot'); return; }
+    if (runVoiceIntent(raw)) { assistantAddMessage(assistantQuickReply(raw), 'bot'); return; }
+    assistantAddMessage('Vou pesquisar isso em Canais, Filmes e Séries.', 'bot'); closeAssistantPanel(); setTimeout(function () { runVoiceCommand(raw); }, 120);
+}
+function renderAssistantPanel(autoListen) {
+    if ($('zx-assistant-panel')) { if (autoListen) setTimeout(startVoiceCommand, 80); return; }
+    var old = $('zx-assistant-css'); if (old && old.parentNode) old.parentNode.removeChild(old);
+    var panel = document.createElement('div'); panel.id = 'zx-assistant-panel'; panel.className = 'zx-assistant-panel'; panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', 'Ultra Assistente');
+    panel.innerHTML = '<div class="zx-assistant-card"><div class="zx-assistant-head"><div><strong>Ultra Assistente</strong><small>Fale ou digite o que você quer fazer</small></div><button type="button" class="zx-assistant-x" id="zxAssistantClose" aria-label="Fechar">×</button></div><div class="zx-assistant-messages" id="zxAssistantMessages"></div><div class="zx-assistant-quick"><button type="button" class="zx-assistant-chip" data-assistant="O que posso assistir agora?">Para você</button><button type="button" class="zx-assistant-chip" data-assistant="Abrir filmes">Filmes</button><button type="button" class="zx-assistant-chip" data-assistant="Abrir séries">Séries</button><button type="button" class="zx-assistant-chip" data-assistant="Abrir canais">Canais</button><button type="button" class="zx-assistant-chip" data-assistant="Pausar">Pausar</button></div><div class="zx-assistant-hint">Exemplos: “buscar The Walking Dead”, “abrir rádios”, “me avise quando começar o jornal”</div><form class="zx-assistant-form" id="zxAssistantForm"><input class="zx-assistant-input" id="zxAssistantInput" autocomplete="off" placeholder="Digite um comando…" aria-label="Comando para o Ultra Assistente"><button type="button" class="zx-assistant-mic" id="zxAssistantMic" aria-label="Falar">●</button><button type="submit" class="zx-assistant-send" aria-label="Enviar">OK</button></form></div>';
+    document.body.appendChild(panel); var st = document.createElement('div'); st.innerHTML = assistantStyles(); document.head.appendChild(st.firstChild);
+    assistantAddMessage('Olá! Posso pesquisar conteúdos, abrir telas, controlar o player e criar avisos no EPG.', 'bot');
+    var close = $('zxAssistantClose'); if (close) close.addEventListener('click', closeAssistantPanel);
+    var form = $('zxAssistantForm'), inp = $('zxAssistantInput'); if (form) form.addEventListener('submit', function (e) { e.preventDefault(); if (inp) { assistantSubmit(inp.value); inp.value = ''; } });
+    var chips = panel.querySelectorAll('[data-assistant]'); for (var i = 0; i < chips.length; i++) (function (b) { b.addEventListener('click', function () { assistantSubmit(b.getAttribute('data-assistant') || ''); }); })(chips[i]);
+    var mic = $('zxAssistantMic'); if (mic) mic.addEventListener('click', function () { startVoiceCommand(); });
+    panel.addEventListener('keydown', function (e) { if (e.key === 'Escape' || e.keyCode === 27) { e.preventDefault(); closeAssistantPanel(); } });
+    try { if (inp) inp.focus(); } catch (e) {}
+    if (autoListen) setTimeout(startVoiceCommand, 120);
+}
 function runVoiceIntent(text) {
     if (voiceEpgIntent(text)) return true;
     var cmd = normVoiceText(text).replace(/^(por favor|ultra player|ultra assistente)\s+/, '').replace(/^(abrir|abra|abre|ir para|va para|mostrar|mostre|acessar|acesse)\s+/, '').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
@@ -1947,7 +1987,7 @@ function runVoiceIntent(text) {
         }
     }
     if (!path) return false;
-    assistantToast(label); setTimeout(function () { go(path, false); }, 120); return true;
+    closeAssistantPanel(); assistantToast(label); setTimeout(function () { go(path, false); }, 120); return true;
 }
 function voiceKind(text) {
     var q = normVoiceText(text);
@@ -2194,10 +2234,10 @@ function runVoiceCommand(text) {
     next(0);
 }
 function startVoiceCommand() {
-    var btn = $('zxVoiceBtn'); if (btn) { btn.className += ' is-listening'; btn.setAttribute('aria-label', 'Ouvindo'); }
-    function done() { var b = $('zxVoiceBtn'); if (b) b.className = b.className.replace(/\s*is-listening\b/g, ''); }
-    global.__voiceResult = function (text) { done(); runVoiceCommand(text); };
-    global.__voiceError = function () { done(); };
+    var btn = $('zxAssistantMic') || $('zxVoiceBtn'); if (btn) { btn.className += ' is-listening'; btn.setAttribute('aria-label', 'Ouvindo'); }
+    function done() { var b = $('zxVoiceBtn'); if (b) { b.className = b.className.replace(/\s*is-listening\b/g, ''); b.setAttribute('aria-label', 'Ultra Assistente — comando de voz'); } var m = $('zxAssistantMic'); if (m) { m.className = m.className.replace(/\s*is-listening\b/g, ''); m.setAttribute('aria-label', 'Falar'); } }
+    global.__voiceResult = function (text) { done(); if ($('zx-assistant-panel')) assistantSubmit(text); else runVoiceCommand(text); };
+    global.__voiceError = function () { done(); if ($('zx-assistant-panel')) assistantAddMessage('Não consegui ouvir. Tente falar novamente.', 'bot'); };
     try {
         if (global.HdxNative && typeof global.HdxNative.startVoice === 'function') { global.HdxNative.startVoice(); return; }
         var R = global.SpeechRecognition || global.webkitSpeechRecognition;
@@ -2445,7 +2485,7 @@ function renderHome() {
     try {
         var pb = document.getElementById('zxProfBtn');
         if (pb) pb.addEventListener('click', function (e) { if (e && e.preventDefault) e.preventDefault(); showProfGate('menu'); });
-        var vb = document.getElementById('zxVoiceBtn'); if (vb) vb.addEventListener('click', function (e) { if (e && e.preventDefault) e.preventDefault(); startVoiceCommand(); });
+        var vb = document.getElementById('zxVoiceBtn'); if (vb) vb.addEventListener('click', function (e) { if (e && e.preventDefault) e.preventDefault(); renderAssistantPanel(true); });
         var rb = document.getElementById('zxRadioBtn'); if (rb) rb.addEventListener('click', function (e) { if (e && e.preventDefault) e.preventDefault(); go('/radio'); });
     } catch (e) {}
     firstRunFlow();   // 1ª abertura no Android → idioma + aviso anti-pirataria + escolha Celular x TV
