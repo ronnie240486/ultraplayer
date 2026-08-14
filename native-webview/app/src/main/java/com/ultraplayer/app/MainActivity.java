@@ -249,6 +249,21 @@ public final class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void miniPause() {
+            runOnUiThread(() -> { if (miniPlayer != null) miniPlayer.pause(); });
+        }
+
+        @JavascriptInterface
+        public void miniResume() {
+            runOnUiThread(() -> { if (miniPlayer != null) miniPlayer.play(); });
+        }
+
+        @JavascriptInterface
+        public void miniFullscreen() {
+            runOnUiThread(() -> { if (miniPlayer != null && miniContainer != null && miniContainer.getVisibility() == View.VISIBLE) openFullMiniPlayer(); });
+        }
+
+        @JavascriptInterface
         public void setFormFactor(String mode) {
             runOnUiThread(() -> {
                 String normalized = "tv".equalsIgnoreCase(mode) ? "tv" : "mobile";

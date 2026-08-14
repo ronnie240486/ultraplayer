@@ -1388,6 +1388,7 @@ function render(path) {
     if (p === '/login') return renderLogin();
     if (p === '/lists') return renderLists(query);
     if (p === '/home' || p === '/' || p === '') return renderHome();
+    if (p === '/search') return renderUniversalSearch();
     if (p === '/reload') return doReload();
     if (p === '/logout') return doLogout();
         if (p === '/settings') return renderSettings();
@@ -1846,6 +1847,44 @@ function voiceCleanQuery(text) {
     q = q.replace(/\b(um|uma|o|a|os|as|de|do|da|dos|das|canal|canais|filme|filmes|serie|series|série|séries)\b/g, ' ');
     return q.replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
 }
+/* Ultra Assistente — primeira camada local e determinística. Ela resolve ações
+   de navegação sem rede e deixa nomes de conteúdo seguirem para a busca já
+   existente. Assim o comando continua rápido, privado e funciona offline. */
+function assistantToast(text) {
+    try {
+        var old = $('zx-assistant-toast'); if (old && old.parentNode) old.parentNode.removeChild(old);
+        var el = document.createElement('div'); el.id = 'zx-assistant-toast';
+        el.style.cssText = 'position:fixed;left:50%;bottom:5.5vh;transform:translateX(-50%);z-index:100004;max-width:min(760px,88vw);padding:13px 20px;border:1px solid rgba(16,185,129,.75);border-radius:15px;background:rgba(4,25,17,.96);color:#f3fff8;font:700 clamp(14px,1.5vw,20px)/1.3 system-ui,-apple-system,Segoe UI,sans-serif;box-shadow:0 12px 36px rgba(0,0,0,.5);text-align:center;pointer-events:none;';
+        el.textContent = 'Ultra Assistente: ' + String(text || 'Pronto'); document.body.appendChild(el);
+        setTimeout(function () { try { if (el.parentNode) el.parentNode.removeChild(el); } catch (e) {} }, 1800);
+    } catch (e) {}
+}
+function runVoiceIntent(text) {
+    var cmd = normVoiceText(text).replace(/^(por favor|ultra player|ultra assistente)\s+/, '').replace(/^(abrir|abra|abre|ir para|va para|mostrar|mostre|acessar|acesse)\s+/, '').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
+    var path = '', label = '';
+    if (/^(home|inicio|tela inicial|pagina inicial)$/.test(cmd)) { path = '/home'; label = 'abrindo a tela inicial'; }
+    else if (/^(tv ao vivo|canais|canais ao vivo|televisao|televisao ao vivo|epg|programacao)$/.test(cmd)) { path = '/live'; label = 'abrindo TV ao vivo'; }
+    else if (/^(filmes?|cinema|vod)$/.test(cmd)) { path = '/movies'; label = 'abrindo Filmes'; }
+    else if (/^(series?|novelas?|animes?)$/.test(cmd)) { path = '/series'; label = 'abrindo Séries'; }
+    else if (/^(favoritos?|meus favoritos)$/.test(cmd)) { path = '/favorites'; label = 'abrindo Favoritos'; }
+    else if (/^(playlist|listas?|servidor|trocar lista)$/.test(cmd)) { path = '/lists'; label = 'abrindo Playlist'; }
+    else if (/^(configuracoes?|ajustes?)$/.test(cmd)) { path = '/settings'; label = 'abrindo Configurações'; }
+    else if (/^(buscar|pesquisar|busca universal|buscar em tudo|pesquisar tudo)$/.test(cmd)) { path = '/search'; label = 'abrindo Busca em tudo'; }
+    else if (/^(recarregar|atualizar|reload)$/.test(cmd)) { path = '/reload'; label = 'atualizando o aplicativo'; }
+    else if (/^(pausar|pause|pare o video|pare o filme|pare a serie)$/.test(cmd)) { try { if (global.HdxNative && global.HdxNative.miniPause) global.HdxNative.miniPause(); } catch (e) {} assistantToast('vídeo pausado'); return true; }
+    else if (/^(continuar|retomar|retome|dar play|play)$/.test(cmd)) { try { if (global.HdxNative && global.HdxNative.miniResume) global.HdxNative.miniResume(); } catch (e) {} assistantToast('continuando a reprodução'); return true; }
+    else if (/^(tela cheia|abrir tela cheia|aumentar a tela|expandir video)$/.test(cmd)) { try { if (global.HdxNative && global.HdxNative.miniFullscreen) global.HdxNative.miniFullscreen(); } catch (e) {} assistantToast('abrindo tela cheia'); return true; }
+    else if (/^(voltar|volte|retornar)$/.test(cmd)) { assistantToast('voltando'); setTimeout(function () { try { history.back(); } catch (e) {} }, 120); return true; }
+    else {
+        var rm = cmd.match(/^radio(?:s)?(?:\s+online)?(?:\s+(gospel|rock|pop|sertanejo|classica|blues|jazz|metal|heavy metal|brasil))?$/);
+        if (rm) {
+            var map = { gospel: 'gospel', rock: 'rock', pop: 'pop', sertanejo: 'sertanejo', classica: 'classical', blues: 'blues', jazz: 'jazz', metal: 'metal', 'heavy metal': 'metal', brasil: 'brazil' };
+            S.radioCategory = map[rm[1] || ''] || 'brazil'; path = '/radio'; label = 'abrindo Rádios' + (rm[1] ? ' • ' + rm[1] : '');
+        }
+    }
+    if (!path) return false;
+    assistantToast(label); setTimeout(function () { go(path, false); }, 120); return true;
+}
 function voiceKind(text) {
     var q = normVoiceText(text);
     if (/\b(serie|series|novela|novelas|temporada|episodio|episodios|anime)\b/.test(q)) return 'series';
@@ -1949,11 +1988,62 @@ function renderVoiceResults(kind, query, list) {
 }
 function voiceSearchKind(kind, q) {
     return ensureCatalog(kind).then(function (cat) {
-        var all = (cat && cat.all) || [], scored = [];
+        var all = kidsFilterList((cat && cat.all) || []), scored = [];
         for (var i = 0; i < all.length; i++) { var sc = voiceMatchScore(all[i], q, kind); if (sc > 0) scored.push({ item: all[i], score: sc }); }
         scored.sort(function (a, b) { return b.score - a.score; });
         return { kind: kind, scored: scored };
     });
+}
+function universalSearchStyles() {
+    var a = S.accent || '#10b981';
+    return '<style>'
+        + '.universal-search-screen{position:fixed;inset:0;display:flex;flex-direction:column;overflow:hidden;background:radial-gradient(130% 100% at 50% 0%,#0e2019,#06130f 48%,#040907);color:#f4fff9;}'
+        + '.universal-search-screen .search-topbar{display:flex;align-items:center;gap:12px;padding:14px 20px 10px;flex:none;}'
+        + '.universal-search-screen .search-title{font-size:24px;font-weight:900;white-space:nowrap;}'
+        + '.universal-search-form{display:flex;gap:8px;align-items:center;padding:0 20px 12px;flex:none;}'
+        + '.universal-search-form input{flex:1;min-width:0;padding:12px 15px;border:2px solid ' + a + '55;border-radius:12px;background:#06130f;color:#fff;font-size:17px;outline:none;}'
+        + '.universal-search-form input:focus{border-color:' + a + ';box-shadow:0 0 0 3px ' + a + '33;}'
+        + '.universal-search-form button{flex:0 0 auto;border:1px solid ' + a + '66;border-radius:12px;padding:12px 17px;background:' + a + '20;color:#fff;font-size:16px;font-weight:800;cursor:pointer;}'
+        + '.universal-search-form button:focus{background:' + a + '45;border-color:#fff;outline:none;box-shadow:0 0 0 3px ' + a + '55;}'
+        + '#zx-universal-status{padding:0 20px 10px;color:#9db0a7;font-size:14px;flex:none;}'
+        + '#zx-universal-results{flex:1;min-height:0;overflow:auto;padding:0 20px 28px;}'
+        + '.universal-section{margin:0 0 24px;}.universal-section h2{margin:0 0 10px;font-size:21px;font-weight:900;color:#fff;}.universal-section h2 span{color:#9db0a7;font-size:13px;font-weight:600;margin-left:8px;}'
+        + '.universal-section .voice-search-screen{position:static;display:block;background:none;overflow:visible;}.universal-section .voice-channel-card{min-height:82px;}.universal-section .poster-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px 10px;}'
+        + '.universal-empty{padding:32px 12px;text-align:center;color:#9db0a7;font-size:17px;}'
+        + '@media (max-width:800px){.universal-search-screen .search-topbar{padding:10px 12px 7px;}.universal-search-screen .search-title{font-size:19px;}.universal-search-form{padding:0 12px 9px;}.universal-search-form input{font-size:14px;padding:10px 11px;}.universal-search-form button{font-size:13px;padding:10px 12px;}#zx-universal-status,#zx-universal-results{padding-left:12px;padding-right:12px;}.universal-section h2{font-size:18px;}.universal-section .poster-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 8px;}}'
+        + 'body.zx-ff-mobile .universal-section .poster-grid{grid-template-columns:repeat(auto-fill,minmax(132px,1fr));}'
+        + '</style>';
+}
+function universalSearchRun(query) {
+    var q = normVoiceText(query || '');
+    var status = $('zx-universal-status'), out = $('zx-universal-results');
+    if (!q) { if (status) status.textContent = 'Digite um nome ou fale o que deseja encontrar.'; if (out) out.innerHTML = '<div class="universal-empty">Pesquise em Canais, Filmes e Séries ao mesmo tempo.</div>'; return; }
+    if (status) status.textContent = 'Procurando em Canais, Filmes e Séries…';
+    if (out) out.innerHTML = '<div class="universal-empty">Carregando resultados…</div>';
+    showLoading(true);
+    Promise.all(['live','movies','series'].map(function (kind) { return ensureCatalog(kind).then(function (cat) { var src = kidsFilterList((cat && cat.all) || []), rows = []; for (var i = 0; i < src.length; i++) { var sc = voiceMatchScore(src[i], q, kind); if (sc > 0) rows.push({ item: src[i], score: sc }); } rows.sort(function (x, y) { return y.score - x.score; }); return { kind: kind, rows: rows.slice(0, 36) }; }).catch(function () { return { kind: kind, rows: [] }; }); })).then(function (groups) {
+        showLoading(false);
+        var labels = { live: 'Canais', movies: 'Filmes', series: 'Séries' }, html = '';
+        for (var i = 0; i < groups.length; i++) {
+            var g = groups[i], list = g.rows.map(function (x) { return x.item; });
+            if (!list.length) continue;
+            var body = g.kind === 'live' ? voiceChannelTiles(list) : '<div class="poster-grid">' + posterTiles(list, g.kind) + '</div>';
+            html += '<section class="universal-section"><h2>' + labels[g.kind] + '<span>' + list.length + ' resultado' + (list.length === 1 ? '' : 's') + '</span></h2>' + body + '</section>';
+        }
+        if (status) status.textContent = html ? 'Resultados para “' + query + '”.' : 'Nenhum resultado encontrado para “' + query + '”.';
+        if (out) out.innerHTML = html || '<div class="universal-empty">Nenhum resultado encontrado.</div>';
+        afterRender(); loadVoiceChannelLogos(); loadVoicePosterImages(); setTimeout(loadVoicePosterImages, 250);
+        if (out) out.addEventListener('click', function (e) { var row = e.target; while (row && row !== out && !((' ' + (row.className || '') + ' ').indexOf(' voice-channel-card ') >= 0)) row = row.parentNode; if (!row || row === out) return; e.preventDefault(); var sid = row.getAttribute('data-sid'), name = row.getAttribute('data-name') || ''; if (sid) playViaNative({ kind: 'live', url: streamUrl('live', sid), title: name, resume: 0, zxKind: 'live', zxId: sid, name: name, zap: liveFullZapList(sid) || liveZapList(sid) }); });
+        focusHomeStart();
+    });
+}
+function renderUniversalSearch() {
+    setHtml('<div class="search-screen universal-search-screen"><div class="search-topbar"><a href="/home" class="gt-back" autofocus>← Voltar</a><div class="search-title">Buscar em tudo</div></div><form class="universal-search-form" id="zx-universal-form" onsubmit="return false"><input id="zx-universal-query" type="search" autocomplete="off" placeholder="Canal, filme ou série…" aria-label="Buscar em tudo"><button type="submit">Buscar</button><button type="button" id="zx-universal-voice" title="Usar comando de voz" aria-label="Usar comando de voz">Falar</button></form><div id="zx-universal-status">Pesquise em Canais, Filmes e Séries ao mesmo tempo.</div><div id="zx-universal-results"><div class="universal-empty">Digite um nome para começar.</div></div></div>' + flatStyles() + voiceResultsStyles() + universalSearchStyles());
+    var form = $('zx-universal-form'), inp = $('zx-universal-query');
+    if (form) form.addEventListener('submit', function (e) { e.preventDefault(); universalSearchRun(inp ? inp.value : ''); });
+    if (inp) inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); universalSearchRun(inp.value); } });
+    var vb = $('zx-universal-voice'); if (vb) vb.addEventListener('click', function () { go('/home', false); setTimeout(startVoiceCommand, 140); });
+    afterRender(); try { if (inp) inp.focus(); } catch (e) {}
 }
 function chooseVoiceResult(found, q) {
     if (!found.length) return { kind: voiceKind(q), scored: [] };
@@ -2012,7 +2102,9 @@ function playVoiceExact(hit) {
     return false;
 }
 function runVoiceCommand(text) {
-    var raw = String(text || '').trim(), normalized = normVoiceText(raw), q = voiceCleanQuery(raw), explicitKind = /\b(filme|filmes|movie|movies|cinema|vod|serie|series|novela|novelas|temporada|episodio|episodios|anime)\b/.test(normalized), preferred = voiceKind(raw);
+    var raw = String(text || '').trim();
+    if (runVoiceIntent(raw)) return;
+    var normalized = normVoiceText(raw), q = voiceCleanQuery(raw), explicitKind = /\b(filme|filmes|movie|movies|cinema|vod|serie|series|novela|novelas|temporada|episodio|episodios|anime)\b/.test(normalized), preferred = voiceKind(raw);
     if (!q) { renderVoiceResults(preferred, raw, []); return; }
     showLoading(true);
     var order = explicitKind ? [preferred] : ['live', 'movies', 'series'];
@@ -2193,7 +2285,8 @@ function renderHome() {
         + '<div class="zh-date">' + esc(dateStr) + '</div></div>'
         + '<div class="zh-icons">'
         + '<a href="/lists" class="zh-tbtn">' + svg(svSrv) + '<span>Servidor</span></a>'
-        + '<button type="button" class="zh-tbtn ic zh-voice" id="zxVoiceBtn" aria-label="Comando de voz"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line><line x1="8" y1="22" x2="16" y2="22"></line></svg></button>'
+        + '<a href="/search" class="zh-tbtn ic" title="Buscar em tudo" aria-label="Buscar em tudo">' + svg(svSearch) + '</a>'
+        + '<button type="button" class="zh-tbtn ic zh-voice" id="zxVoiceBtn" title="Ultra Assistente" aria-label="Ultra Assistente — comando de voz"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line><line x1="8" y1="22" x2="16" y2="22"></line></svg></button>'
         + '<button type="button" class="zh-tbtn ic zh-radio" id="zxRadioBtn" aria-label="Rádios online"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M4.9 4.9a10 10 0 0 0 0 14.2M19.1 4.9a10 10 0 0 1 0 14.2M2 2l20 20"></path></svg></button>'
         + '<a href="/reload" class="zh-tbtn ic">' + svg(svRel) + '</a>'
         + '<a href="/settings" class="zh-tbtn ic">' + svg(svGer) + '</a>'
@@ -2207,6 +2300,7 @@ function renderHome() {
     var svSer = '<rect x="3" y="7" width="18" height="13" rx="2"></rect><path d="M8 7 5 3M16 7l3-4M12 7 12 3"></path>';
     var svPl = '<line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="16" y2="18"></line><circle cx="18.5" cy="18.5" r="3.2"></circle><path d="M18.5 17.1v2.8M17.1 18.5h2.8"></path>';
     var svHeart = '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 1 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8z"></path>';
+    var svSearch = '<circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path>';
     function tile(href, ic, label, subTxt, subId, atf, elId, remoteKey) {
         return '<a href="' + href + '" class="zh-tile"' + (elId ? ' id="' + elId + '"' : '') + (atf ? ' autofocus' : '') + '>'
             + '<span class="zh-ico">' + (remoteKey ? homeRemoteIconHtml(remoteKey, svg(ic)) : svg(ic)) + '</span>'
