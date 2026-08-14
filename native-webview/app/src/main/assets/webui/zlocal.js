@@ -496,12 +496,14 @@ function checkListNotifications() {
     fetchT(url, 9000, { cache: 'no-store', credentials: 'omit', headers: { 'Accept': 'application/json', 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' } })
         .then(function (r) { if (!r.ok) throw new Error('list_notifications_' + r.status); return r.json(); })
         .then(function (d) {
-            var list = d && Array.isArray(d.notifications) ? d.notifications.slice() : [];
-            list.sort(function (a, b) { return String(b.created_at || '').localeCompare(String(a.created_at || '')); });
-            for (var i = 0; i < list.length; i++) {
-                var n = list[i];
-                if (n && n.status === 'failure' && n.acknowledged !== true && !listNotificationWasSeen(n.id)) { showListNotification(n, mac); break; }
-            }
+            return processFailoverState(d, mac).then(function () {
+                var list = d && Array.isArray(d.notifications) ? d.notifications.slice() : [];
+                list.sort(function (a, b) { return String(b.created_at || '').localeCompare(String(a.created_at || '')); });
+                for (var i = 0; i < list.length; i++) {
+                    var n = list[i];
+                    if (n && n.status === 'failure' && n.acknowledged !== true && !listNotificationWasSeen(n.id)) { showListNotification(n, mac); break; }
+                }
+            });
         })
         .catch(function () {})
         .then(function () { S.listNotificationBusy = false; });
@@ -1456,6 +1458,63 @@ function directListModels(j) {
 function syncDirectListCache(done) {
     if (!S.directAuth || S.code !== '__mac__' || !S.user) { done(); return; }
     fetchT(DIRECT_PANEL_BASE + '/check_mac.php?mac=' + enc(S.user), 10000).then(function (r) { return r.json(); }).then(function (j) { var fresh = directListModels(j); if (fresh.length) { saveDirectPlaylists(fresh); S.directPlaylists = fresh; } }).catch(function () {}).then(done);
+}
+function fetchDirectListsForFailover() {
+    var cached = loadDirectPlaylists();
+    if (!S.directAuth || !S.user) return Promise.resolve(cached);
+    return fetchT(DIRECT_PANEL_BASE + '/check_mac.php?mac=' + enc(S.user), 10000, { cache: 'no-store', credentials: 'omit', headers: { 'Accept': 'application/json', 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' } })
+        .then(function (r) { return r.json(); })
+        .then(function (j) { var fresh = directListModels(j); if (fresh.length) { saveDirectPlaylists(fresh); S.directPlaylists = fresh; return fresh; } return cached; })
+        .catch(function () { return cached; });
+}
+function failoverStorageKey(mac) { return 'zx_failover_transition_' + String(mac || '').replace(/[^0-9A-F]/gi, '').toUpperCase(); }
+function failoverLastTransition(mac) { try { return localStorage.getItem(failoverStorageKey(mac)) || ''; } catch (e) { return ''; } }
+function failoverSaveTransition(mac, id) { try { localStorage.setItem(failoverStorageKey(mac), String(id)); } catch (e) {} }
+function chooseFailoverList(lists, d) {
+    if (!lists || !lists.length) return -1;
+    var state = String((d && d.failover_state) || '').toLowerCase();
+    if (state === 'primary_restored') return 0;
+    var wantedName = String((d && d.active_list_name) || '').trim().toLowerCase();
+    if (wantedName) for (var i = 0; i < lists.length; i++) if (String(lists[i].name || '').trim().toLowerCase() === wantedName) return i;
+    var n = parseInt(d && d.active_list_number, 10);
+    if (n > 0 && n <= lists.length) return n - 1;
+    return -1;
+}
+function switchDirectListBackground(index) {
+    var lists = S.directPlaylists && S.directPlaylists.length ? S.directPlaylists : loadDirectPlaylists();
+    var pick = parseInt(index, 10);
+    if (!lists.length || isNaN(pick) || !lists[pick]) return false;
+    var p = lists[pick], creds = playlistToXtream({ playlist_url: p.url, playlist_name: p.name, type: p.type }, p.name);
+    if (!creds && !p.server) return false;
+    var same = (parseInt(S.listIndex || activeListIndex(), 10) || 0) === pick && String(S.playlistUrl || '') === String(p.url || '');
+    S.listIndex = pick; S.server = p.server || (creds && creds.server) || S.server; S.playlistUrl = p.url; S.playlistType = p.type || 'xtream'; S.xtreamDerived = creds; S.xtreamUnavailable = false;
+    S.cat = { movies: null, series: null, live: null }; S.catPromises = {}; S.m3uCatalogPromise = null;
+    try { localStorage.setItem('zx_list_index', String(pick)); } catch (e) {}
+    saveCreds();
+    return !same;
+}
+function showListSyncToast(message) {
+    if (!message) return;
+    var old = $('zx-list-sync-toast'); if (old && old.parentNode) old.parentNode.removeChild(old);
+    var el = document.createElement('div'); el.id = 'zx-list-sync-toast';
+    el.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:100001;max-width:min(760px,92vw);padding:14px 18px;border:1px solid #10b981;border-radius:12px;background:rgba(7,28,19,.97);color:#f4fff9;font:600 15px/1.4 system-ui,-apple-system,Segoe UI,sans-serif;box-shadow:0 10px 32px rgba(0,0,0,.5);text-align:center;';
+    el.textContent = String(message);
+    document.body.appendChild(el);
+    setTimeout(function () { try { if (el.parentNode) el.parentNode.removeChild(el); } catch (e) {} }, 9000);
+}
+function processFailoverState(d, mac) {
+    if (!d || d.playlist_sync_required !== true) return Promise.resolve(false);
+    var transition = String(d.failover_transition_id || '');
+    if (!transition || transition === failoverLastTransition(mac)) return Promise.resolve(false);
+    return fetchDirectListsForFailover().then(function (lists) {
+        var pick = chooseFailoverList(lists, d);
+        if (pick < 0) return false;
+        var changed = switchDirectListBackground(pick);
+        failoverSaveTransition(mac, transition);
+        var msg = String(d.playlist_sync_message || '');
+        if (msg) showListSyncToast(msg);
+        return changed;
+    });
 }
 function directResponseToState(j, mode, fallback) {
     if (!j || j.success === false || j.authorized === false) return null;
