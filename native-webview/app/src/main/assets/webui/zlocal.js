@@ -43,7 +43,8 @@ var S = {
     adultOk: false,
     online: true,               // VPS (painel) alcançável?
     rawCss: '',
-    cat: { movies: null, series: null, live: null }   // {cats, byCat:{id:[...]}, all:[...]}
+    cat: { movies: null, series: null, live: null },   // {cats, byCat:{id:[...]}, all:[...]}
+    radioCache: {}, radioPromises: {}
 };
 
 /* ---------- helpers ---------- */
@@ -749,11 +750,20 @@ function applyWallpaper(url) {
 }
 function applyHomePanelWall() {
     try {
-        var el = document.querySelector('.zx-panel-wall');
-        if (!el) return;
+        var els = document.querySelectorAll('.zx-panel-wall,.zx-settings-wall');
+        if (!els || !els.length) return;
         var u = String((S.branding && S.branding.background_url) || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-        el.style.backgroundImage = u ? "url('" + u + "')" : 'none';
+        for (var i = 0; i < els.length; i++) els[i].style.backgroundImage = u ? "url('" + u + "')" : 'none';
     } catch (e) {}
+}
+function warmHomeCatalogs() {
+    if ((!S.server && !S.playlistUrl) || S._homeWarmStarted) return;
+    S._homeWarmStarted = true;
+    var kinds = ['movies', 'series', 'live'];
+    for (var i = 0; i < kinds.length; i++) (function (kind, delay) {
+        setTimeout(function () { ensureCatalog(kind).catch(function () {}); }, delay);
+    })(kinds[i], i * 180);
+    setTimeout(function () { radioLoadCategory(radioCategory('gospel')).catch(function () {}); }, 720);
 }
 function applyBranding(b) {
     if (!b) return;
@@ -1790,11 +1800,16 @@ function radioMerge(list) {
     out.sort(function (a, b) { return (b.clicks || 0) - (a.clicks || 0); }); return out.slice(0, 600);
 }
 function radioLoadCategory(cat) {
+    var key = (cat && cat.id) || 'gospel';
+    if (S.radioCache[key]) return Promise.resolve(S.radioCache[key]);
+    if (S.radioPromises[key]) return S.radioPromises[key];
     var tags = (cat && cat.tags) || [], hosts = ['de1.api.radio-browser.info','all.api.radio-browser.info'], req = [], base = { limit: 250, hidebroken: 'true', order: 'clickcount', reverse: 'true' };
     for (var i = 0; i < tags.length; i++) { var tp = {}; for (var tk in base) tp[tk] = base[tk]; tp.tag = tags[i]; if (cat && cat.countrycode) tp.countrycode = cat.countrycode; req.push(radioHttp(radioApiUrl(tp, hosts[0])).catch(function () { return []; })); }
     var featured = (cat && cat.featured) || [];
     for (var f = 0; f < featured.length; f++) { var np = {}; for (var nk in base) np[nk] = base[nk]; np.name = featured[f]; if (cat && cat.countrycode) np.countrycode = cat.countrycode; req.push(radioHttp(radioApiUrl(np, hosts[0])).catch(function () { return []; })); }
-    return Promise.all(req).then(function (chunks) { var all = []; for (var j = 0; j < chunks.length; j++) all = all.concat(chunks[j] || []); var merged = radioMerge(all); if (merged.length) return merged; var fallback = {}; for (var fk in base) fallback[fk] = base[fk]; fallback.tag = tags[0] || 'gospel'; if (cat && cat.countrycode) fallback.countrycode = cat.countrycode; return radioHttp(radioApiUrl(fallback, hosts[1])).then(function (x) { return radioMerge(x); }).catch(function () { return []; }); });
+    var work = Promise.all(req).then(function (chunks) { var all = []; for (var j = 0; j < chunks.length; j++) all = all.concat(chunks[j] || []); var merged = radioMerge(all); if (merged.length) return merged; var fallback = {}; for (var fk in base) fallback[fk] = base[fk]; fallback.tag = tags[0] || 'gospel'; if (cat && cat.countrycode) fallback.countrycode = cat.countrycode; return radioHttp(radioApiUrl(fallback, hosts[1])).then(function (x) { return radioMerge(x); }).catch(function () { return []; }); }).then(function (stations) { S.radioCache[key] = stations || []; delete S.radioPromises[key]; return S.radioCache[key]; }, function (err) { delete S.radioPromises[key]; throw err; });
+    S.radioPromises[key] = work;
+    return work;
 }
 function radioStyles() {
     var a = S.accent || '#10b981';
@@ -1976,6 +1991,7 @@ function renderHome() {
     }
     wireAnnounce(ann);
     afterRender();
+    try { setTimeout(warmHomeCatalogs, 220); } catch (e) {}
     focusHomeStart();   // foco SEMPRE no "TV ao Vivo" já MARCADO (o harness focaria "Servidor")
     // PERFIS: avatar do topo abre o "Quem está assistindo?"
     try {
@@ -3407,8 +3423,10 @@ function lazyGrid(grid) {
 function settingsStyles() {
     var a = S.accent || '#10b981';
     return '<style>'
-        + '.settings-screen{background:radial-gradient(130% 100% at 50% 0%,#0e2019,#0a1712 45%,#050d09);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}'
-        + '.settings-screen::before{content:"ULTRA";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) translateZ(0);font-size:38vw;font-weight:900;letter-spacing:-.03em;color:' + a + ';opacity:.04;pointer-events:none;white-space:nowrap;z-index:0;}'
+        + '.settings-screen{position:relative;overflow:hidden;background:transparent !important;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}'
+        + '.zx-settings-wall{position:absolute;inset:0;z-index:0;pointer-events:none;background-color:#080808;background-position:center center;background-repeat:no-repeat;background-size:cover;}'
+        + '.settings-screen::before{display:none !important;}'
+        + '.settings-screen .settings-back,.settings-screen .settings-header,.settings-screen .settings-layout{position:relative;z-index:1;}'
         // ⚠️ NÃO usar .settings-screen>*{position:relative} — mataria o position:absolute
         // do .settings-layout (menu+conteúdo) e a tela colapsa. Só o header precisa subir.
         + '.settings-header{position:relative;z-index:1;}'
@@ -3480,7 +3498,7 @@ function renderSettings() {
         + '<div id="zx-pin-msg" style="min-height:18px;font-size:14px;margin:2px 0 12px;color:#ff8c95"></div>'
         + '<button type="button" class="action-btn" id="zx-pin-save"><div class="ab-title">Salvar nova senha</div></button>'
         + '</div></div>';
-    setHtml(settingsStyles() + '<div class="settings-screen"><a href="/home" class="settings-back">← Voltar</a>'
+    setHtml(settingsStyles() + '<div class="settings-screen"><div class="zx-settings-wall" aria-hidden="true"></div><a href="/home" class="settings-back">← Voltar</a>'
         + '<div class="settings-header"><h1>Configurações</h1><div class="settings-sub">' + te('Personalize o seu ') + esc((S.branding && (S.branding.app_title)) || 'UltraPlayer') + '</div></div>'
         + '<div class="settings-layout"><div class="settings-menu" id="settings-menu">'
         + '<a href="#info" class="sm-item is-active" data-pane="pane-info" autofocus><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></span><span class="sm-label">Informação Geral</span></a>'
@@ -3501,6 +3519,7 @@ function renderSettings() {
         + ffPane + langPane + themePane + parentalPane
         + '<div class="settings-pane" id="pane-clear" style="display:none;"><div class="pane-title">Limpar Cache</div><div class="pane-sub">Use caso esteja tendo problemas com o app.</div><div class="pane-section"><button type="button" class="action-btn" id="btn-clear-cache"><div class="ab-title">Limpar cache local</div><div class="ab-sub">Remove dados temporários armazenados.</div></button></div></div>'
         + '</div></div></div>');
+    applyHomePanelWall();
     wireSettings();
     afterRender();
 }

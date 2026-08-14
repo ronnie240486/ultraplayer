@@ -10,8 +10,8 @@ android {
         applicationId 'com.ultraplayer.app'
         minSdk 21
         targetSdk 28
-        versionCode 60
-        versionName '4.23.0'
+        versionCode 61
+        versionName '4.24.0'
     }
 
     buildTypes {
