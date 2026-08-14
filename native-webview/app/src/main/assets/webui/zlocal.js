@@ -748,9 +748,10 @@ function applyBranding(b) {
     try { document.title = title; } catch (e) {}
     var saved = appThemeId();
     if (saved && saved !== 'verde') applyAppTheme(saved, false); else applyAccent(b.accent || '#10b981');
-    // Alguns painéis guardam a imagem enviada no campo banner_url. Ela também
-    // deve ocupar o fundo inteiro quando não existe background_url separado.
-    applyWallpaper(b.wallpaper_url || b.background_url || b.background || b.banner_url || '');
+    // O painel usa exclusivamente background_url para a imagem de fundo da
+    // home. Não usar bg_url/background/banner como fallback: esses campos podem
+    // conter a arte antiga ou um banner diferente do fundo escolhido.
+    applyWallpaper(b.background_url || '');
 }
 var ULTRA_CONFIG_ENDPOINT = 'https://renciaapp.manus.space/api/v5/ultra-config?mac=';
 function applyUltraConfig(j, rerender) {
@@ -763,8 +764,12 @@ function applyUltraConfig(j, rerender) {
     b.app_title = j.app_name || b.app_title || 'UltraPlayer';
     b.brand_name = j.app_name || b.brand_name || 'UltraPlayer';
     b.logo_url = j.logo_url || b.logo_url || '';
-    b.banner_url = j.banner_url || b.banner_url || '';
-    b.background_url = j.background_url || b.background_url || '';
+    // Limpa imagens antigas antes de aplicar a resposta atual do painel.
+    // background_url é o único campo aceito como fundo da tela principal.
+    b.banner_url = '';
+    b.wallpaper_url = '';
+    b.background = '';
+    b.background_url = j.background_url || '';
     b.message_image_url = j.message_image_url || b.message_image_url || '';
     b.impact_phrase = j.impact_phrase || b.impact_phrase || '';
     b.message_title = j.message_title || b.message_title || '';
@@ -1333,7 +1338,7 @@ function directResponseToState(j, mode, fallback) {
     S.playlistUrl = chosenUrl; S.playlistType = String(chosen.type || (chosenUrl.indexOf('get.php') >= 0 ? 'm3u_plus' : 'xtream')).toLowerCase();
     fetchUltraConfig();
     try { localStorage.setItem('zx_direct_mode', mode); if (mode === 'mac') localStorage.setItem('zx_mac', S.user); } catch (e) {}
-    var d = { ok: true, dns: { base: server, name: j.dns_titulo || '' }, license: { mac: j.mac || fallback || '', exp_date: expTs }, branding: { app_name: j.app_name || 'UltraPlayer', logo: j.logo_url || '', background: j.bg_url || '', banner: j.banner_url || '' } };
+    var d = { ok: true, dns: { base: server, name: j.dns_titulo || '' }, license: { mac: j.mac || fallback || '', exp_date: expTs }, branding: { app_name: j.app_name || 'UltraPlayer', logo: j.logo_url || '', background_url: '' } };
     S.cat = { movies: null, series: null, live: null }; S.m3uCatalogPromise = null; S.xtreamUnavailable = false; S.favDirty = { live: [], movie: [], series: [] };
     applyResolve(d, false); saveSnap(d); saveCreds(); go('/home', true); return true;
 }
@@ -2706,17 +2711,17 @@ function liveStyles() {
         // é % da tela, a conta continua dando 4 com a sidebar larga).
         + 'body.zx-ff-tv .cat-sidebar,body.ui-tv .cat-sidebar{width:17vw !important;max-width:17vw !important;padding:.55vw .3vw .55vw .5vw !important;}'
         + 'body.zx-ff-tv .sidebar-content,body.ui-tv .sidebar-content{left:17vw !important;padding:.55vw .7vw .7vw !important;}'
-        + 'body.zx-ff-tv .cat-sidebar .cat-pill,body.ui-tv .cat-sidebar .cat-pill{font-size:.9vw !important;padding-top:.78vw !important;padding-bottom:.78vw !important;padding-left:.65vw !important;padding-right:1.8vw !important;margin-bottom:.26vw !important;min-height:54px !important;border-radius:.5vw !important;line-height:1.12 !important;display:flex !important;align-items:center !important;}'
+        + 'body.zx-ff-tv .cat-sidebar .cat-pill,body.ui-tv .cat-sidebar .cat-pill{font-size:15px !important;padding-top:12px !important;padding-bottom:12px !important;padding-left:.65vw !important;padding-right:1.8vw !important;margin-bottom:6px !important;min-height:54px !important;border-radius:.5vw !important;line-height:1.18 !important;display:flex !important;align-items:center !important;}'
         + 'body.zx-ff-tv .cat-sidebar .cat-pill>span:first-child,body.ui-tv .cat-sidebar .cat-pill>span:first-child{white-space:normal !important;overflow:visible !important;text-overflow:clip !important;line-height:1.12 !important;}'
-        + 'body.zx-ff-tv .cat-sidebar .cat-pill .cat-count{font-size:.9vw;right:.8vw;margin-top:-.45vw;line-height:1vw;}'
+        + 'body.zx-ff-tv .cat-sidebar .cat-pill .cat-count{font-size:13px !important;right:.8vw;margin-top:-7px;line-height:1.1;}'
         + 'body.zx-ff-tv .cat-sidebar .cat-lock{width:.8vw;height:.8vw;}'
         + 'body.zx-ff-tv .cat-sidebar{overflow-y:auto !important;scroll-behavior:auto !important;}'
         + 'body.zx-ff-tv .cat-sidebar .cat-pill:focus-visible{scroll-margin-top:12px;scroll-margin-bottom:12px;}'
         + 'body.zx-ff-tv .sidebar-content .sc-title{font-size:1.8vw;margin-bottom:1.1vw;}'
         + 'body.zx-ff-tv .live-split .channel-tile-tv,body.ui-tv .live-split .channel-tile-tv{min-height:44px !important;height:50px !important;padding:4px 6px !important;margin-bottom:3px !important;border-radius:7px !important;}'
         + 'body.zx-ff-tv .live-split .channel-tile-tv .ct-logo,body.ui-tv .live-split .channel-tile-tv .ct-logo{width:22px !important;height:22px !important;margin-right:4px !important;border-radius:4px !important;}'
-        + 'body.zx-ff-tv .live-split .channel-tile-tv .ct-name,body.ui-tv .live-split .channel-tile-tv .ct-name{font-size:.5vw !important;line-height:1.02 !important;}'
-        + 'body.zx-ff-tv .live-split .channel-tile-tv .ct-num,body.ui-tv .live-split .channel-tile-tv .ct-num{font-size:.4vw !important;margin-bottom:0 !important;}'
+        + 'body.zx-ff-tv .live-split .channel-tile-tv .ct-name,body.ui-tv .live-split .channel-tile-tv .ct-name{font-size:14px !important;line-height:1.12 !important;}'
+        + 'body.zx-ff-tv .live-split .channel-tile-tv .ct-num,body.ui-tv .live-split .channel-tile-tv .ct-num{font-size:11px !important;margin-bottom:1px !important;}'
         + '.cat-sidebar .cat-pill:hover{border-color:' + a + '80;}'
         + '.cat-sidebar .cat-pill .cat-count{color:#8fa39a;}'
         + '.cat-sidebar .cat-pill:focus{background:' + a + '2e;border-color:' + a + ';box-shadow:0 0 0 3px ' + a + '66;color:#fff;outline:none;}'
