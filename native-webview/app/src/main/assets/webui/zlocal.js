@@ -736,13 +736,13 @@ function applyWallpaper(url) {
         // antiga nem criar uma segunda camada por baixo.
         st.textContent = ".bg-diamonds{background-color:transparent !important;background-image:none !important;}"
             + "#app-root,.app-root{background-color:transparent !important;background-image:url('" + safe + "') !important;background-position:center center;background-repeat:no-repeat;background-size:cover;background-attachment:fixed;}"
-            + '.sidebar-screen,.zx-home2,.home-screen,.radio-screen,.search-screen,.settings-screen{background-color:transparent !important;background-image:none !important;}'
+            + '.sidebar-screen,.zx-home2,.home-screen,.radio-screen,.search-screen,.settings-screen,.detail-screen,.detail-bg,.category-screen,.cat-screen,.content-screen,.live-screen{background-color:transparent !important;background-image:none !important;}'
             + '.zx-home2{background:transparent !important;}.zx-home2 .zh-amb,.zx-home2 .zh-wm{display:none !important;}';
     } else {
         // Sem imagem do painel, remove a arte antiga do root e deixa apenas a
         // cor do tema, sem fallback para bg_url/background/banner.
         st.textContent = '.bg-diamonds{background-color:transparent !important;background-image:none !important;}#app-root,.app-root{background-color:#080808 !important;background-image:none !important;}'
-            + '.sidebar-screen,.zx-home2,.home-screen,.radio-screen,.search-screen,.settings-screen{background-color:transparent !important;background-image:none !important;}'
+            + '.sidebar-screen,.zx-home2,.home-screen,.radio-screen,.search-screen,.settings-screen,.detail-screen,.detail-bg,.category-screen,.cat-screen,.content-screen,.live-screen{background-color:transparent !important;background-image:none !important;}'
             + '.zx-home2{background:transparent !important;}.zx-home2 .zh-amb,.zx-home2 .zh-wm{display:none !important;}';
     }
 }
@@ -796,7 +796,10 @@ function fetchUltraConfig() {
     var mac = getAppMac();
     if (!mac) return Promise.resolve(null);
     // Única fonte de branding do UltraPlayer: /api/v5/ultra-config.
-    return fetchT(ULTRA_CONFIG_ENDPOINT + enc(mac), 10000, { credentials: 'omit', headers: { 'Accept': 'application/json' } }).then(function (r) { return r.json(); }).then(function (j) { applyUltraConfig(j, true); return j; }).catch(function () { var cached = lsGet('zx_ultra_config'); if (cached) applyUltraConfig(cached, false); return null; });
+    // Remove a configuração antiga e não usa fallback visual cacheado: se o
+    // painel mudou a imagem, a próxima abertura deve refletir imediatamente.
+    try { localStorage.removeItem('zx_ultra_config'); } catch (e) {}
+    return fetchT(ULTRA_CONFIG_ENDPOINT + enc(mac), 10000, { cache: 'no-store', credentials: 'omit', headers: { 'Accept': 'application/json', 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' } }).then(function (r) { return r.json(); }).then(function (j) { applyUltraConfig(j, true); return j; }).catch(function () { return null; });
 }
 function loadCss() {
     // ⚠️ Android WebView BLOQUEIA fetch() de file:// — MAS o XMLHttpRequest
