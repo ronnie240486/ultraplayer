@@ -273,8 +273,19 @@ function getDid() {
 function loadDirectPlaylists() {
     try { var list = JSON.parse(localStorage.getItem('zx_direct_playlists') || '[]'); return Array.isArray(list) ? list : []; } catch (e) { return []; }
 }
+function expiryTimestamp(value) {
+    if (value === null || value === undefined || value === '') return 0;
+    if (typeof value === 'number' && isFinite(value)) return value > 20000000000 ? Math.floor(value / 1000) : Math.floor(value);
+    var s = String(value).trim(); if (!s) return 0;
+    if (/^\d+$/.test(s)) { var n = Number(s); return n > 20000000000 ? Math.floor(n / 1000) : Math.floor(n); }
+    var d = new Date(s); return isNaN(d.getTime()) ? 0 : Math.floor(d.getTime() / 1000);
+}
+function listExpiryValue(p) {
+    p = p || {};
+    return p.expire_date || p.expireDate || p.dataExpiracao || p.expiration_date || p.expires_at || p.valid_until || p.validUntil || p.expiry_date || p.expiry || '';
+}
 function saveDirectPlaylists(list) {
-    try { localStorage.setItem('zx_direct_playlists', JSON.stringify((list || []).map(function (p) { return { id: String(p.id), name: p.name || 'Lista', url: p.url || '', type: p.type || '', server: p.server || '' }; }))); } catch (e) {}
+    try { localStorage.setItem('zx_direct_playlists', JSON.stringify((list || []).map(function (p) { return { id: String(p.id), name: p.name || 'Lista', url: p.url || '', type: p.type || '', server: p.server || '', expire_date: listExpiryValue(p) || '' }; }))); } catch (e) {}
 }
 function activeListIndex() { var n = 0; try { n = parseInt(localStorage.getItem('zx_list_index') || '0', 10) || 0; } catch (e) {} return n < 0 ? 0 : n; }
 function saveCreds() { try { localStorage.setItem('zx_creds', JSON.stringify({ code: S.code, user: S.user, pass: S.pass, playlistUrl: S.playlistUrl || '', playlistType: S.playlistType || '', listIndex: S.listIndex || 0 })); } catch (e) {} }
@@ -1451,7 +1462,7 @@ function directListModels(j) {
         var lp = list[li] || {}, lu = String(lp.playlist_url || lp.url || ''); if (!lu) continue;
         var lc = playlistToXtream(lp, 'Lista ' + (li + 1));
         var lsrv = lc ? lc.server : ''; try { if (!lsrv) { var lpu = new URL(lu); lsrv = lpu.protocol + '//' + lpu.host; } } catch (e) {}
-        available.push({ id: String(li), name: String(lp.playlist_name || lp.name || lp.title || ('Lista ' + (li + 1))), url: lu, type: String(lp.type || (lu.indexOf('get.php') >= 0 ? 'm3u_plus' : 'xtream')).toLowerCase(), server: lsrv });
+        available.push({ id: String(li), name: String(lp.playlist_name || lp.name || lp.title || ('Lista ' + (li + 1))), url: lu, type: String(lp.type || (lu.indexOf('get.php') >= 0 ? 'm3u_plus' : 'xtream')).toLowerCase(), server: lsrv, expire_date: listExpiryValue(lp) || '' });
     }
     return available;
 }
@@ -1488,6 +1499,7 @@ function switchDirectListBackground(index) {
     if (!creds && !p.server) return false;
     var same = (parseInt(S.listIndex || activeListIndex(), 10) || 0) === pick && String(S.playlistUrl || '') === String(p.url || '');
     S.listIndex = pick; S.server = p.server || (creds && creds.server) || S.server; S.playlistUrl = p.url; S.playlistType = p.type || 'xtream'; S.xtreamDerived = creds; S.xtreamUnavailable = false;
+    try { S.info = S.info || {}; S.info.license = S.info.license || {}; var backgroundExpiry = expiryTimestamp(listExpiryValue(p)); if (backgroundExpiry) S.info.license.exp_date = backgroundExpiry; } catch (e) {}
     S.cat = { movies: null, series: null, live: null }; S.catPromises = {}; S.m3uCatalogPromise = null;
     try { localStorage.setItem('zx_list_index', String(pick)); } catch (e) {}
     saveCreds();
@@ -1530,8 +1542,7 @@ function directResponseToState(j, mode, fallback) {
     var server = creds ? creds.server : '';
     try { if (!server) { var pu = new URL(chosenUrl); server = pu.protocol + '//' + pu.host; } } catch (e) {}
     if (!server) return null;
-    var exp = j.expire_date || j.dataExpiracao || null, expTs = 0;
-    if (exp) { var dt = new Date(exp); if (!isNaN(dt.getTime())) expTs = Math.floor(dt.getTime() / 1000); }
+    var exp = listExpiryValue(chosenInfo) || j.expire_date || j.dataExpiracao || null, expTs = expiryTimestamp(exp);
     S.directAuth = true;
     S.code = mode === 'mac' ? '__mac__' : '__credentials__';
     S.user = mode === 'mac' ? String(j.mac || fallback || '') : String(fallback || j.username || '');
@@ -1651,6 +1662,7 @@ function switchDirectList(index) {
     var p = lists[pick], creds = playlistToXtream({ playlist_url: p.url, playlist_name: p.name, type: p.type }, p.name);
     if (!creds && !p.server) return;
     S.listIndex = pick; S.server = p.server || (creds && creds.server) || S.server; S.playlistUrl = p.url; S.playlistType = p.type || 'xtream'; S.xtreamDerived = creds; S.xtreamUnavailable = false; S.cat = { movies: null, series: null, live: null }; S.m3uCatalogPromise = null;
+    try { S.info = S.info || {}; S.info.license = S.info.license || {}; var manualExpiry = expiryTimestamp(listExpiryValue(p)); if (manualExpiry) S.info.license.exp_date = manualExpiry; } catch (e) {}
     try { localStorage.setItem('zx_list_index', String(pick)); } catch (e) {}
     saveCreds();
     go('/home', true);
