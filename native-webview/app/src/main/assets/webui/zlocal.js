@@ -1556,9 +1556,18 @@ function directListModels(j) {
     }
     return available;
 }
+function applyActiveDirectListExpiry(lists) {
+    try {
+        var all = Array.isArray(lists) ? lists : [], pick = activeListIndex();
+        var p = all[pick] || all[0] || {}, raw = listExpiryValue(p), ts = expiryTimestamp(raw);
+        S.info = S.info || {}; S.info.license = S.info.license || {};
+        if (ts) { S.info.license.exp_date = ts; S.info.license.exp_display = ''; }
+        else { delete S.info.license.exp_date; delete S.info.license.exp_display; }
+    } catch (e) {}
+}
 function syncDirectListCache(done) {
     if (!S.directAuth || S.code !== '__mac__' || !S.user) { done(); return; }
-    fetchT(DIRECT_PANEL_BASE + '/check_mac.php?mac=' + enc(S.user), 10000).then(function (r) { return r.json(); }).then(function (j) { var fresh = directListModels(j); if (fresh.length) { saveDirectPlaylists(fresh); S.directPlaylists = fresh; } }).catch(function () {}).then(done);
+    fetchT(DIRECT_PANEL_BASE + '/check_mac.php?mac=' + enc(S.user), 10000, { cache: 'no-store', credentials: 'omit', headers: { 'Accept': 'application/json', 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' } }).then(function (r) { return r.json(); }).then(function (j) { var fresh = directListModels(j); if (fresh.length) { saveDirectPlaylists(fresh); S.directPlaylists = fresh; applyActiveDirectListExpiry(fresh); } }).catch(function () {}).then(done);
 }
 function fetchDirectListsForFailover() {
     var cached = loadDirectPlaylists();
@@ -1589,7 +1598,7 @@ function switchDirectListBackground(index) {
     if (!creds && !p.server) return false;
     var same = (parseInt(S.listIndex || activeListIndex(), 10) || 0) === pick && String(S.playlistUrl || '') === String(p.url || '');
     S.listIndex = pick; S.server = p.server || (creds && creds.server) || S.server; S.playlistUrl = p.url; S.playlistType = p.type || 'xtream'; S.xtreamDerived = creds; S.xtreamUnavailable = false;
-    try { S.info = S.info || {}; S.info.license = S.info.license || {}; var backgroundExpiry = expiryTimestamp(listExpiryValue(p)); if (backgroundExpiry) S.info.license.exp_date = backgroundExpiry; } catch (e) {}
+    applyActiveDirectListExpiry(lists);
     S.cat = { movies: null, series: null, live: null }; S.catPromises = {}; S.m3uCatalogPromise = null;
     try { localStorage.setItem('zx_list_index', String(pick)); } catch (e) {}
     saveCreds();
@@ -1752,7 +1761,7 @@ function switchDirectList(index) {
     var p = lists[pick], creds = playlistToXtream({ playlist_url: p.url, playlist_name: p.name, type: p.type }, p.name);
     if (!creds && !p.server) return;
     S.listIndex = pick; S.server = p.server || (creds && creds.server) || S.server; S.playlistUrl = p.url; S.playlistType = p.type || 'xtream'; S.xtreamDerived = creds; S.xtreamUnavailable = false; S.cat = { movies: null, series: null, live: null }; S.m3uCatalogPromise = null;
-    try { S.info = S.info || {}; S.info.license = S.info.license || {}; var manualExpiry = expiryTimestamp(listExpiryValue(p)); if (manualExpiry) S.info.license.exp_date = manualExpiry; } catch (e) {}
+    applyActiveDirectListExpiry(lists);
     try { localStorage.setItem('zx_list_index', String(pick)); } catch (e) {}
     saveCreds();
     go('/home', true);
@@ -3418,6 +3427,15 @@ function detailStyles() {
         + '.btn-tv:focus{background:' + a + '2e;color:#fff;border-color:' + a + ';box-shadow:0 0 0 3px ' + a + '66;outline:none;}'
         + '.btn-tv.is-primary{background:' + a + ';color:#04231a;border-color:' + a + ';}'
         + '.btn-tv.is-primary:focus{background:#0fcf93;border-color:#fff;box-shadow:0 0 0 3px ' + a + '66;color:#04231a;}'
+        // Ações do detalhe em uma única linha: Reproduzir → Trailer → Favoritos.
+        + '.detail-hero .dh-buttons{display:flex;flex-wrap:nowrap;align-items:stretch;gap:10px;max-width:min(100%,760px);overflow-x:auto;overflow-y:hidden;}'
+        + '.detail-hero .dh-buttons>*{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;min-width:0;margin:0;box-sizing:border-box;white-space:nowrap;padding:12px 14px;font-size:clamp(11px,1.55vw,17px);}'
+        + '.detail-hero .dh-buttons>.btn-tv{height:auto;}'
+        + '.detail-hero .dh-buttons .btn-icon{flex:0 0 auto;width:18px;height:18px;margin-right:7px;}'
+        + '.detail-hero .dh-buttons .btn-tv.is-fav{border-color:' + a + ';}'
+        + 'body.zx-ff-mobile .detail-hero .dh-buttons{gap:6px;}'
+        + 'body.zx-ff-mobile .detail-hero .dh-buttons>*{padding:9px 9px;font-size:clamp(10px,1.85vw,14px);}'
+        + 'body.zx-ff-mobile .detail-hero .dh-buttons .btn-icon{width:16px;height:16px;margin-right:5px;}'
         // temporadas + episódios
         + '.season-pill{background:' + a + '0d;border:1px solid ' + a + '24;border-radius:12px;color:#e7efe9;}'
         + '.season-pill:focus{background:' + a + '2e;color:#fff;border-color:' + a + ';box-shadow:0 0 0 3px ' + a + '66;outline:none;}'
@@ -3463,7 +3481,7 @@ function renderDetailMovie(id) {
             + '<div class="dh-buttons">'
                         + playBtns
             + '<button type="button" class="btn-tv trailer-detail-btn" data-trailer-title="' + attr(name) + '" data-trailer-kind="movie" data-trailer-url="' + attr(info.youtube_trailer || md.youtube_trailer || info.trailer || '') + '"><span class="btn-icon">▶</span>Trailer</button>'
-            + '<button type="button" class="btn-tv" id="btn-favorite" data-kind="movie" data-id="' + attr(id) + '" data-name="' + attr(name) + '" data-poster="' + attr(cover) + '"><span class="btn-icon" id="fav-icon">' + (isFav ? '♥' : '+') + '</span><span id="fav-text">' + (isFav ? 'Remover dos Favoritos' : 'Favoritos') + '</span></button>'
+            + '<button type="button" class="btn-tv" id="btn-favorite" data-kind="movie" data-id="' + attr(id) + '" data-name="' + attr(name) + '" data-poster="' + attr(cover) + '"><span class="btn-icon" id="fav-icon">' + (isFav ? '♥' : '+') + '</span><span id="fav-text">' + 'Favoritos' + '</span></button>'
             + '</div></div></div>'
             + '<div class="dh-similar-lazy" data-cat="' + attr(info.category_id || md.category_id || '') + '"></div></div>' + detailStyles());
         S.playExt = ext; S.playName = name; S.playPoster = cover; S.playSeries = null;
@@ -3492,7 +3510,7 @@ function m3uDetail(kind, id) {
         + '<p class="dh-plot">Conteúdo disponível na sua lista.</p><div class="dh-buttons">'
         + '<a class="btn-tv is-primary" href="' + playHref + '" data-ext="' + attr(ext) + '" autofocus><span class="btn-icon">▶</span>Reproduzir</a>'
         + '<button type="button" class="btn-tv trailer-detail-btn" data-trailer-title="' + attr(name) + '" data-trailer-kind="' + (kind === 'series' ? 'series' : 'movie') + '" data-trailer-url=""><span class="btn-icon">▶</span>Trailer</button>'
-        + '<button type="button" class="btn-tv" id="btn-favorite" data-kind="' + (kind === 'movies' ? 'movie' : 'series') + '" data-id="' + attr(id) + '" data-name="' + attr(name) + '" data-poster="' + attr(poster) + '"><span class="btn-icon" id="fav-icon">' + (isFav ? '♥' : '+') + '</span><span id="fav-text">' + (isFav ? 'Remover dos Favoritos' : 'Favoritos') + '</span></button>'
+        + '<button type="button" class="btn-tv" id="btn-favorite" data-kind="' + (kind === 'movies' ? 'movie' : 'series') + '" data-id="' + attr(id) + '" data-name="' + attr(name) + '" data-poster="' + attr(poster) + '"><span class="btn-icon" id="fav-icon">' + (isFav ? '♥' : '+') + '</span><span id="fav-text">' + 'Favoritos' + '</span></button>'
         + '</div></div></div></div>' + detailStyles());
     S.playName = name; S.playPoster = poster; S.playExt = ext;
     if (kind === 'series') S.playSeries = { id: parseInt(id, 10), name: name, poster: poster, list: [{ id: parseInt(id, 10), ext: ext, s: 1, e: 1 }] };
@@ -3551,7 +3569,7 @@ function renderDetailSeries(id) {
         setHtml('<div class="detail-screen" id="series-detail"><div class="detail-bg"' + (bg ? ' style="background-image:url(\'' + attr(bg) + '\')"' : '') + '></div>'
             + '<div class="detail-hero"><a href="javascript:history.back()" class="dh-back">← Voltar</a>'
             + '<div class="dh-content"><h1>' + esc(name) + '</h1><div class="dh-meta">' + badges + '</div><p class="dh-plot">' + esc(plot) + '</p>'
-            + '<div class="dh-buttons">' + playBtn + '<button type="button" class="btn-tv trailer-detail-btn" data-trailer-title="' + attr(name) + '" data-trailer-kind="series" data-trailer-url="' + attr(info.youtube_trailer || info.trailer || '') + '"><span class="btn-icon">▶</span>Trailer</button><button type="button" class="btn-tv" id="btn-favorite" data-kind="series" data-id="' + attr(id) + '" data-name="' + attr(name) + '" data-poster="' + attr(cover) + '"><span class="btn-icon" id="fav-icon">' + (isFav ? '♥' : '+') + '</span><span id="fav-text">' + (isFav ? 'Remover dos Favoritos' : 'Favoritos') + '</span></button></div>'
+            + '<div class="dh-buttons">' + playBtn + '<button type="button" class="btn-tv trailer-detail-btn" data-trailer-title="' + attr(name) + '" data-trailer-kind="series" data-trailer-url="' + attr(info.youtube_trailer || info.trailer || '') + '"><span class="btn-icon">▶</span>Trailer</button><button type="button" class="btn-tv" id="btn-favorite" data-kind="series" data-id="' + attr(id) + '" data-name="' + attr(name) + '" data-poster="' + attr(cover) + '"><span class="btn-icon" id="fav-icon">' + (isFav ? '♥' : '+') + '</span><span id="fav-text">' + 'Favoritos' + '</span></button></div>'
             + '</div></div>' + seasonsBlock + '</div>' + detailStyles());
         // contexto da série p/ o "Continue Assistindo" do player de episódio
         // (o continue de série usa o series_id + nome/capa da SÉRIE, não do ep).
@@ -3571,10 +3589,18 @@ function wireSeasons() {
 }
 function wireFavBtn() {
     var btn = $('btn-favorite'); if (!btn) return;
+    function paint(on) {
+        var icon = $('fav-icon'), text = $('fav-text');
+        if (icon) icon.textContent = on ? '♥' : '+';
+        if (text) text.textContent = t('Favoritos');
+        btn.setAttribute('aria-label', on ? t('Remover dos Favoritos') : t('Favoritos'));
+        btn.className = btn.className.replace(/\s*is-fav\b/g, '') + (on ? ' is-fav' : '');
+    }
+    paint(inArr(S.fav[btn.getAttribute('data-kind') === 'movie' ? 'movie' : 'series'], btn.getAttribute('data-id')));
     btn.addEventListener('click', function (e) {
         e.preventDefault();
         var on = favToggle(btn.getAttribute('data-kind'), btn.getAttribute('data-id'), btn.getAttribute('data-name'), btn.getAttribute('data-poster'));
-        $('fav-icon').textContent = on ? '♥' : '+'; $('fav-text').textContent = on ? t('Remover dos Favoritos') : t('Favoritos');
+        paint(on);
         updateFavCounts();   // se a sidebar estiver visível atrás, o contador já muda
     });
 }
@@ -5251,6 +5277,8 @@ function boot() {
             else { renderOfflineFirst(); }
         });
     }
+    // MAC: atualiza a validade real do painel mesmo quando a Home abriu de um snapshot antigo.
+    if (S.directAuth) syncDirectListCache(function () { if (document.querySelector('.zx-home2')) renderHome(); });
     // branding standalone (atualiza se o resolve não trouxe) — silencioso
     api('branding').then(function (b) { if (b && b.ok) applyBranding(b); });
 }
