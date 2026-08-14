@@ -1064,13 +1064,14 @@ function channelTile(s, i) {
     var name = s.name || 'Canal';
     var num = parseInt(s.num || (i + 1), 10);
     var logo = s.stream_icon || '';
-    var catName = s.category_name || s.group || s.group_title || '';
-    if (!catName) {
-        try {
-            var liveCats = S.cat.live && S.cat.live.cats || [], cid = String(s.category_id || '');
-            for (var ci = 0; ci < liveCats.length; ci++) if (String(liveCats[ci].category_id || '') === cid) { catName = liveCats[ci].category_name || ''; break; }
-        } catch (e) {}
-    }
+    // O ID do catálogo é mais confiável que category_name/group, que algumas
+    // listas devolvem como um rótulo genérico (por exemplo, ABERTOS).
+    var catName = '';
+    try {
+        var liveCats = S.cat.live && S.cat.live.cats || [], cid = String(s.category_id || '');
+        for (var ci = 0; ci < liveCats.length; ci++) if (String(liveCats[ci].category_id || '') === cid) { catName = liveCats[ci].category_name || ''; break; }
+    } catch (e) {}
+    if (!catName) catName = s.category_name || s.group || s.group_title || '';
     var isFav = inArr(S.fav.live, sid);
     return '<a class="channel-tile-tv" tabindex="0"'
         + ' data-href="/live/channel/' + sid + '?name=' + encodeURIComponent(name) + '&logo=' + encodeURIComponent(logo) + '"'
@@ -3327,7 +3328,7 @@ var h = '';
             if (nsid && row === lastEl) {
                 try { if (global.HdxNative && global.HdxNative.miniStop) global.HdxNative.miniStop(); } catch (e) {}
                 trackRecent(nsid, nnm, nlogo, 0);
-                playViaNative({ kind: 'live', url: streamUrl('live', nsid), title: nnm, resume: 0, zxKind: 'live', zxId: nsid, name: nnm, zap: liveZapList(nsid) });
+                playViaNative({ kind: 'live', url: streamUrl('live', nsid), title: nnm, resume: 0, zxKind: 'live', zxId: nsid, name: nnm, zap: liveFullZapList(nsid) || liveZapList(nsid) });
                 return;
             }
             lastEl = row; lastT = nowNative;
@@ -4069,16 +4070,27 @@ function liveFullZapList(sid) {
         for (var i = 0; i < all.length; i++) {
             var item = all[i] || {}, id = parseInt(item.stream_id || 0, 10);
             if (!id) continue;
-            var cat = item.category_name || item.group || item.group_title || '';
-            if (!cat) {
-                var cid = String(item.category_id || '');
-                for (var ci = 0; ci < cats.length; ci++) if (String(cats[ci].category_id || '') === cid) { cat = cats[ci].category_name || ''; break; }
-            }
+            // O Xtream pode trazer um `category_name` genérico (por exemplo,
+            // ABERTOS) mesmo quando `category_id` aponta para a categoria real.
+            // No menu transparente do player, o ID do catálogo é a fonte correta.
+            var cat = '';
+            var cid = String(item.category_id || '');
+            for (var ci = 0; ci < cats.length; ci++) if (String(cats[ci].category_id || '') === cid) { cat = cats[ci].category_name || ''; break; }
+            if (!cat) cat = item.category_name || item.group || item.group_title || '';
             if (String(id) === String(sid)) idx = out.length;
             out.push({ i: id, t: item.name || (t('Canal') + ' ' + id), c: cat, u: streamUrl('live', id) });
         }
         if (!out.length) return null;
-        return { list: out, index: idx < 0 ? 0 : idx };
+        var categoryNames = [], seenCategories = {};
+        for (var cix = 0; cix < cats.length; cix++) {
+            var listedName = String(cats[cix].category_name || '').trim();
+            if (listedName && !seenCategories[listedName]) { seenCategories[listedName] = 1; categoryNames.push(listedName); }
+        }
+        for (var oix = 0; oix < out.length; oix++) {
+            var itemName = String(out[oix].c || '').trim();
+            if (itemName && !seenCategories[itemName]) { seenCategories[itemName] = 1; categoryNames.push(itemName); }
+        }
+        return { list: out, index: idx < 0 ? 0 : idx, categories: categoryNames };
     } catch (e) { return null; }
 }
 function liveZapList(sid) {
@@ -4117,6 +4129,7 @@ function playViaNative(opts) {
             resume: opts.resume || 0, id: String(opts.zxId || ''),
             has_next: !!(opts.nextEp),  // série com próximo ep → ExoPlayer mostra "Próximo"
             zap: opts.zap ? opts.zap.list : (opts.kind === 'live' ? ((liveFullZapList(opts.zxId) || {}).list || undefined) : undefined),        // menu completo e zapping
+            zap_categories: opts.zap ? (opts.zap.categories || []) : (opts.kind === 'live' ? ((liveFullZapList(opts.zxId) || {}).categories || []) : []),
             zap_index: opts.zap ? opts.zap.index : (opts.kind === 'live' ? ((liveFullZapList(opts.zxId) || {}).index || 0) : undefined)
         }));
     } catch (e) {}
@@ -4201,7 +4214,7 @@ function renderPlayerLive(sid, query) {
     var qs = parseQuery(query); var name = qs.name || t('Canal');
     if (nativeAvail()) {
         trackRecent(sid, name, qs.logo || '', 0);
-        playViaNative({ kind: 'live', url: streamUrl('live', sid), title: name, resume: 0, zxKind: 'live', zxId: sid, name: name, zap: liveZapList(sid) });
+        playViaNative({ kind: 'live', url: streamUrl('live', sid), title: name, resume: 0, zxKind: 'live', zxId: sid, name: name, zap: liveFullZapList(sid) || liveZapList(sid) });
         history.back(); return;                   // volta pro grid; ExoPlayer abre por cima
     }
     setHtml(playerShell('live', name));

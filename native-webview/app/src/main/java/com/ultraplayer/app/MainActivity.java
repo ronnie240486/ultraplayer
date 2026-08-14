@@ -554,6 +554,13 @@ public final class MainActivity extends Activity {
                 return;
             }
             java.util.LinkedHashSet<String> cats = new java.util.LinkedHashSet<>();
+            org.json.JSONArray zapCategories = current.optJSONArray("zap_categories");
+            if (zapCategories != null) {
+                for (int i = 0; i < zapCategories.length(); i++) {
+                    String listedCategory = zapCategories.optString(i, "").trim();
+                    if (!listedCategory.isEmpty()) cats.add(listedCategory);
+                }
+            }
             for (int i = 0; i < zap.length(); i++) {
                 JSONObject item = zap.optJSONObject(i);
                 if (item == null || item.optString("u", "").isEmpty()) continue;
