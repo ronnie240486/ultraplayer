@@ -745,6 +745,15 @@ function applyWallpaper(url) {
             + '.sidebar-screen,.zx-home2,.home-screen,.radio-screen,.search-screen,.settings-screen,.detail-screen,.detail-bg,.category-screen,.cat-screen,.content-screen,.live-screen{background-color:transparent !important;background-image:none !important;}'
             + '.zx-home2{background:transparent !important;}.zx-home2 .zh-amb,.zx-home2 .zh-wm{display:none !important;}';
     }
+    try { applyHomePanelWall(); } catch (e) {}
+}
+function applyHomePanelWall() {
+    try {
+        var el = document.querySelector('.zx-panel-wall');
+        if (!el) return;
+        var u = String((S.branding && S.branding.background_url) || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        el.style.backgroundImage = u ? "url('" + u + "')" : 'none';
+    } catch (e) {}
 }
 function applyBranding(b) {
     if (!b) return;
@@ -1943,8 +1952,9 @@ function renderHome() {
 
     // announceStyles: SEM ele a faixa/pop-up de aviso do painel renderiza CRUA no
     // canto (o redesign da home tinha deixado a função órfã — bug 19/07).
-    setHtml('<div class="zx-home2">' + homeRemoteBannerHtml() + bannerHtml + '<div class="zh-amb"></div><div class="zh-wm" aria-hidden="true">ULTRA</div><div class="zh-ui">'
+    setHtml('<div class="zx-home2"><div class="zx-panel-wall" aria-hidden="true"></div>' + homeRemoteBannerHtml() + bannerHtml + '<div class="zh-amb"></div><div class="zh-wm" aria-hidden="true">ULTRA</div><div class="zh-ui">'
         + top + nav + recent + status + '</div>' + popHtml + '</div>' + homeStyles(ac) + announceStyles(ac));
+    applyHomePanelWall();
     applyPhoneHomeLayout();
     if (!srvName) startHomeClock();   // com nome de parceiro no topo não há relógio pra atualizar
     loadHomePosters();   // capas do "Assistido Recentemente" (o lazy-loader global é escopado a grid)
@@ -2269,7 +2279,8 @@ function applyPhoneHomeLayout() {
 function homeStyles(ac) {
     var a = ac || '#10b981';
     return '<style>'
-        + '.zx-home2{position:fixed;inset:0;overflow:hidden;background:radial-gradient(130% 100% at 50% 0%,#0e2019,#0a1712 45%,#050d09);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}'
+        + '.zx-home2{position:fixed;inset:0;overflow:hidden;background:transparent;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}'
+        + '.zx-panel-wall{position:absolute;inset:0;z-index:0;pointer-events:none;background-color:#080808;background-position:center center;background-repeat:no-repeat;background-size:cover;}'
         /* translateZ(0) = vira camada de GPU cacheada: o foco andando não re-rasteriza
            o degradê nem a marca d'água gigante (repaint por tecla em TV fraca) */
         + '.zh-amb{position:absolute;inset:0;pointer-events:none;transform:translateZ(0);background:radial-gradient(40% 55% at 18% 30%,' + a + '22,transparent 70%),radial-gradient(45% 60% at 85% 20%,rgba(20,120,90,.14),transparent 70%),radial-gradient(60% 60% at 50% 120%,' + a + '18,transparent 70%);}'
@@ -2328,6 +2339,12 @@ function homeStyles(ac) {
         + '.zh-navtop .zh-ico svg{width:3.3vw;height:3.3vw;}'
         + '.zh-navtop .zh-tl{font-size:1.7vw;}'
         + '.zh-navbot{display:flex;gap:1.2vw;}'
+        + '.zx-home2:not(.zx-phone) .zh-nav{display:grid;grid-template-columns:minmax(0,32%) minmax(0,1fr);gap:1.3vw;align-items:stretch;flex:1;min-height:0;}'
+        + '.zx-home2:not(.zx-phone) .zh-nav>.zh-tile{width:auto;max-width:none;flex:none;min-height:0;}'
+        + '.zx-home2:not(.zx-phone) .zh-navr{display:grid;grid-template-rows:minmax(0,1fr) auto;gap:1.2vw;min-height:0;}'
+        + '.zx-home2:not(.zx-phone) .zh-navtop{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.2vw;min-height:0;}'
+        + '.zx-home2:not(.zx-phone) .zh-navtop .zh-tile{height:auto;min-height:0;overflow:visible;}'
+        + '.zx-home2:not(.zx-phone) .zh-navbot{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.2vw;}'
         /* fileira baixa: Favoritos + Playlist (ícone e texto na horizontal) */
         + '.zh-stile{flex:1;display:flex;align-items:center;justify-content:center;gap:.9vw;padding:1.25vw 1vw;border-radius:1.2vw;text-decoration:none;color:#f4f7f5;background:' + a + '10;border:1px solid ' + a + '2e;}'
         + '.zh-sico{display:flex;align-items:center;justify-content:center;flex:none;}'
