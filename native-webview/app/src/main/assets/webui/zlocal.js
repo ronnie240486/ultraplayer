@@ -2413,7 +2413,8 @@ function renderHome() {
 
     // announceStyles: SEM ele a faixa/pop-up de aviso do painel renderiza CRUA no
     // canto (o redesign da home tinha deixado a função órfã — bug 19/07).
-    setHtml('<div class="zx-home2"><div class="zx-panel-wall" aria-hidden="true"></div>' + homeRemoteBannerHtml() + bannerHtml + '<div class="zh-amb"></div><div class="zh-wm" aria-hidden="true">ULTRA</div><div class="zh-ui">'
+    var mobileHomeClass = getFormFactor() === 'mobile' ? ' zx-mobile' : '';
+    setHtml('<div class="zx-home2' + mobileHomeClass + '"><div class="zx-panel-wall" aria-hidden="true"></div>' + homeRemoteBannerHtml() + bannerHtml + '<div class="zh-amb"></div><div class="zh-wm" aria-hidden="true">ULTRA</div><div class="zh-ui">'
         + top + nav + recent + recommendations + status + '</div>' + popHtml + '</div>' + homeStyles(ac) + announceStyles(ac));
     applyHomePanelWall();
     applyPhoneHomeLayout();
@@ -2971,6 +2972,7 @@ function homeStyles(ac) {
         + '.zx-home2.zx-phone .zh-nav{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:116px;align-items:stretch;gap:9px;flex:none!important;height:auto!important;min-height:0!important;}'
         + '.zx-home2.zx-phone .zh-nav>.zh-tile,.zx-home2.zx-phone .zh-navtop .zh-tile{height:116px!important;min-height:116px!important;max-height:116px!important;flex:none!important;}'
         + '.zx-home2.zx-phone .zh-navr,.zx-home2.zx-phone .zh-navtop,.zx-home2.zx-phone .zh-navbot{display:contents!important;}'
+        + '.zx-home2.zx-mobile{overflow-y:auto !important;overflow-x:hidden !important;} .zx-home2.zx-mobile .zh-ui{position:relative !important;min-height:100vh;height:auto !important;overflow:visible !important;padding-bottom:34px;} .zx-home2.zx-mobile .zh-nav{display:flex !important;position:relative !important;align-items:stretch !important;flex:none !important;width:100% !important;height:132px !important;min-height:132px !important;margin:18px 0 16px !important;padding:4px 4px 10px !important;gap:9px !important;overflow-x:auto !important;overflow-y:hidden !important;box-sizing:border-box !important;scrollbar-width:thin !important;-webkit-overflow-scrolling:touch;} .zx-home2.zx-mobile .zh-navr,.zx-home2.zx-mobile .zh-navtop,.zx-home2.zx-mobile .zh-navbot{display:contents !important;} .zx-home2.zx-mobile .zh-nav>.zh-tile,.zx-home2.zx-mobile .zh-navtop .zh-tile,.zx-home2.zx-mobile .zh-navbot .zh-stile{display:flex !important;position:relative !important;float:none !important;flex:0 0 190px !important;width:190px !important;min-width:190px !important;max-width:190px !important;height:116px !important;min-height:116px !important;max-height:116px !important;margin:0 !important;box-sizing:border-box !important;overflow:hidden !important;scroll-snap-align:start;} .zx-home2.zx-mobile .zh-recent{position:relative !important;display:flex !important;clear:both !important;margin-top:8px !important;max-width:100% !important;overflow:hidden !important;} .zx-home2.zx-mobile .zh-posters{display:flex !important;position:relative !important;max-width:100% !important;overflow-x:auto !important;overflow-y:hidden !important;padding:2px 4px 8px !important;box-sizing:border-box !important;} .zx-home2.zx-mobile .zh-poster{flex:0 0 165px !important;width:165px !important;min-width:165px !important;height:79px !important;min-height:79px !important;max-height:79px !important;}'
         + '</style>';
 }
 /* Aviso de vencimento (só na HOME). Usa license do resolve (zero rede extra).
