@@ -774,7 +774,9 @@ function applyUltraConfig(j, rerender) {
     b.banner_url = '';
     b.wallpaper_url = '';
     b.background = '';
-    b.background_url = j.background_url || '';
+    // O endpoint ultra-config pode vir sem imagem; nesse caso preserva o
+    // background_url recebido do check_mac.php, que é o fundo selecionado no painel.
+    b.background_url = j.background_url || j.bg_url || b.background_url || '';
     b.message_image_url = j.message_image_url || b.message_image_url || '';
     b.impact_phrase = j.impact_phrase || b.impact_phrase || '';
     b.message_title = j.message_title || b.message_title || '';
@@ -1343,7 +1345,8 @@ function directResponseToState(j, mode, fallback) {
     S.playlistUrl = chosenUrl; S.playlistType = String(chosen.type || (chosenUrl.indexOf('get.php') >= 0 ? 'm3u_plus' : 'xtream')).toLowerCase();
     fetchUltraConfig();
     try { localStorage.setItem('zx_direct_mode', mode); if (mode === 'mac') localStorage.setItem('zx_mac', S.user); } catch (e) {}
-    var d = { ok: true, dns: { base: server, name: j.dns_titulo || '' }, license: { mac: j.mac || fallback || '', exp_date: expTs }, branding: { app_name: j.app_name || 'UltraPlayer', logo: j.logo_url || '', background_url: '' } };
+    // check_mac.php entrega o fundo selecionado pelo painel em bg_url.
+    var d = { ok: true, dns: { base: server, name: j.dns_titulo || '' }, license: { mac: j.mac || fallback || '', exp_date: expTs }, branding: { app_name: j.app_name || 'UltraPlayer', logo: j.logo_url || '', background_url: j.bg_url || '' } };
     S.cat = { movies: null, series: null, live: null }; S.m3uCatalogPromise = null; S.xtreamUnavailable = false; S.favDirty = { live: [], movie: [], series: [] };
     applyResolve(d, false); saveSnap(d); saveCreds(); go('/home', true); return true;
 }
