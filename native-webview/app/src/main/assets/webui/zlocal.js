@@ -2145,7 +2145,7 @@ function renderUniversalSearch() {
     var form = $('zx-universal-form'), inp = $('zx-universal-query');
     if (form) form.addEventListener('submit', function (e) { e.preventDefault(); universalSearchRun(inp ? inp.value : ''); });
     if (inp) inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); universalSearchRun(inp.value); } });
-    var vb = $('zx-universal-voice'); if (vb) vb.addEventListener('click', function () { go('/home', false); setTimeout(function () { renderAssistantPanel(false); }, 140); });
+    var vb = $('zx-universal-voice'); if (vb) vb.addEventListener('click', function () { go('/home', false); setTimeout(startVoiceCommand, 140); });
     afterRender(); try { if (inp) inp.focus(); } catch (e) {}
 }
 function chooseVoiceResult(found, q) {
@@ -2484,7 +2484,7 @@ function renderHome() {
     try {
         var pb = document.getElementById('zxProfBtn');
         if (pb) pb.addEventListener('click', function (e) { if (e && e.preventDefault) e.preventDefault(); showProfGate('menu'); });
-        var vb = document.getElementById('zxVoiceBtn'); if (vb) vb.addEventListener('click', function (e) { if (e && e.preventDefault) e.preventDefault(); renderAssistantPanel(false); });
+        var vb = document.getElementById('zxVoiceBtn'); if (vb) vb.addEventListener('click', function (e) { if (e && e.preventDefault) e.preventDefault(); closeAssistantPanel(); startVoiceCommand(); });
         var rb = document.getElementById('zxRadioBtn'); if (rb) rb.addEventListener('click', function (e) { if (e && e.preventDefault) e.preventDefault(); go('/radio'); });
     } catch (e) {}
     firstRunFlow();   // 1ª abertura no Android → idioma + aviso anti-pirataria + escolha Celular x TV
