@@ -10,6 +10,8 @@ const requiredJs = [
   'function homeRecommendationItems()',
   'function fillHomeRecommendations()',
   'function applyAccessibility()',
+  'function showAmbient()',
+  'function profileUsageTick()',
   "if (p === '/search') return renderUniversalSearch();",
   'id="zhReco"'
 ];

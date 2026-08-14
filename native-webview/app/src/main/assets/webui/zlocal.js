@@ -842,7 +842,7 @@ function applyAccessibility() {
         if (accessibilityEnabled('large')) body.className += ' zx-a11y-large';
         if (accessibilityEnabled('high')) body.className += ' zx-a11y-high';
         var st = $('zx-a11y-css'); if (!st) { st = document.createElement('style'); st.id = 'zx-a11y-css'; document.head.appendChild(st); }
-        st.textContent = '.zx-a11y-large .zh-tl,.zx-a11y-large .zh-stile b{font-size:1.16em !important}.zx-a11y-large .zh-tsub,.zx-a11y-large .zh-ssub,.zx-a11y-large .zh-cname{font-size:1.12em !important}.zx-a11y-large .btn-tv,.zx-a11y-large button,.zx-a11y-large input,.zx-a11y-large select{line-height:1.25}.zx-a11y-high .zh-tbtn,.zx-a11y-high .zh-tile,.zx-a11y-high .zh-stile,.zx-a11y-high .btn-tv,.zx-a11y-high .sm-item,.zx-a11y-high .opt-btn{border-color:#fff !important}.zx-a11y-high .zh-tbtn:focus,.zx-a11y-high .zh-tile:focus,.zx-a11y-high .zh-stile:focus,.zx-a11y-high button:focus,.zx-a11y-high a:focus{outline:3px solid #fff !important;box-shadow:0 0 0 5px #10b981 !important}';
+        st.textContent = '.zx-a11y-large .zh-tl,.zx-a11y-large .zh-stile b{font-size:1.16em !important}.zx-a11y-large .zh-tsub,.zx-a11y-large .zh-ssub,.zx-a11y-large .zh-cname{font-size:1.12em !important}.zx-a11y-large .btn-tv,.zx-a11y-large button,.zx-a11y-large input,.zx-a11y-large select{line-height:1.25}.zx-a11y-high .zh-tbtn,.zx-a11y-high .zh-tile,.zx-a11y-high .zh-stile,.zx-a11y-high .btn-tv,.zx-a11y-high .sm-item,.zx-a11y-high .opt-btn{border-color:#fff !important}.zx-a11y-high .zh-tbtn:focus,.zx-a11y-high .zh-tile:focus,.zx-a11y-high .zh-stile:focus,.zx-a11y-high button:focus,.zx-a11y-high a:focus{outline:3px solid #fff !important;box-shadow:0 0 0 5px #10b981 !important}.zx-ambient-wall{position:absolute;inset:0;background:var(--zx-bg,#06130f) center/cover no-repeat;filter:brightness(.38)}.zx-ambient-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;color:#fff;text-align:center}.zx-ambient-center .brand-lockup{transform:scale(1.35);margin-bottom:12px}.zx-ambient-clock{font-size:clamp(64px,12vw,180px);font-weight:200;letter-spacing:.05em;font-variant-numeric:tabular-nums}.zx-ambient-date{font-size:clamp(18px,2.4vw,34px);color:#c7d8cf}.zx-ambient-hint{margin-top:24px;font-size:clamp(12px,1.4vw,18px);color:#8fa39a}.zx-ambient-center .brand-mark{width:54px;height:54px}.zx-ambient-center .brand-logo{font-size:34px}';
     } catch (e) {}
 }
 function ultraDiagnosticsText() {
@@ -853,6 +853,24 @@ function ultraDiagnosticsText() {
     rows.push('Modo: ' + (getFormFactor() === 'tv' ? 'TV Box' : 'Celular'));
     ['live','movies','series'].forEach(function (k) { var c = S.cat && S.cat[k]; rows.push((k === 'live' ? 'Canais' : k === 'movies' ? 'Filmes' : 'Séries') + ': ' + (c && c.all ? fmtNum(c.all.length) : 'aguardando catálogo')); });
     return rows.join(' · ');
+}
+function ambientEnabled() { return accessibilityEnabled('ambient'); }
+function closeAmbient() { try { var el = $('zx-ambient-overlay'); if (el && el.parentNode) el.parentNode.removeChild(el); if (global.__zxAmbientTimer) { clearInterval(global.__zxAmbientTimer); global.__zxAmbientTimer = null; } } catch (e) {} }
+function showAmbient() {
+    if (!ambientEnabled() || !document.querySelector('.zx-home2') || $('zx-ambient-overlay')) return;
+    if (document.querySelector('.zx-ff-ask,.zx-ann-overlay,#zx-expiration-modal,.zx-epg-alarm-modal')) return;
+    var now = new Date(), logo = brandLogoHtml();
+    var el = document.createElement('div'); el.id = 'zx-ambient-overlay'; el.tabIndex = 0; el.setAttribute('aria-label', 'Modo ambiente');
+    el.innerHTML = '<div class="zx-ambient-wall"></div><div class="zx-ambient-center">' + logo + '<div class="zx-ambient-clock" id="zxAmbientClock">' + p2(now.getHours()) + ':' + p2(now.getMinutes()) + '</div><div class="zx-ambient-date" id="zxAmbientDate"></div><div class="zx-ambient-hint">Pressione qualquer botão para continuar</div></div>';
+    document.body.appendChild(el);
+    var tick = function () { var n = new Date(), c = $('zxAmbientClock'), d = $('zxAmbientDate'); if (c) c.textContent = p2(n.getHours()) + ':' + p2(n.getMinutes()); if (d) d.textContent = currentLang() === 'en' ? n.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' }) : n.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }); };
+    tick(); global.__zxAmbientTimer = setInterval(tick, 1000); try { el.focus(); } catch (e) {}
+}
+function startAmbientWatch() {
+    if (global.__zxAmbientWatch) return; global.__zxAmbientWatch = true; var last = Date.now();
+    function activity() { last = Date.now(); closeAmbient(); }
+    document.addEventListener('keydown', activity, true); document.addEventListener('pointerdown', activity, true); document.addEventListener('touchstart', activity, true);
+    setInterval(function () { if (ambientEnabled() && Date.now() - last > 45000) showAmbient(); }, 5000);
 }
 function applyAccent(accent) {
     S.accent = accent || '#10b981';
@@ -4007,7 +4025,7 @@ function renderSettings() {
     var pinCss = 'display:block;width:100%;box-sizing:border-box;margin-bottom:10px;padding:13px 16px;background:#0c0f0d;border:1.5px solid rgba(255,255,255,.16);border-radius:12px;color:#fff;font-size:18px;text-align:center;letter-spacing:6px;outline:none';
         var parentalMenu = '<a href="#parental" class="sm-item" data-pane="pane-parental"><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></span><span class="sm-label">Controle parental</span></a>';
     var accessibilityMenu = '<a href="#accessibility" class="sm-item" data-pane="pane-accessibility"><span class="sm-ico">Aa</span><span class="sm-label">Acessibilidade</span></a>';
-    var accessibilityPane = '<div class="settings-pane" id="pane-accessibility" style="display:none;"><div class="pane-title">Acessibilidade e diagnóstico</div><div class="pane-sub">Ajustes opcionais para facilitar a leitura e verificar o estado do aplicativo.</div><div class="pane-section"><div class="opt-row"><button type="button" class="opt-btn" data-a11y-set="large">Texto maior</button><button type="button" class="opt-btn" data-a11y-set="high">Alto contraste</button></div></div><div class="pane-section"><button type="button" class="action-btn" id="zx-run-diagnostics"><div class="ab-title">Verificar conexão e catálogo</div><div class="ab-sub" id="zx-diagnostics-result">Toque ou pressione OK para executar.</div></button></div></div>';
+    var accessibilityPane = '<div class="settings-pane" id="pane-accessibility" style="display:none;"><div class="pane-title">Acessibilidade e diagnóstico</div><div class="pane-sub">Ajustes opcionais para facilitar a leitura e verificar o estado do aplicativo.</div><div class="pane-section"><div class="opt-row"><button type="button" class="opt-btn" data-a11y-set="large">Texto maior</button><button type="button" class="opt-btn" data-a11y-set="high">Alto contraste</button><button type="button" class="opt-btn" data-a11y-set="ambient">Modo ambiente</button></div></div><div class="pane-section"><button type="button" class="action-btn" id="zx-run-diagnostics"><div class="ab-title">Verificar conexão e catálogo</div><div class="ab-sub" id="zx-diagnostics-result">Toque ou pressione OK para executar.</div></button></div></div>';
     var parentalPane = '<div class="settings-pane" id="pane-parental" style="display:none;"><div class="pane-title">Controle parental</div>'
         + '<div class="pane-sub">A senha bloqueia as categorias <strong>adultas (XXX)</strong>. Fica guardada <strong>só neste aparelho</strong> (nada no servidor). Padrão: <strong>1234</strong>.</div>'
         + '<div class="pane-section" style="max-width:340px">'
@@ -5051,16 +5069,16 @@ function profSetActive(i) {
     try { localStorage.setItem('zx_prof_active', String(i)); } catch (e) {}
     S.profNs = profActive().ns;
 }
-function profCreate(name, av, kids) {
+function profCreate(name, av, kids, limit) {
     var a = profAll();
     if (a.length >= 4) return false;
     var seq = 2;
     try { seq = parseInt(localStorage.getItem('zx_prof_seq') || '2', 10) || 2; localStorage.setItem('zx_prof_seq', String(seq + 1)); } catch (e) {}
-    a.push({ n: name, a: av, ns: 'p' + seq + '_', kids: !!kids });
+    a.push({ n: name, a: av, ns: 'p' + seq + '_', kids: !!kids, limit: kids ? Math.max(0, Math.min(480, parseInt(limit, 10) || 0)) : 0 });
     profSave(a);
     return true;
 }
-function profUpdate(i, name, av, kids) { var a = profAll(); if (i < 0 || i >= a.length) return; a[i].n = name; a[i].a = av; a[i].kids = !!kids; profSave(a); }
+function profUpdate(i, name, av, kids, limit) { var a = profAll(); if (i < 0 || i >= a.length) return; a[i].n = name; a[i].a = av; a[i].kids = !!kids; a[i].limit = kids ? Math.max(0, Math.min(480, parseInt(limit, 10) || 0)) : 0; profSave(a); }
 function profDelete(i) {
     var a = profAll();
     if (a.length <= 1 || i < 0 || i >= a.length) return;
@@ -5096,7 +5114,21 @@ function profWipeNs(ns) {
     } catch (e) {}
 }
 // troca de perfil EM USO: re-aponta o storage e recarrega os espelhos
+function profLimit(p) { return p && p.kids ? Math.max(0, parseInt(p.limit, 10) || 0) : 0; }
+function profileUsageKey() { var p = profActive() || {}, day = new Date(), ds = day.getFullYear() + '-' + p2(day.getMonth() + 1) + '-' + p2(day.getDate()); return 'zx_prof_usage_' + String(p.ns || '') + ds; }
+function profileUsageSeconds() { try { return Math.max(0, parseInt(localStorage.getItem(profileUsageKey()) || '0', 10) || 0); } catch (e) { return 0; } }
+function showKidsLimitModal() {
+    if ($('zx-kids-limit-modal')) return;
+    var ov = document.createElement('div'); ov.id = 'zx-kids-limit-modal'; ov.className = 'zx-ff-ask tv-modal'; ov.innerHTML = '<div class="zx-ffa-card" style="text-align:center"><div class="zx-ffa-title">Tempo de hoje concluído</div><div class="zx-ffa-sub">O limite diário deste perfil infantil foi atingido. Volte amanhã ou peça ao responsável para ajustar o limite.</div><button type="button" class="zx-pf-save" id="zxKidsLimitOk">OK</button></div>'; document.body.appendChild(ov); var b = $('zxKidsLimitOk'); if (b) b.addEventListener('click', function () { try { ov.parentNode.removeChild(ov); } catch (e) {} go('/home', true); }); try { b.focus(); } catch (e) {}
+}
+function profileUsageTick() {
+    var lim = profLimit(profActive()); if (!lim || document.hidden || !S.server) return;
+    var next = profileUsageSeconds() + 60; try { localStorage.setItem(profileUsageKey(), String(next)); } catch (e) {}
+    if (next >= lim * 60 && !global.__zxKidsLimitShown) { global.__zxKidsLimitShown = true; showKidsLimitModal(); }
+}
+function startProfileUsageWatch() { if (global.__zxProfileUsageWatch) return; global.__zxProfileUsageWatch = setInterval(profileUsageTick, 60000); }
 function profApplyData() {
+    global.__zxKidsLimitShown = false;
     S.profNs = profActive().ns;
     S.cat = { movies: null, series: null, live: null };
     S.m3uCatalogPromise = null;
@@ -5293,6 +5325,7 @@ function showProfEditor(idx, onDone) {
     var a = profAll();
     var nome = (idx >= 0) ? a[idx].n : '';
     var kids = (idx >= 0) ? !!a[idx].kids : false;
+    var limit = (idx >= 0) ? Math.max(0, parseInt(a[idx].limit, 10) || 0) : 0;
     var av = (idx >= 0) ? a[idx].a : (a.length % PROF_AVS.length);
     if (kids && av >= PROF_KIDS.length) av = 0;
     var armDel = false;
@@ -5307,6 +5340,7 @@ function showProfEditor(idx, onDone) {
         var avatarSet = kids ? PROF_KIDS : PROF_AVS;
         var h = '<div class="zx-ffa-card"><div class="zx-ffa-title">' + te(idx < 0 ? 'Novo perfil' : 'Editar perfil') + '</div>'
             + '<div class="zx-pf-kids"><div><div class="zx-pf-kids-title">' + te('Perfil infantil') + '</div><div class="zx-pf-kids-sub">' + te('Sem canais e filmes adultos — nem com PIN, o conteúdo simplesmente não aparece') + '</div></div><button type="button" class="zx-pf-switch' + (kids ? ' on' : '') + '" id="zxPfKidsSwitch" aria-label="' + te('Perfil infantil') + '"></button></div>'
+            + '<div id="zxPfLimitWrap" style="display:' + (kids ? 'block' : 'none') + ';margin:9px 0 8px"><label class="zx-ffa-sub" for="zxPfLimit">Limite diário do perfil infantil (minutos; 0 = sem limite)</label><input type="number" id="zxPfLimit" min="0" max="480" inputmode="numeric" value="' + attr(limit) + '" class="zx-pf-input" style="margin-top:6px"></div>'
             + '<div class="zx-pf-prev" id="zxPfPrev" style="text-align:center;margin:4px 0 10px">' + profAvatarHtml(av, 96, kids) + '</div>'
             + '<input type="text" class="zx-pf-input" id="zxPfName" maxlength="16" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="' + te('Nome do perfil') + '">'
             + '<div class="zx-ffa-sub" style="margin:8px 0 0">' + te('Escolha um avatar') + '</div>'
@@ -5320,7 +5354,7 @@ function showProfEditor(idx, onDone) {
             + '</div></div>';
         ov.innerHTML = h;
         var kidsBtn = $('zxPfKidsSwitch');
-        if (kidsBtn) kidsBtn.addEventListener('click', function () { var nameEl = $('zxPfName'); if (nameEl) nome = nameEl.value; kids = !kids; if (kids && av >= PROF_KIDS.length) av = 0; paint(); var newName = $('zxPfName'); if (newName) { newName.value = nome; try { newName.focus(); } catch (e) {} } });
+        if (kidsBtn) kidsBtn.addEventListener('click', function () { var nameEl = $('zxPfName'); if (nameEl) nome = nameEl.value; var limitEl = $('zxPfLimit'); if (limitEl) limit = parseInt(limitEl.value, 10) || 0; kids = !kids; if (kids && av >= PROF_KIDS.length) av = 0; paint(); var newName = $('zxPfName'); if (newName) { newName.value = nome; try { newName.focus(); } catch (e) {} } });
         var inp = $('zxPfName');
         if (inp) inp.value = nome;
         // escolher avatar: troca classes + preview EM-PLACE (o rebuild matava o
@@ -5340,11 +5374,12 @@ function showProfEditor(idx, onDone) {
             var n = (inp ? inp.value : nome).replace(/^\s+|\s+$/g, '');
             if (!n) { try { inp.focus(); } catch (e) {} return; }
             if (n.length > 16) n = n.slice(0, 16);
+            var limitEl = $('zxPfLimit'); if (limitEl) limit = parseInt(limitEl.value, 10) || 0;
             if (idx >= 0) {
-                profUpdate(idx, n, av, kids);
+                profUpdate(idx, n, av, kids, limit);
                 profApplyData();                       // pode ter editado o ativo
             } else {
-                profCreate(n, av, kids);
+                profCreate(n, av, kids, limit);
                 profSetActive(profAll().length - 1);   // criar já entra no novo
                 profApplyData();
             }
@@ -5443,10 +5478,12 @@ function injectAndroidCss() {
 function boot() {
     applyAppTheme(appThemeId(), false);
     applyAccessibility();
+    startAmbientWatch();
     S.directAuth = !!directModeStored();
     S.did = getDid();
     fetchUltraConfig();
     try { S.profNs = profActive().ns; } catch (e) { S.profNs = ''; }   // PERFIS: antes de qualquer leitura
+    startProfileUsageWatch();
     patchHistory();
     installShim();
     installRouter();
