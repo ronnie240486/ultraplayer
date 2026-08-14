@@ -1552,7 +1552,7 @@ function directListModels(j) {
         var lp = list[li] || {}, lu = String(lp.playlist_url || lp.url || ''); if (!lu) continue;
         var lc = playlistToXtream(lp, 'Lista ' + (li + 1));
         var lsrv = lc ? lc.server : ''; try { if (!lsrv) { var lpu = new URL(lu); lsrv = lpu.protocol + '//' + lpu.host; } } catch (e) {}
-        available.push({ id: String(li), name: String(lp.playlist_name || lp.name || lp.title || ('Lista ' + (li + 1))), url: lu, type: String(lp.type || (lu.indexOf('get.php') >= 0 ? 'm3u_plus' : 'xtream')).toLowerCase(), server: lsrv, expire_date: listExpiryValue(lp) || '' });
+        available.push({ id: String(li), name: String(lp.playlist_name || lp.name || lp.title || ('Lista ' + (li + 1))), url: lu, type: String(lp.type || (lu.indexOf('get.php') >= 0 ? 'm3u_plus' : 'xtream')).toLowerCase(), server: lsrv, expire_date: listExpiryValue(lp) || listExpiryValue(j) || '' });
     }
     return available;
 }
@@ -1632,7 +1632,7 @@ function directResponseToState(j, mode, fallback) {
     var server = creds ? creds.server : '';
     try { if (!server) { var pu = new URL(chosenUrl); server = pu.protocol + '//' + pu.host; } } catch (e) {}
     if (!server) return null;
-    var exp = listExpiryValue(chosenInfo) || j.expire_date || j.dataExpiracao || null, expTs = expiryTimestamp(exp);
+    var exp = listExpiryValue(chosenInfo) || listExpiryValue(j) || null, expTs = expiryTimestamp(exp);
     S.directAuth = true;
     S.code = mode === 'mac' ? '__mac__' : '__credentials__';
     S.user = mode === 'mac' ? String(j.mac || fallback || '') : String(fallback || j.username || '');
@@ -2131,8 +2131,13 @@ function renderHome() {
     // (abrir detalhe → Voltar). Pedido do Leonardo.
     S.vodBack = {}; S.vodPos = null; S.liveBack = null;
     var info = S.info || {}; var lic = info.license || {};
-    var exp = (lic.exp_display || 'Sem expiração');
-    if (!lic.exp_display && info.exp_date) { var dt = new Date(info.exp_date * 1000); exp = p2(dt.getDate()) + '/' + p2(dt.getMonth() + 1) + '/' + dt.getFullYear(); }
+    // A validade vem em license.exp_date. A leitura anterior consultava
+    // info.exp_date (nível errado), por isso o rodapé mostrava "Sem expiração"
+    // mesmo quando check_mac.php devolvia expire_date.
+    var exp = lic.exp_display || '';
+    var expTs = expiryTimestamp(lic.exp_date || info.exp_date || info.expire_date || listExpiryValue(info));
+    if (!exp && expTs) { var dt = new Date(expTs * 1000); if (!isNaN(dt.getTime())) exp = p2(dt.getDate()) + '/' + p2(dt.getMonth() + 1) + '/' + dt.getFullYear(); }
+    if (!exp) exp = 'Sem expiração';
     var mac = lic.mac || '';
     var ann = (S.branding && S.branding.announce) || null;
     var bannerHtml = '';
