@@ -725,11 +725,18 @@ function applyAccent(accent) {
 }
 function applyWallpaper(url) {
     var st = $('zx-wall');
-    if (!url) { if (st) st.parentNode.removeChild(st); return; }
     if (!st) { st = document.createElement('style'); st.id = 'zx-wall'; document.head.appendChild(st); }
-    st.textContent = '.bg-diamonds,.sidebar-screen,.zx-home2,.home-screen{background-color:#080808 !important;'
-        + "background-image:linear-gradient(rgba(8,8,8,0.60),rgba(8,8,8,0.82)),url('" + url + "') !important;"
-        + 'background-position:center center;background-repeat:no-repeat;background-size:cover;background-attachment:fixed;}';
+    var safe = String(url || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    if (safe) {
+        // Uma única camada de imagem no fundo global. As telas internas ficam
+        // transparentes para não duplicar a mesma imagem sobre o .bg-diamonds.
+        st.textContent = ".bg-diamonds{background-color:#080808 !important;background-image:url('" + safe + "') !important;background-position:center center;background-repeat:no-repeat;background-size:cover;background-attachment:fixed;}"
+            + '.app-root,.sidebar-screen,.zx-home2,.home-screen,.radio-screen,.search-screen,.settings-screen{background-color:transparent !important;background-image:none !important;}';
+    } else {
+        // Sem branding: remove também o gradiente/imagem padrão do APK.
+        st.textContent = '.bg-diamonds{background-color:#080808 !important;background-image:none !important;}'
+            + '.app-root,.sidebar-screen,.zx-home2,.home-screen,.radio-screen,.search-screen,.settings-screen{background-color:transparent !important;background-image:none !important;}';
+    }
 }
 function applyBranding(b) {
     if (!b) return;
