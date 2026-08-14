@@ -1947,11 +1947,11 @@ function assistantSubmit(text) {
     if (runVoiceIntent(raw)) { assistantAddMessage(assistantQuickReply(raw), 'bot'); return; }
     assistantAddMessage('Vou pesquisar isso em Canais, Filmes e Séries.', 'bot'); closeAssistantPanel(); setTimeout(function () { runVoiceCommand(raw); }, 120);
 }
-function renderAssistantPanel(autoListen) {
-    if ($('zx-assistant-panel')) { if (autoListen) setTimeout(startVoiceCommand, 80); return; }
+function renderAssistantPanel() {
+    if ($('zx-assistant-panel')) return;
     var old = $('zx-assistant-css'); if (old && old.parentNode) old.parentNode.removeChild(old);
     var panel = document.createElement('div'); panel.id = 'zx-assistant-panel'; panel.className = 'zx-assistant-panel'; panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', 'Ultra Assistente');
-    panel.innerHTML = '<div class="zx-assistant-card"><div class="zx-assistant-head"><div><strong>Ultra Assistente</strong><small>Fale ou digite o que você quer fazer</small></div><button type="button" class="zx-assistant-x" id="zxAssistantClose" aria-label="Fechar">×</button></div><div class="zx-assistant-messages" id="zxAssistantMessages"></div><div class="zx-assistant-quick"><button type="button" class="zx-assistant-chip" data-assistant="O que posso assistir agora?">Para você</button><button type="button" class="zx-assistant-chip" data-assistant="Abrir filmes">Filmes</button><button type="button" class="zx-assistant-chip" data-assistant="Abrir séries">Séries</button><button type="button" class="zx-assistant-chip" data-assistant="Abrir canais">Canais</button><button type="button" class="zx-assistant-chip" data-assistant="Pausar">Pausar</button></div><div class="zx-assistant-hint">Exemplos: “buscar The Walking Dead”, “abrir rádios”, “me avise quando começar o jornal”</div><form class="zx-assistant-form" id="zxAssistantForm"><input class="zx-assistant-input" id="zxAssistantInput" autocomplete="off" placeholder="Digite um comando…" aria-label="Comando para o Ultra Assistente"><button type="button" class="zx-assistant-mic" id="zxAssistantMic" aria-label="Falar">●</button><button type="submit" class="zx-assistant-send" aria-label="Enviar">OK</button></form></div>';
+    panel.innerHTML = '<div class="zx-assistant-card"><div class="zx-assistant-head"><div><strong>Ultra Assistente</strong><small>Toque no microfone para falar ou digite um comando</small></div><button type="button" class="zx-assistant-x" id="zxAssistantClose" aria-label="Fechar">×</button></div><div class="zx-assistant-messages" id="zxAssistantMessages"></div><div class="zx-assistant-quick"><button type="button" class="zx-assistant-chip" data-assistant="O que posso assistir agora?">Para você</button><button type="button" class="zx-assistant-chip" data-assistant="Abrir filmes">Filmes</button><button type="button" class="zx-assistant-chip" data-assistant="Abrir séries">Séries</button><button type="button" class="zx-assistant-chip" data-assistant="Abrir canais">Canais</button><button type="button" class="zx-assistant-chip" data-assistant="Pausar">Pausar</button></div><div class="zx-assistant-hint">Exemplos: “buscar The Walking Dead”, “abrir rádios”, “me avise quando começar o jornal”</div><form class="zx-assistant-form" id="zxAssistantForm"><input class="zx-assistant-input" id="zxAssistantInput" autocomplete="off" placeholder="Digite um comando…" aria-label="Comando para o Ultra Assistente"><button type="button" class="zx-assistant-mic" id="zxAssistantMic" aria-label="Falar">●</button><button type="submit" class="zx-assistant-send" aria-label="Enviar">OK</button></form></div>';
     document.body.appendChild(panel); var st = document.createElement('div'); st.innerHTML = assistantStyles(); document.head.appendChild(st.firstChild);
     assistantAddMessage('Olá! Posso pesquisar conteúdos, abrir telas, controlar o player e criar avisos no EPG.', 'bot');
     var close = $('zxAssistantClose'); if (close) close.addEventListener('click', closeAssistantPanel);
@@ -1960,7 +1960,6 @@ function renderAssistantPanel(autoListen) {
     var mic = $('zxAssistantMic'); if (mic) mic.addEventListener('click', function () { startVoiceCommand(); });
     panel.addEventListener('keydown', function (e) { if (e.key === 'Escape' || e.keyCode === 27) { e.preventDefault(); closeAssistantPanel(); } });
     try { if (inp) inp.focus(); } catch (e) {}
-    if (autoListen) setTimeout(startVoiceCommand, 120);
 }
 function runVoiceIntent(text) {
     if (voiceEpgIntent(text)) return true;
@@ -2146,7 +2145,7 @@ function renderUniversalSearch() {
     var form = $('zx-universal-form'), inp = $('zx-universal-query');
     if (form) form.addEventListener('submit', function (e) { e.preventDefault(); universalSearchRun(inp ? inp.value : ''); });
     if (inp) inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); universalSearchRun(inp.value); } });
-    var vb = $('zx-universal-voice'); if (vb) vb.addEventListener('click', function () { go('/home', false); setTimeout(startVoiceCommand, 140); });
+    var vb = $('zx-universal-voice'); if (vb) vb.addEventListener('click', function () { go('/home', false); setTimeout(function () { renderAssistantPanel(false); }, 140); });
     afterRender(); try { if (inp) inp.focus(); } catch (e) {}
 }
 function chooseVoiceResult(found, q) {
@@ -2485,7 +2484,7 @@ function renderHome() {
     try {
         var pb = document.getElementById('zxProfBtn');
         if (pb) pb.addEventListener('click', function (e) { if (e && e.preventDefault) e.preventDefault(); showProfGate('menu'); });
-        var vb = document.getElementById('zxVoiceBtn'); if (vb) vb.addEventListener('click', function (e) { if (e && e.preventDefault) e.preventDefault(); renderAssistantPanel(true); });
+        var vb = document.getElementById('zxVoiceBtn'); if (vb) vb.addEventListener('click', function (e) { if (e && e.preventDefault) e.preventDefault(); renderAssistantPanel(false); });
         var rb = document.getElementById('zxRadioBtn'); if (rb) rb.addEventListener('click', function (e) { if (e && e.preventDefault) e.preventDefault(); go('/radio'); });
     } catch (e) {}
     firstRunFlow();   // 1ª abertura no Android → idioma + aviso anti-pirataria + escolha Celular x TV
