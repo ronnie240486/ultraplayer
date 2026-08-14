@@ -28,6 +28,9 @@ import android.graphics.drawable.GradientDrawable;
 
 import androidx.media3.common.MediaItem;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.datasource.DefaultHttpDataSource;
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+import androidx.media3.common.PlaybackException;
 import androidx.media3.ui.PlayerView;
 
 import org.json.JSONObject;
@@ -55,6 +58,9 @@ public final class MainActivity extends Activity {
     private String miniPayload = "";
     private boolean miniExpanded = false;
     private boolean keepMiniAfterFull = true;
+    private long lastRootBackAt = 0L;
+    private String miniSourceUrl = "";
+    private boolean miniTsRetryUsed = false;
     private FrameLayout.LayoutParams miniLayoutBeforeExpand;
     private static final int VOICE_REQUEST = 7412;
     private static final int VOICE_PERMISSION_REQUEST = 7413;
@@ -418,6 +424,14 @@ public final class MainActivity extends Activity {
         b.setMinWidth(dp(48));
         b.setPadding(dp(8), 0, dp(8), 0);
         b.setBackground(makeRoundBackground(0xCC183329, 0xAA6EE7B7, 1, dp(8)));
+        b.setFocusable(true);
+        b.setFocusableInTouchMode(true);
+        if (android.os.Build.VERSION.SDK_INT >= 21) {
+            android.graphics.drawable.StateListDrawable states = new android.graphics.drawable.StateListDrawable();
+            states.addState(new int[]{android.R.attr.state_focused}, makeRoundBackground(0xEE10B981, 0xFFFFFFFF, 2, dp(8)));
+            states.addState(new int[]{}, makeRoundBackground(0xCC183329, 0xAA6EE7B7, 1, dp(8)));
+            b.setBackground(states);
+        }
         return b;
     }
 
@@ -626,7 +640,7 @@ public final class MainActivity extends Activity {
         boolean large = tvMode;
         int screenWidth = getResources().getDisplayMetrics().widthPixels;
         int width = large ? Math.max(dp(360), Math.round(screenWidth * 0.32f)) : dp(300);
-        int height = large ? Math.round(width * 0.70f) : dp(230);
+        int height = large ? Math.round(width * 0.84f) : dp(285);
         FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(width, height, android.view.Gravity.TOP | android.view.Gravity.RIGHT);
         p.rightMargin = large ? dp(16) : dp(12);
         p.topMargin = large ? dp(76) : dp(78);
@@ -647,7 +661,7 @@ public final class MainActivity extends Activity {
         int maxH = Math.max(dp(100), root.getHeight() - top - dp(4));
         // Mantém a largura medida pelo WebView, mas dá mais altura vertical ao
         // quadro nativo nos dois modos, conforme o ajuste visual solicitado.
-        int extraHeight = isTv ? dp(34) : dp(45);
+        int extraHeight = isTv ? dp(72) : dp(70);
         height = Math.min(maxH, height + extraHeight);
         width = Math.min(width, maxW);
         height = Math.min(height, maxH);
@@ -679,10 +693,22 @@ public final class MainActivity extends Activity {
             if (url.isEmpty()) return;
             miniPayload = json.toString();
             if (miniPlayer == null) {
-                miniPlayer = new ExoPlayer.Builder(this).build();
+                DefaultHttpDataSource.Factory http = new DefaultHttpDataSource.Factory()
+                        .setUserAgent("Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 UltraPlayer/4.31")
+                        .setAllowCrossProtocolRedirects(true);
+                miniPlayer = new ExoPlayer.Builder(this)
+                        .setMediaSourceFactory(new DefaultMediaSourceFactory(http))
+                        .build();
+                miniPlayer.addListener(new androidx.media3.common.Player.Listener() {
+                    @Override public void onPlayerError(PlaybackException error) {
+                        retryLiveAsTs();
+                    }
+                });
                 miniPlayerView.setPlayer(miniPlayer);
             }
             if (!url.equals(miniContainer.getTag())) {
+                miniSourceUrl = url;
+                miniTsRetryUsed = false;
                 miniPlayer.setMediaItem(MediaItem.fromUri(url));
                 miniPlayer.prepare();
                 miniPlayer.play();
@@ -692,6 +718,20 @@ public final class MainActivity extends Activity {
             }
             if (miniTitle != null) miniTitle.setText("Mini player • " + title + " • toque novamente para abrir");
             miniContainer.setVisibility(View.VISIBLE);
+        } catch (Throwable ignored) { }
+    }
+
+    private void retryLiveAsTs() {
+        if (miniPlayer == null || miniTsRetryUsed || miniSourceUrl == null || miniSourceUrl.isEmpty()) return;
+        String lower = miniSourceUrl.toLowerCase(java.util.Locale.US);
+        if (lower.indexOf("/live/") < 0 || (lower.indexOf(".m3u8") < 0 && lower.indexOf(".m3u") < 0)) return;
+        String fallback = miniSourceUrl.replaceFirst("(?i)\\.(m3u8|m3u)(\\?.*)?$", ".ts$2");
+        if (fallback.equals(miniSourceUrl)) fallback = miniSourceUrl + (miniSourceUrl.indexOf('?') >= 0 ? "&" : "?") + "format=ts";
+        miniTsRetryUsed = true;
+        try {
+            miniPlayer.setMediaItem(MediaItem.fromUri(fallback));
+            miniPlayer.prepare();
+            miniPlayer.play();
         } catch (Throwable ignored) { }
     }
 
@@ -784,6 +824,8 @@ public final class MainActivity extends Activity {
             miniContainer.setVisibility(View.GONE);
             miniContainer.setTag(null);
             miniPayload = "";
+            miniSourceUrl = "";
+            miniTsRetryUsed = false;
         }
     }
 
@@ -829,6 +871,30 @@ public final class MainActivity extends Activity {
         sendVoiceError();
     }
 
+    private void showExitConfirm() {
+        if (isFinishing() || isDestroyed()) return;
+        new AlertDialog.Builder(MainActivity.this)
+                .setTitle("Sair ou continuar?")
+                .setMessage("Você deseja sair do UltraPlayer ou continuar assistindo?")
+                .setNegativeButton("Continuar", null)
+                .setPositiveButton("Sair", (d, w) -> {
+                    try { finishAndRemoveTask(); } catch (Throwable ignored) { finishAffinity(); }
+                })
+                .setOnCancelListener(d -> { lastRootBackAt = 0L; })
+                .show();
+    }
+
+    private void handleRootBack() {
+        long now = android.os.SystemClock.elapsedRealtime();
+        if (now - lastRootBackAt <= 1800L) {
+            lastRootBackAt = 0L;
+            showExitConfirm();
+            return;
+        }
+        lastRootBackAt = now;
+        android.widget.Toast.makeText(MainActivity.this, "Pressione voltar novamente para sair", android.widget.Toast.LENGTH_SHORT).show();
+    }
+
     @Override
     public void onBackPressed() {
         if (miniExpanded) {
@@ -839,16 +905,11 @@ public final class MainActivity extends Activity {
             collapseFullMiniPlayer();
             return;
         }
-        if (webView == null) { finish(); return; }
+        if (webView == null) { handleRootBack(); return; }
         webView.evaluateJavascript("window.__zxBackAction ? window.__zxBackAction() : 'na'", value -> {
-            if (value == null || value.contains("na") || value.contains("null")) {
-                new AlertDialog.Builder(MainActivity.this)
-                        .setTitle("Sair do UltraPlayer?")
-                        .setMessage("Deseja fechar o aplicativo?")
-                        .setNegativeButton("Cancelar", null)
-                        .setPositiveButton("Sair", (d, w) -> finish())
-                        .show();
-            }
+            boolean handled = value != null && !value.contains("na") && !value.contains("null");
+            if (handled) { lastRootBackAt = 0L; return; }
+            handleRootBack();
         });
     }
 

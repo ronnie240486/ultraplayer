@@ -152,7 +152,26 @@
         return 'SKIP';
     }
 
+    function settingsSibling(currentEl, dir) {
+        if (!currentEl || (dir !== 'up' && dir !== 'down')) return null;
+        var item = currentEl;
+        while (item && item !== document.body) {
+            var cls = typeof item.className === 'string' ? item.className : '';
+            if ((' ' + cls + ' ').indexOf(' sm-item ') >= 0) break;
+            item = item.parentNode;
+        }
+        if (!item || item === document.body) return null;
+        var list = document.querySelectorAll('#settings-menu .sm-item[data-pane]');
+        var idx = -1;
+        for (var i = 0; i < list.length; i++) if (list[i] === item) { idx = i; break; }
+        if (idx < 0) return null;
+        var next = idx + (dir === 'down' ? 1 : -1);
+        return (next >= 0 && next < list.length && visible(list[next])) ? list[next] : null;
+    }
+
     function pickSpatial(currentEl, dir) {
+        var settingsNext = settingsSibling(currentEl, dir);
+        if (settingsNext) return settingsNext;
         var sib = pickSiblingInRow(currentEl, dir) || pickSiblingInColumn(currentEl, dir);
         if (sib) return sib;
 
