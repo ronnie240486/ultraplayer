@@ -10,8 +10,8 @@ android {
         applicationId 'com.ultraplayer.app'
         minSdk 21
         targetSdk 28
-        versionCode 62
-        versionName '4.24.1'
+        versionCode 63
+        versionName '4.25.0'
     }
 
     buildTypes {
@@ -19,11 +19,18 @@ android {
             minifyEnabled false
         }
         release {
-            minifyEnabled false
+            // APK otimizado: R8 remove bytecode não utilizado e reduz recursos.
+            minifyEnabled true
+            shrinkResources true
+            // Mantém a mesma assinatura de teste para atualizar instalações debug.
+            signingConfig signingConfigs.debug
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 
+    lint {
+        disable 'ExpiredTargetSdkVersion'
+    }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
