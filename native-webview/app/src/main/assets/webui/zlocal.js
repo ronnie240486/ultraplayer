@@ -759,6 +759,21 @@ function applyBranding(b) {
     applyWallpaper(b.background_url || '');
 }
 var ULTRA_CONFIG_ENDPOINT = 'https://renciaapp.manus.space/api/v5/ultra-config?mac=';
+var PANEL_CONFIG_ENDPOINT = 'https://renciaapp.manus.space/api/v5/check_mac.php?mac=';
+function fetchPanelBackground() {
+    var mac = getAppMac();
+    if (!mac) return Promise.resolve(null);
+    return fetchT(PANEL_CONFIG_ENDPOINT + enc(mac), 10000, { credentials: 'omit', headers: { 'Accept': 'application/json' } }).then(function (r) { return r.json(); }).then(function (j) {
+        var url = String(j && (j.bg_url || (j.branding && j.branding.bg_url) || '') || '');
+        if (url) {
+            var b = S.branding || {};
+            b.background_url = url;
+            S.branding = b;
+            applyWallpaper(url);
+        }
+        return j;
+    }).catch(function () { return null; });
+}
 function applyUltraConfig(j, rerender) {
     if (!j) return;
     if (j.registered === false || j.allowed === false) { S.ultraDenied = true; S.remoteConfig = j; return; }
@@ -794,6 +809,9 @@ function applyUltraConfig(j, rerender) {
 function fetchUltraConfig() {
     var mac = getAppMac();
     if (!mac) return Promise.resolve(null);
+    // Busca também o endpoint principal, que é a origem confirmada do bg_url
+    // escolhido no painel e usado pela interface de Filmes/Séries/Canais.
+    fetchPanelBackground();
     return fetchT(ULTRA_CONFIG_ENDPOINT + enc(mac), 10000, { credentials: 'omit', headers: { 'Accept': 'application/json' } }).then(function (r) { return r.json(); }).then(function (j) { applyUltraConfig(j, true); return j; }).catch(function () { var cached = lsGet('zx_ultra_config'); if (cached) applyUltraConfig(cached, false); return null; });
 }
 function loadCss() {
