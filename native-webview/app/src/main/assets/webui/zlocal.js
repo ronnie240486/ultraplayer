@@ -743,10 +743,20 @@ function streamUrl(kind, id, ext) {
     if ((S.playlistType || '').indexOf('m3u') === 0 && (!S.xtreamDerived || S.xtreamUnavailable)) {
         var bucket = kind === 'live' ? 'live' : kind === 'movie' ? 'movies' : 'series';
         var m3u = (S.cat[bucket] && S.cat[bucket].all) || [];
-        for (var mi = 0; mi < m3u.length; mi++) if (String(m3u[mi].stream_id) === String(id) || String(m3u[mi].series_id || '') === String(id)) return m3u[mi].stream_url || '';
+        for (var mi = 0; mi < m3u.length; mi++) if (String(m3u[mi].stream_id) === String(id) || String(m3u[mi].series_id || '') === String(id)) {
+            var directLive = m3u[mi].stream_url || '';
+            if (kind === 'live' && getFormFactor() === 'tv' && /\.(m3u8|m3u)(\?.*)?$/i.test(directLive)) directLive = directLive.replace(/\.(m3u8|m3u)(\?.*)?$/i, '.ts$2');
+            return directLive;
+        }
     }
     var c = xtreamCreds(), u = enc(c.user), p = enc(c.pass), base = c.server || S.server;
-    if (kind === 'live') return base + '/live/' + u + '/' + p + '/' + id + '.m3u8';
+    if (kind === 'live') {
+        // Algumas TV Box exibem HLS preto mesmo quando a mesma conta funciona
+        // no celular. O endpoint Xtream aceita MPEG-TS como primeira tentativa
+        // na TV Box; no Celular preservamos HLS.
+        var liveExt = getFormFactor() === 'tv' ? '.ts' : '.m3u8';
+        return base + '/live/' + u + '/' + p + '/' + id + liveExt;
+    }
     if (kind === 'movie') return base + '/movie/' + u + '/' + p + '/' + id + '.' + (ext || 'mp4');
     return base + '/series/' + u + '/' + p + '/' + id + '.' + (ext || 'mp4');
 }
@@ -999,7 +1009,7 @@ function posterTile(s, kind) {
 function posterTiles(list, kind) { var h = ''; for (var i = 0; i < list.length; i++) h += posterTile(list[i], kind); return h; }
 function trailerSearchUrl(title, kind) {
     var suffix = kind === 'series' ? ' série trailer oficial' : ' filme trailer oficial';
-    return 'https://www.youtube.com/results?search_query=' + encodeURIComponent(String(title || '') + suffix);
+    return 'https://m.youtube.com/results?search_query=' + encodeURIComponent(String(title || '') + suffix);
 }
 function openTrailer(title, kind, direct) {
     var raw = String(direct || ''), u = /^https?:\/\//i.test(raw) ? raw : trailerSearchUrl(title, kind);
@@ -1074,51 +1084,86 @@ function channelTiles(list) { var h = ''; for (var i = 0; i < list.length; i++) 
 
 /* ---------- catálogo (carrega tudo 1x por seção; igual HDX direto) ---------- */
 var PAGE = 100;
-function xtreamCatalog(kind) {
+function xtreamCatalog(kind, fastFirstCategory) {
     var catsAction = kind === 'live' ? 'get_live_categories' : kind === 'movies' ? 'get_vod_categories' : 'get_series_categories';
     var listAction = kind === 'live' ? 'get_live_streams' : kind === 'movies' ? 'get_vod_streams' : 'get_series';
     var newKey = kind === 'series' ? 'last_modified' : 'added';
-    return Promise.all([xt(catsAction), xt(listAction)]).then(function (res) {
-        if (!tizenAvail() && (res[0] === null || res[1] === null)) throw { zxOffline: 1 };
-        var cats = arr1(res[0]), rawAll = arr1(res[1]), adultCats = {}, all = rawAll, byCat = {};
+    function finish(catsRaw, streamsRaw) {
+        if (!tizenAvail() && (catsRaw === null || streamsRaw === null)) throw { zxOffline: 1 };
+        var cats = arr1(catsRaw), rawAll = arr1(streamsRaw), adultCats = {}, all = rawAll, byCat = {};
         for (var ac = 0; ac < cats.length; ac++) if (isAdultName(cats[ac].category_name)) adultCats[String(cats[ac].category_id || '')] = 1;
         if (profKidsActive()) all = rawAll.filter(function (item) { return !adultCats[String(item.category_id || '')] && kidsAllows(item); });
-        for (var i = 0; i < all.length; i++) {
-            var cid = String(all[i].category_id || '');
-            if (!byCat[cid]) byCat[cid] = [];
-            byCat[cid].push(all[i]);
-        }
+        for (var i = 0; i < all.length; i++) { var cid = String(all[i].category_id || ''); if (!byCat[cid]) byCat[cid] = []; byCat[cid].push(all[i]); }
         if (kind !== 'live') { for (var c in byCat) if (byCat.hasOwnProperty(c)) sortNewest(byCat[c], newKey); sortNewest(all, newKey); }
         var outCats = [];
-        for (var j = 0; j < cats.length; j++) {
-            var id = String(cats[j].category_id || ''), catName = cats[j].category_name || '—', catAdult = isAdultName(catName);
-            if (profKidsActive() && catAdult) continue;
-            outCats.push({ category_id: id, category_name: catName, num: (byCat[id] ? byCat[id].length : 0), adult: catAdult });
-        }
-        S.cat[kind] = { cats: outCats, byCat: byCat, all: all };
+        for (var j = 0; j < cats.length; j++) { var id = String(cats[j].category_id || ''), catName = cats[j].category_name || '—', catAdult = isAdultName(catName); if (profKidsActive() && catAdult) continue; outCats.push({ category_id: id, category_name: catName, num: (byCat[id] ? byCat[id].length : 0), adult: catAdult }); }
+        S.cat[kind] = { cats: outCats, byCat: byCat, all: all, partial: !!fastFirstCategory };
         return S.cat[kind];
-    });
+    }
+    if (fastFirstCategory && kind !== 'live') {
+        return xt(catsAction).then(function (catsRaw) {
+            var cats = arr1(catsRaw), chosen = null;
+            for (var i = 0; i < cats.length; i++) if (!isAdultName(cats[i].category_name)) { chosen = cats[i]; break; }
+            var extra = chosen && chosen.category_id ? '&category_id=' + enc(chosen.category_id) : '';
+            return xt(listAction, extra).then(function (streamsRaw) { return finish(catsRaw, streamsRaw); });
+        });
+    }
+    return Promise.all([xt(catsAction), xt(listAction)]).then(function (res) { return finish(res[0], res[1]); });
+}
+function catalogCacheKey(kind) {
+    var source = String(S.playlistUrl || S.server || 'default');
+    return 'zx_catalog_cache_v2:' + kind + ':' + source.slice(-160);
+}
+function compactCatalogForCache(cat) {
+    if (!cat) return null;
+    var by = {}, keys = Object.keys(cat.byCat || {});
+    for (var i = 0; i < keys.length; i++) by[keys[i]] = (cat.byCat[keys[i]] || []).slice(0, 60);
+    return { cats: (cat.cats || []).slice(0, 180), byCat: by, all: (cat.all || []).slice(0, 360), partial: true };
+}
+function saveCatalogCache(kind, cat) {
+    try { lsSet(catalogCacheKey(kind), { ts: Date.now(), data: compactCatalogForCache(cat) }); } catch (e) {}
+}
+function readCatalogCache(kind) {
+    try {
+        var hit = lsGet(catalogCacheKey(kind));
+        if (!hit || !hit.data || !hit.ts || Date.now() - hit.ts > 15 * 60 * 1000) return null;
+        return hit.data;
+    } catch (e) { return null; }
 }
 function ensureCatalog(kind) {
-    // kind: 'movies' | 'series' | 'live'. Resolve → { cats:[{category_id,category_name,num,adult}], byCat:{}, all:[] }
+    // Em TV Box, uma fotografia curta do catálogo libera a primeira tela imediatamente.
+    // A consulta completa continua em segundo plano e atualiza a fonte para a próxima entrada.
     if (S.cat[kind]) return Promise.resolve(S.cat[kind]);
+    if (S.catPromises[kind]) return S.catPromises[kind];
+    var cached = getFormFactor() === 'tv' ? readCatalogCache(kind) : null;
+    if (cached) {
+        S.cat[kind] = cached;
+        setTimeout(function () {
+            if (!S.catPromises[kind]) refreshCatalog(kind, true);
+        }, 0);
+        return Promise.resolve(cached);
+    }
+    return refreshCatalog(kind, false);
+}
+function refreshCatalog(kind, forceFull) {
     if (S.catPromises[kind]) return S.catPromises[kind];
     var isM3u = (S.playlistType || '').indexOf('m3u') === 0;
     if (isM3u && !S.xtreamDerived && !S.xtreamUnavailable) xtreamCreds();
-    if (isM3u && (!S.xtreamDerived || S.xtreamUnavailable)) {
-        S.catPromises[kind] = catalogFromM3U().then(function (result) { delete S.catPromises[kind]; return result; }, function (err) { delete S.catPromises[kind]; throw err; });
-        return S.catPromises[kind];
-    }
-    var work = xtreamCatalog(kind);
-    S.catPromises[kind] = work.catch(function (err) {
+    var work;
+    if (isM3u && (!S.xtreamDerived || S.xtreamUnavailable)) work = catalogFromM3U();
+    else work = xtreamCatalog(kind, !forceFull && getFormFactor() === 'tv' && kind !== 'live').catch(function (err) {
         if (isM3u && S.xtreamDerived) {
-            S.xtreamUnavailable = true;
-            S.xtreamDerived = null;
+            S.xtreamUnavailable = true; S.xtreamDerived = null;
             S.cat = { movies: null, series: null, live: null };
             return catalogFromM3U();
         }
         throw err;
-    }).then(function (result) { delete S.catPromises[kind]; return result; }, function (err) { delete S.catPromises[kind]; throw err; });
+    });
+    S.catPromises[kind] = work.then(function (result) {
+        saveCatalogCache(kind, result); delete S.catPromises[kind];
+        if (!forceFull && result && result.partial) setTimeout(function () { refreshCatalog(kind, true); }, 350);
+        return result;
+    }, function (err) { delete S.catPromises[kind]; throw err; });
     return S.catPromises[kind];
 }
 function streamsForCat(kind, catId) {
@@ -1292,7 +1337,7 @@ function afterRender() {
     try { if (global.__hdxTv && global.__hdxTv.afterSwap) global.__hdxTv.afterSwap(); } catch (e) {}
     try { installTrailerStyles(); } catch (e2) {}
     try {
-        var d = document.querySelectorAll('.trailer-detail-btn');
+        var d = document.querySelectorAll('.trailer-detail-btn,.poster-trailer-btn');
         for (var i = 0; i < d.length; i++) (function (btn) { if (btn.getAttribute('data-trailer-wired')) return; btn.setAttribute('data-trailer-wired', '1'); btn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); openTrailer(btn.getAttribute('data-trailer-title') || '', btn.getAttribute('data-trailer-kind') || 'movie', btn.getAttribute('data-trailer-url') || ''); }); })(d[i]);
     } catch (e3) {}
 }
@@ -2833,6 +2878,10 @@ function renderSection(kind, opts) {
     if (!S.server) return renderNoPlaylist();   // sem lista -> "Playlist não adicionada"
     showLoading(true);
     ensureCatalog(kind).then(function (cat) {
+        if (kind !== 'live' && cat && cat.partial && opts.catId && !cat.byCat[String(opts.catId)]) {
+            showLoading(true);
+            return refreshCatalog(kind, true).then(function () { return renderSection(kind, opts); });
+        }
         showLoading(false);
         if (kind === 'live') return renderLiveSection(cat, opts);
         renderVodSection(kind, cat, opts);

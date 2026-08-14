@@ -55,14 +55,17 @@ public final class TrailerActivity extends Activity {
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
-        settings.setMediaPlaybackRequiresUserGesture(true);
+        settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(true);
         settings.setSupportMultipleWindows(false);
         settings.setUserAgentString("UltraPlayer-Trailer/1.0 " + settings.getUserAgentString());
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
+        webView.setFocusable(true);
+        webView.setFocusableInTouchMode(true);
         root.addView(webView, new FrameLayout.LayoutParams(-1, -1));
+        webView.requestFocus(View.FOCUS_DOWN);
 
         ProgressBar loading = new ProgressBar(this);
         FrameLayout.LayoutParams loadingLp = new FrameLayout.LayoutParams(54, 54, Gravity.CENTER);
@@ -75,6 +78,8 @@ public final class TrailerActivity extends Activity {
         back.setAllCaps(false);
         back.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         back.setBackgroundColor(Color.argb(205, 6, 19, 15));
+        back.setFocusable(true);
+        back.setOnFocusChangeListener((v, focused) -> v.setBackgroundColor(focused ? Color.argb(235, 16, 185, 129) : Color.argb(205, 6, 19, 15)));
         back.setOnClickListener(v -> finish());
         FrameLayout.LayoutParams backLp = new FrameLayout.LayoutParams(-2, 54, Gravity.TOP | Gravity.START);
         backLp.leftMargin = 18;

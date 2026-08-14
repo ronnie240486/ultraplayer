@@ -723,10 +723,18 @@ public final class MainActivity extends Activity {
 
     private void retryLiveAsTs() {
         if (miniPlayer == null || miniTsRetryUsed || miniSourceUrl == null || miniSourceUrl.isEmpty()) return;
+        boolean livePayload = miniPayload != null && miniPayload.contains("\"kind\":\"live\"");
+        if (!livePayload) return;
         String lower = miniSourceUrl.toLowerCase(java.util.Locale.US);
-        if (lower.indexOf("/live/") < 0 || (lower.indexOf(".m3u8") < 0 && lower.indexOf(".m3u") < 0)) return;
-        String fallback = miniSourceUrl.replaceFirst("(?i)\\.(m3u8|m3u)(\\?.*)?$", ".ts$2");
-        if (fallback.equals(miniSourceUrl)) fallback = miniSourceUrl + (miniSourceUrl.indexOf('?') >= 0 ? "&" : "?") + "format=ts";
+        String fallback;
+        if (lower.matches(".*\\.(m3u8|m3u)(\\?.*)?$")) {
+            fallback = miniSourceUrl.replaceFirst("(?i)\\.(m3u8|m3u)(\\?.*)?$", ".ts$2");
+        } else if (lower.matches(".*\\.ts(\\?.*)?$")) {
+            fallback = miniSourceUrl.replaceFirst("(?i)\\.ts(\\?.*)?$", ".m3u8$1");
+        } else {
+            fallback = miniSourceUrl + (miniSourceUrl.indexOf('?') >= 0 ? "&" : "?") + "format=ts";
+        }
+        if (fallback.equals(miniSourceUrl)) return;
         miniTsRetryUsed = true;
         try {
             miniPlayer.setMediaItem(MediaItem.fromUri(fallback));
@@ -907,6 +915,11 @@ public final class MainActivity extends Activity {
         }
         if (webView == null) { handleRootBack(); return; }
         webView.evaluateJavascript("window.__zxBackAction ? window.__zxBackAction() : 'na'", value -> {
+            // evaluateJavascript devolve strings JS com aspas: `"exit"`.
+            // Esse retorno precisa cair no contador de dois toques do Java,
+            // não ser consumido como uma navegação já tratada.
+            boolean wantsExit = value != null && (value.contains("exit") || value.contains("EXIT"));
+            if (wantsExit) { handleRootBack(); return; }
             boolean handled = value != null && !value.contains("na") && !value.contains("null");
             if (handled) { lastRootBackAt = 0L; return; }
             handleRootBack();
