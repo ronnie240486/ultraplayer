@@ -312,11 +312,29 @@ public final class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void openTrailer(String url, String title) {
+            final String target = url == null ? "" : url.trim();
+            if (target.isEmpty() || !(target.startsWith("https://") || target.startsWith("http://"))) return;
+            runOnUiThread(() -> {
+                try {
+                    Intent intent = new Intent(MainActivity.this, TrailerActivity.class);
+                    intent.putExtra("url", target);
+                    intent.putExtra("title", title == null ? "" : title);
+                    startActivity(intent);
+                } catch (Throwable ignored) { }
+            });
+        }
+
+        @JavascriptInterface
         public void openUrl(String url) {
             final String target = url == null ? "" : url.trim();
             if (target.isEmpty() || !(target.startsWith("https://") || target.startsWith("http://"))) return;
             runOnUiThread(() -> {
-                try { startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(target))); } catch (Throwable ignored) { }
+                try {
+                    Intent intent = new Intent(MainActivity.this, TrailerActivity.class);
+                    intent.putExtra("url", target);
+                    startActivity(intent);
+                } catch (Throwable ignored) { }
             });
         }
 

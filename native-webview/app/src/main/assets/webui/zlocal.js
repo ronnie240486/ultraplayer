@@ -882,7 +882,10 @@ function trailerSearchUrl(title, kind) {
 }
 function openTrailer(title, kind, direct) {
     var raw = String(direct || ''), u = /^https?:\/\//i.test(raw) ? raw : trailerSearchUrl(title, kind);
-    try { if (global.HdxNative && typeof global.HdxNative.openUrl === 'function') { global.HdxNative.openUrl(u); return; } } catch (e) {}
+    try {
+        if (global.HdxNative && typeof global.HdxNative.openTrailer === 'function') { global.HdxNative.openTrailer(u, String(title || '')); return; }
+        if (global.HdxNative && typeof global.HdxNative.openUrl === 'function') { global.HdxNative.openUrl(u); return; }
+    } catch (e) {}
     try { global.open(u, '_blank'); } catch (e2) { try { location.href = u; } catch (e3) {} }
 }
 function trailerFromTarget(target) {
