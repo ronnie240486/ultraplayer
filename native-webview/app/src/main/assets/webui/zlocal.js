@@ -465,6 +465,42 @@ function applyOfflineHint() {
 function listNotificationSeenKey(id) { return 'zx_list_notification_seen_' + String(id || ''); }
 function listNotificationWasSeen(id) { try { return localStorage.getItem(listNotificationSeenKey(id)) === '1'; } catch (e) { return false; } }
 function listNotificationMarkSeen(id) { try { localStorage.setItem(listNotificationSeenKey(id), '1'); } catch (e) {} }
+function expirationModalSeenKey(key) { return 'zx_expiration_modal_' + String(key || ''); }
+function expirationModalWasSeen(key) { try { return localStorage.getItem(expirationModalSeenKey(key)) === '1'; } catch (e) { return false; } }
+function expirationModalMarkSeen(key) { try { localStorage.setItem(expirationModalSeenKey(key), '1'); } catch (e) {} }
+function applyExpirationState(expiration) {
+    if (!expiration || typeof expiration !== 'object') return;
+    try {
+        S.info = S.info || {}; S.info.license = S.info.license || {};
+        var hasDate = Object.prototype.hasOwnProperty.call(expiration, 'expiration_date') || Object.prototype.hasOwnProperty.call(expiration, 'expiration_display');
+        var raw = expiration.expiration_date || expiration.expiration_display || '';
+        var ts = expiryTimestamp(raw);
+        if (hasDate) {
+            if (ts) S.info.license.exp_date = ts; else delete S.info.license.exp_date;
+            S.info.license.exp_display = expiration.expiration_display ? String(expiration.expiration_display) : '';
+        }
+    } catch (e) {}
+}
+function showExpirationModal(expiration) {
+    if (!expiration || expiration.show_modal !== true || $('zx-expiration-modal')) return;
+    var key = String(expiration.modal_key || expiration.expiration_date || expiration.expiration_state || '');
+    if (!key || expirationModalWasSeen(key)) return;
+    expirationModalMarkSeen(key);
+    var title = esc(expiration.modal_title || 'Aviso de vencimento');
+    var message = esc(expiration.modal_message || 'Seu acesso está próximo do vencimento.');
+    var ov = document.createElement('div'); ov.id = 'zx-expiration-modal';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100002;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,.52);font-family:system-ui,-apple-system,Segoe UI,sans-serif;';
+    ov.innerHTML = '<div role="alertdialog" aria-modal="true" style="width:min(680px,94vw);background:rgba(9,20,15,.98);border:2px solid #f59e0b;border-radius:18px;padding:26px;color:#f8fff9;box-shadow:0 18px 70px rgba(0,0,0,.65);box-sizing:border-box;text-align:left;">'
+        + '<div style="font-size:30px;line-height:1;margin-bottom:14px;color:#fbbf24">⏳</div>'
+        + '<div style="font-size:22px;font-weight:800;margin-bottom:10px;">' + title + '</div>'
+        + '<div style="font-size:17px;line-height:1.5;color:#d4e1d9;white-space:pre-wrap;">' + message + '</div>'
+        + '<div style="text-align:right;margin-top:24px;"><button id="zx-expiration-ok" autofocus type="button" style="min-width:140px;padding:12px 20px;border:0;border-radius:10px;background:#f59e0b;color:#1b1203;font-size:16px;font-weight:800;">OK</button></div></div>';
+    document.body.appendChild(ov);
+    try { document.body.classList.add('tv-modal-open'); } catch (e) {}
+    var ok = $('zx-expiration-ok'); if (ok) ok.addEventListener('click', function () { try { if (ov.parentNode) ov.parentNode.removeChild(ov); } catch (e) {} try { document.body.classList.remove('tv-modal-open'); } catch (e2) {} });
+    try { if (ok) ok.focus(); } catch (e3) {}
+}
+function processExpirationState(expiration) { applyExpirationState(expiration); showExpirationModal(expiration); }
 function listNotificationAck(mac, id) {
     if (!mac || !id) return;
     var body = JSON.stringify({ mac: mac, alert_id: Number(id) || id });
@@ -507,6 +543,7 @@ function checkListNotifications() {
     fetchT(url, 9000, { cache: 'no-store', credentials: 'omit', headers: { 'Accept': 'application/json', 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' } })
         .then(function (r) { if (!r.ok) throw new Error('list_notifications_' + r.status); return r.json(); })
         .then(function (d) {
+            processExpirationState(d && d.expiration);
             return processFailoverState(d, mac).then(function () {
                 var list = d && Array.isArray(d.notifications) ? d.notifications.slice() : [];
                 list.sort(function (a, b) { return String(b.created_at || '').localeCompare(String(a.created_at || '')); });
@@ -521,7 +558,7 @@ function checkListNotifications() {
 }
 function startListNotificationWatcher() {
     if (S.listNotificationTimer) return;
-    checkListNotifications();
+    try { setTimeout(checkListNotifications, 900); } catch (e) { checkListNotifications(); }
     try { S.listNotificationTimer = setInterval(checkListNotifications, 60000); } catch (e) {}
 }
 
@@ -2041,8 +2078,8 @@ function renderHome() {
     // (abrir detalhe → Voltar). Pedido do Leonardo.
     S.vodBack = {}; S.vodPos = null; S.liveBack = null;
     var info = S.info || {}; var lic = info.license || {};
-    var exp = 'Sem expiração';
-    if (info.exp_date) { var dt = new Date(info.exp_date * 1000); exp = p2(dt.getDate()) + '/' + p2(dt.getMonth() + 1) + '/' + dt.getFullYear(); }
+    var exp = (lic.exp_display || 'Sem expiração');
+    if (!lic.exp_display && info.exp_date) { var dt = new Date(info.exp_date * 1000); exp = p2(dt.getDate()) + '/' + p2(dt.getMonth() + 1) + '/' + dt.getFullYear(); }
     var mac = lic.mac || '';
     var ann = (S.branding && S.branding.announce) || null;
     var bannerHtml = '';
@@ -3656,7 +3693,7 @@ function settingsStyles() {
 }
 function renderSettings() {
     var info = S.info || {}; var lic = info.license || {};
-    var exp = 'Sem expiração'; if (info.exp_date) { var dt = new Date(info.exp_date * 1000); exp = p2(dt.getDate()) + '/' + p2(dt.getMonth() + 1) + '/' + dt.getFullYear(); }
+    var exp = (lic.exp_display || 'Sem expiração'); if (!lic.exp_display && info.exp_date) { var dt = new Date(info.exp_date * 1000); exp = p2(dt.getDate()) + '/' + p2(dt.getMonth() + 1) + '/' + dt.getFullYear(); }
     var status = info.status || '';
     // "Tela do app" (Celular x TV) — só no Android (UI empacotada com HdxNative)
     var ffMenu = nativeAvail() ? '<a href="#screen" class="sm-item" data-pane="pane-screen"><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"></rect><line x1="12" y1="18" x2="12" y2="18"></line></svg></span><span class="sm-label">Tela do app</span></a>' : '';
