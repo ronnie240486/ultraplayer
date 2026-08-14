@@ -169,7 +169,31 @@
         return (next >= 0 && next < list.length && visible(list[next])) ? list[next] : null;
     }
 
+    function liveEpgSibling(currentEl, dir) {
+        if (!currentEl || (dir !== 'left' && dir !== 'right')) return null;
+        var cls = typeof currentEl.className === 'string' ? currentEl.className : '';
+        var inChannel = cls.indexOf('channel-tile-tv') >= 0 || !!(currentEl.closest && currentEl.closest('.channel-tile-tv'));
+        var inEpg = cls.indexOf('epg-alarm') >= 0 || !!(currentEl.closest && currentEl.closest('.live-epg'));
+        if (dir === 'right' && inChannel) {
+            var firstBell = document.querySelector('.live-epg .epg-alarm');
+            if (firstBell && visible(firstBell)) return firstBell;
+        }
+        if (dir === 'left' && inEpg) {
+            var sid = currentEl.getAttribute && currentEl.getAttribute('data-sid');
+            var tiles = document.querySelectorAll('.channel-tile-tv');
+            var fallback = null;
+            for (var i = 0; i < tiles.length; i++) {
+                if (!fallback && visible(tiles[i])) fallback = tiles[i];
+                if (sid && tiles[i].getAttribute('data-sid') === sid && visible(tiles[i])) return tiles[i];
+            }
+            return fallback;
+        }
+        return null;
+    }
+
     function pickSpatial(currentEl, dir) {
+        var liveNext = liveEpgSibling(currentEl, dir);
+        if (liveNext) return liveNext;
         var settingsNext = settingsSibling(currentEl, dir);
         if (settingsNext) return settingsNext;
         var sib = pickSiblingInRow(currentEl, dir) || pickSiblingInColumn(currentEl, dir);
