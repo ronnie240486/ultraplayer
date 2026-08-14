@@ -653,9 +653,12 @@ function homeRemoteIconHtml(key, fallbackHtml) {
     return fallbackHtml;
 }
 function homeRemoteBannerHtml() {
-    var b = S.branding || {}, img = b.banner_url || b.background_url || '', title = b.message_title || b.impact_phrase || '', text = b.message_text || '';
-    if (!img && !title && !text) return '';
-    return '<div class="zx-remote-banner">' + (img ? '<img src="' + attr(img) + '" alt="" onerror="this.parentNode.removeChild(this)">' : '') + ((title || text) ? '<div class="zx-remote-banner-copy">' + (title ? '<b>' + esc(title) + '</b>' : '') + (text ? '<span>' + esc(text) + '</span>' : '') + '</div>' : '') + '</div>';
+    // A imagem enviada pelo painel é exclusivamente o fundo global. Não a
+    // renderize novamente como banner dentro da home, pois isso duplicava a
+    // mesma arte atrás e dentro dos cartões principais.
+    var b = S.branding || {}, title = b.message_title || b.impact_phrase || '', text = b.message_text || '';
+    if (!title && !text) return '';
+    return '<div class="zx-remote-banner zx-remote-text-only"><div class="zx-remote-banner-copy" style="position:relative;left:auto;bottom:auto;max-width:100%;width:100%;">' + (title ? '<b>' + esc(title) + '</b>' : '') + (text ? '<span>' + esc(text) + '</span>' : '') + '</div></div>';
 }
 var APP_THEMES = [
     { id: 'verde', name: 'Verde esmeralda', accent: '#10b981', bg: '#06130f', panel: '#0d241a', text: '#f4fff9', muted: '#9db0a7' },
@@ -745,7 +748,9 @@ function applyBranding(b) {
     try { document.title = title; } catch (e) {}
     var saved = appThemeId();
     if (saved && saved !== 'verde') applyAppTheme(saved, false); else applyAccent(b.accent || '#10b981');
-    applyWallpaper(b.wallpaper_url || b.background_url || b.background || '');
+    // Alguns painéis guardam a imagem enviada no campo banner_url. Ela também
+    // deve ocupar o fundo inteiro quando não existe background_url separado.
+    applyWallpaper(b.wallpaper_url || b.background_url || b.background || b.banner_url || '');
 }
 var ULTRA_CONFIG_ENDPOINT = 'https://renciaapp.manus.space/api/v5/ultra-config?mac=';
 function applyUltraConfig(j, rerender) {
