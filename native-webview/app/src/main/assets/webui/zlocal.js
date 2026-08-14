@@ -2349,7 +2349,6 @@ function renderHome() {
         + '<div class="zh-date">' + esc(dateStr) + '</div></div>'
         + '<div class="zh-icons">'
         + '<a href="/lists" class="zh-tbtn">' + svg(svSrv) + '<span>Servidor</span></a>'
-        + '<a href="/search" class="zh-tbtn ic" title="Buscar em tudo" aria-label="Buscar em tudo">' + svg(svSearch) + '</a>'
         + '<button type="button" class="zh-tbtn ic zh-voice" id="zxVoiceBtn" title="Ultra Assistente" aria-label="Ultra Assistente — comando de voz"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line><line x1="8" y1="22" x2="16" y2="22"></line></svg></button>'
         + '<button type="button" class="zh-tbtn ic zh-radio" id="zxRadioBtn" aria-label="Rádios online"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M4.9 4.9a10 10 0 0 0 0 14.2M19.1 4.9a10 10 0 0 1 0 14.2M2 2l20 20"></path></svg></button>'
         + '<a href="/reload" class="zh-tbtn ic">' + svg(svRel) + '</a>'
@@ -4816,6 +4815,14 @@ function applyFormFactor() {
        os tamanhos mudam. Celular é maior para toque e TV Box é compacto. */
 function ffMobileCss() {
     return 'body.zx-ff-mobile .tile-icon svg{width:58px;height:58px}'
+        + 'body.zx-ff-mobile .zx-home2{overflow-y:auto !important;overflow-x:hidden !important;-webkit-overflow-scrolling:touch;}'
+        + 'body.zx-ff-mobile .zx-home2 .zh-ui{position:relative !important;min-height:100vh;height:auto !important;overflow:visible !important;padding-bottom:36px;}'
+        + 'body.zx-ff-mobile .zx-home2 .zh-nav{display:flex !important;align-items:stretch;gap:9px;overflow-x:auto;overflow-y:hidden;width:100%;height:132px !important;min-height:132px !important;flex:none !important;padding:4px 4px 10px;box-sizing:border-box;scrollbar-width:thin;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;}'
+        + 'body.zx-ff-mobile .zx-home2 .zh-navr,body.zx-ff-mobile .zx-home2 .zh-navtop,body.zx-ff-mobile .zx-home2 .zh-navbot{display:contents !important;}'
+        + 'body.zx-ff-mobile .zx-home2 .zh-nav>.zh-tile,body.zx-ff-mobile .zx-home2 .zh-navtop .zh-tile,body.zx-ff-mobile .zx-home2 .zh-navbot .zh-stile{flex:0 0 190px !important;width:190px !important;min-width:190px !important;max-width:190px !important;height:116px !important;min-height:116px !important;max-height:116px !important;scroll-snap-align:start;}'
+        + 'body.zx-ff-mobile .zx-home2 .zh-posters{overflow-x:auto;overflow-y:hidden;max-width:100%;padding:2px 4px 8px;scrollbar-width:thin;-webkit-overflow-scrolling:touch;}'
+        + 'body.zx-ff-mobile .zx-home2 .zh-recent{max-width:100%;overflow:hidden;}'
+        + 'body.zx-ff-mobile .zx-home2 .zh-status{max-width:100%;}'
         + 'body.zx-ff-mobile .home-tile{padding:20px 10px}'
         + 'body.zx-ff-mobile .home-tile span{font-size:17px}'
         + 'body.zx-ff-mobile .home-logo{transform:scale(1);transform-origin:center}'
