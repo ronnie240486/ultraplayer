@@ -2564,15 +2564,20 @@ function homeRecentHtml() {
                 if (sl.s != null && sl.e != null) topLine = t('Temporada ') + sl.s + ' · ' + t('Episódio') + ' ' + sl.e;
             }
         }
-        var leftTxt = '', pct = -1;
+        var leftTxt = '', pct = -1, resumeHref = '/' + it.kind + '/' + enc(it.id), canResume = false;
         if (pr && pr.dur > 60 && pr.pos > 0 && pr.pos < pr.dur) {
             var rem = pr.dur - pr.pos;
             var hh = Math.floor(rem / 3600), mm = Math.floor((rem % 3600) / 60);
             leftTxt = (hh > 0 ? hh + 'h ' + p2(mm) + 'm' : (mm > 0 ? mm + 'm' : '1m')) + ' ' + t('restantes');
             pct = Math.round((pr.pos / pr.dur) * 100); if (pct > 100) pct = 100;
+            canResume = true;
+            if (it.kind === 'movies') resumeHref = '/movies/' + enc(it.id) + '/play?t=' + enc(Math.floor(pr.pos));
+            else if (sl && sl.epId) resumeHref = '/series/' + enc(it.id) + '/episode/' + enc(sl.epId) + '/play?ext=' + enc(sl.ext || 'mp4') + '&t=' + enc(Math.floor(pr.pos));
+            leftTxt = 'Continuar' + (leftTxt ? ' • ' + leftTxt : '');
         }
         var initials = (name || 'UP').replace(/[^A-Za-zÀ-ÿ0-9 ]/g, '').trim().split(/\s+/).slice(0, 2).map(function (x) { return x.charAt(0); }).join('').toUpperCase() || 'UP';
-        cards += '<a class="zh-poster" href="/' + it.kind + '/' + it.id + '">'
+        var cardLabel = (canResume ? 'Continuar assistindo: ' : '') + name;
+        cards += '<a class="zh-poster" href="' + resumeHref + '" title="' + attr(cardLabel) + '" aria-label="' + attr(cardLabel) + '">'
             + '<div class="pt-img zh-art"' + (img ? ' data-src="' + attr(img) + '"' : '') + '><span class="zh-art-fallback">' + esc(initials) + '</span></div>'
             + '<div class="zh-cbody">'
             + (topLine ? '<div class="zh-cyear">' + esc(topLine) + '</div>' : '')
