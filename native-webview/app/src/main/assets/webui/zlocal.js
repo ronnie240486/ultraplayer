@@ -736,12 +736,14 @@ function applyWallpaper(url) {
         // antiga nem criar uma segunda camada por baixo.
         st.textContent = ".bg-diamonds{background-color:transparent !important;background-image:none !important;}"
             + "#app-root,.app-root{background-color:transparent !important;background-image:url('" + safe + "') !important;background-position:center center;background-repeat:no-repeat;background-size:cover;background-attachment:fixed;}"
-            + '.sidebar-screen,.zx-home2,.home-screen,.radio-screen,.search-screen,.settings-screen{background-color:transparent !important;background-image:none !important;}';
+            + '.sidebar-screen,.zx-home2,.home-screen,.radio-screen,.search-screen,.settings-screen{background-color:transparent !important;background-image:none !important;}'
+            + '.zx-home2{background:transparent !important;}.zx-home2 .zh-amb,.zx-home2 .zh-wm{display:none !important;}';
     } else {
         // Sem imagem do painel, remove a arte antiga do root e deixa apenas a
         // cor do tema, sem fallback para bg_url/background/banner.
         st.textContent = '.bg-diamonds{background-color:transparent !important;background-image:none !important;}#app-root,.app-root{background-color:#080808 !important;background-image:none !important;}'
-            + '.sidebar-screen,.zx-home2,.home-screen,.radio-screen,.search-screen,.settings-screen{background-color:transparent !important;background-image:none !important;}';
+            + '.sidebar-screen,.zx-home2,.home-screen,.radio-screen,.search-screen,.settings-screen{background-color:transparent !important;background-image:none !important;}'
+            + '.zx-home2{background:transparent !important;}.zx-home2 .zh-amb,.zx-home2 .zh-wm{display:none !important;}';
     }
 }
 function applyBranding(b) {
