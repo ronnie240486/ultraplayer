@@ -834,6 +834,26 @@ function applyAppTheme(id, rerender) {
 function brandLogoHtmlStyles() {
     return '<style>.brand-lockup{display:inline-flex;align-items:center;gap:9px;vertical-align:middle}.brand-mark{width:42px;height:42px;object-fit:contain;display:block;border-radius:6px}.brand-logo-img{max-height:42px;max-width:190px;object-fit:contain}.home-remote-icon-wrap{width:68px;height:68px;display:flex;align-items:center;justify-content:center}.home-remote-icon{width:68px;height:68px;object-fit:contain;border-radius:12px;display:block}.home-remote-fallback,.home-remote-fallback svg{width:68px;height:68px;display:block}.zx-remote-banner{position:relative;display:flex;align-items:center;gap:18px;max-width:1180px;margin:0 auto 14px;padding:12px 16px;border:1px solid rgba(255,255,255,.14);border-radius:16px;background:rgba(0,0,0,.24);overflow:hidden}.zx-remote-banner img{width:100%;max-height:180px;object-fit:cover;border-radius:11px}.zx-remote-banner-copy{position:absolute;left:28px;bottom:22px;display:flex;flex-direction:column;gap:4px;max-width:70%;padding:10px 14px;border-radius:10px;background:rgba(0,0,0,.58);color:#fff}.zx-remote-banner-copy b{font-size:18px}.zx-remote-banner-copy span{font-size:13px;color:#e6eee9}</style>';
 }
+function accessibilityEnabled(key) { try { return localStorage.getItem('zx_a11y_' + key) === '1'; } catch (e) { return false; } }
+function applyAccessibility() {
+    try {
+        var body = document.body; if (!body) return;
+        body.className = body.className.replace(/\s*zx-a11y-large\b/g, '').replace(/\s*zx-a11y-high\b/g, '');
+        if (accessibilityEnabled('large')) body.className += ' zx-a11y-large';
+        if (accessibilityEnabled('high')) body.className += ' zx-a11y-high';
+        var st = $('zx-a11y-css'); if (!st) { st = document.createElement('style'); st.id = 'zx-a11y-css'; document.head.appendChild(st); }
+        st.textContent = '.zx-a11y-large .zh-tl,.zx-a11y-large .zh-stile b{font-size:1.16em !important}.zx-a11y-large .zh-tsub,.zx-a11y-large .zh-ssub,.zx-a11y-large .zh-cname{font-size:1.12em !important}.zx-a11y-large .btn-tv,.zx-a11y-large button,.zx-a11y-large input,.zx-a11y-large select{line-height:1.25}.zx-a11y-high .zh-tbtn,.zx-a11y-high .zh-tile,.zx-a11y-high .zh-stile,.zx-a11y-high .btn-tv,.zx-a11y-high .sm-item,.zx-a11y-high .opt-btn{border-color:#fff !important}.zx-a11y-high .zh-tbtn:focus,.zx-a11y-high .zh-tile:focus,.zx-a11y-high .zh-stile:focus,.zx-a11y-high button:focus,.zx-a11y-high a:focus{outline:3px solid #fff !important;box-shadow:0 0 0 5px #10b981 !important}';
+    } catch (e) {}
+}
+function ultraDiagnosticsText() {
+    var online = typeof navigator !== 'undefined' && navigator.onLine !== false, rows = [];
+    rows.push('Internet: ' + (online ? 'disponível' : 'indisponível'));
+    rows.push('Servidor: ' + (S.server ? 'conectado' : 'não configurado'));
+    rows.push('Player: ' + (nativeAvail() ? 'Media3/ExoPlayer' : 'player Web'));
+    rows.push('Modo: ' + (getFormFactor() === 'tv' ? 'TV Box' : 'Celular'));
+    ['live','movies','series'].forEach(function (k) { var c = S.cat && S.cat[k]; rows.push((k === 'live' ? 'Canais' : k === 'movies' ? 'Filmes' : 'Séries') + ': ' + (c && c.all ? fmtNum(c.all.length) : 'aguardando catálogo')); });
+    return rows.join(' · ');
+}
 function applyAccent(accent) {
     S.accent = accent || '#10b981';
     if (!S.rawCss) return;
@@ -1279,6 +1299,31 @@ function epgAlarms() { try { var a = JSON.parse(localStorage.getItem('zx_epg_ala
 function saveEpgAlarms(a) { try { localStorage.setItem('zx_epg_alarms', JSON.stringify(a || [])); } catch (e) {} }
 function epgAlarmKey(when, title, channel) { return String(when || 0) + '|' + normVoiceText(title) + '|' + normVoiceText(channel); }
 function epgAlarmHas(when, title, channel) { var k = epgAlarmKey(when, title, channel), a = epgAlarms(); for (var i = 0; i < a.length; i++) if (a[i].key === k) return true; return false; }
+function addVoiceEpgAlarm(program, channel, sid) {
+    var when = epgTimestamp(program && (program.rawStart || program.start));
+    var title = String(program && program.title || 'Programa'), ch = String(channel || 'Canal');
+    if (!when || when <= Date.now()) return false;
+    var a = epgAlarms(), key = epgAlarmKey(when, title, ch); for (var i = 0; i < a.length; i++) if (a[i].key === key) return true;
+    a.push({ key: key, when: when, title: title, channel: ch, sid: parseInt(sid, 10) || 0 }); saveEpgAlarms(a); showEpgToast('Te avisaremos quando sua programação começar.', true); return true;
+}
+function voiceEpgIntent(text) {
+    var cmd = normVoiceText(text), m = cmd.match(/^(?:me avise|avise me|crie um aviso|programe um alarme)(?: quando comecar| quando iniciar| para quando comecar| para quando iniciar)?\s+(.+)$/);
+    if (!m) return false;
+    var query = String(m[1] || '').replace(/^(o|a|um|uma|programa)\s+/, '').trim();
+    if (!query) return false;
+    assistantToast('procurando a programação de ' + query);
+    ensureCatalog('live').then(function (cat) {
+        var all = kidsFilterList((cat && cat.all) || []), cache = S.epgCache || {}, found = [];
+        function collect(sid, channel, epg) { for (var i = 0; i < (epg || []).length; i++) { var p = epg[i] || {}, sc = voiceMatchScore({ name: p.title || '' }, query, 'live'); if (sc > 0 && epgTimestamp(p.rawStart || p.start) > Date.now()) found.push({ p: p, sid: sid, channel: channel, score: sc }); } }
+        for (var sid in cache) if (cache.hasOwnProperty(sid)) { var ci = null; for (var c = 0; c < all.length; c++) if (String(all[c].stream_id) === String(sid)) { ci = all[c]; break; } collect(sid, ci && ci.name || '', cache[sid]); }
+        function finish() { found.sort(function (a, b) { return b.score - a.score || epgTimestamp(a.p.rawStart || a.p.start) - epgTimestamp(b.p.rawStart || b.p.start); }); var top = found[0]; if (top && addVoiceEpgAlarm(top.p, top.channel, top.sid)) { assistantToast('aviso criado para ' + (top.p.title || query)); } else { assistantToast('não encontrei esse programa na programação carregada'); } }
+        if (found.length) { finish(); return; }
+        var channels = all.slice(0, 12), jobs = [];
+        for (var i = 0; i < channels.length; i++) (function (ch) { var sid = String(ch.stream_id || ''); if (!sid) return; var work = cache[sid] ? Promise.resolve(cache[sid]) : xt('get_short_epg', '&stream_id=' + enc(sid) + '&limit=20').then(function (d) { var parsed = epgItemsFromResponse(d); cache[sid] = parsed; return parsed; }); jobs.push(work.then(function (epg) { collect(sid, ch.name || '', epg); }).catch(function () {})); })(channels[i]);
+        Promise.all(jobs).then(finish);
+    }).catch(function () { assistantToast('não foi possível consultar a programação agora'); });
+    return true;
+}
 function showEpgToast(message, enabled) {
     var old = document.querySelector('.zx-epg-toast'); if (old && old.parentNode) old.parentNode.removeChild(old);
     var toast = document.createElement('div'); toast.className = 'zx-epg-toast' + (enabled ? ' is-enabled' : '');
@@ -1860,6 +1905,7 @@ function assistantToast(text) {
     } catch (e) {}
 }
 function runVoiceIntent(text) {
+    if (voiceEpgIntent(text)) return true;
     var cmd = normVoiceText(text).replace(/^(por favor|ultra player|ultra assistente)\s+/, '').replace(/^(abrir|abra|abre|ir para|va para|mostrar|mostre|acessar|acesse)\s+/, '').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
     var path = '', label = '';
     if (/^(home|inicio|tela inicial|pagina inicial)$/.test(cmd)) { path = '/home'; label = 'abrindo a tela inicial'; }
@@ -2293,7 +2339,8 @@ function renderHome() {
         + '<a href="#" class="zh-tbtn ic zh-profbtn" id="zxProfBtn" aria-label="' + te('Perfis') + '">' + profAvatarHtml(profActive().a, 34) + '</a>'
         + '</div></header>';
 
-    var recent = homeRecentHtml();
+        var recent = homeRecentHtml();
+    var recommendations = homeRecommendationsHtml();
 
     var svTv = '<polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2"></rect>';
     var svMov = '<rect x="2" y="4" width="20" height="16" rx="2.5"></rect><path d="M7 4v16M17 4v16M2 9h5M2 15h5M17 9h5M17 15h5"></path>';
@@ -2350,7 +2397,7 @@ function renderHome() {
     // announceStyles: SEM ele a faixa/pop-up de aviso do painel renderiza CRUA no
     // canto (o redesign da home tinha deixado a função órfã — bug 19/07).
     setHtml('<div class="zx-home2"><div class="zx-panel-wall" aria-hidden="true"></div>' + homeRemoteBannerHtml() + bannerHtml + '<div class="zh-amb"></div><div class="zh-wm" aria-hidden="true">ULTRA</div><div class="zh-ui">'
-        + top + nav + recent + status + '</div>' + popHtml + '</div>' + homeStyles(ac) + announceStyles(ac));
+        + top + nav + recent + recommendations + status + '</div>' + popHtml + '</div>' + homeStyles(ac) + announceStyles(ac));
     applyHomePanelWall();
     applyPhoneHomeLayout();
     if (!srvName) startHomeClock();   // com nome de parceiro no topo não há relógio pra atualizar
@@ -2374,6 +2421,7 @@ function renderHome() {
     wireAnnounce(ann);
     afterRender();
     try { setTimeout(warmHomeCatalogs, 220); } catch (e) {}
+    try { setTimeout(fillHomeRecommendations, 480); } catch (e) {}
     focusHomeStart();   // foco SEMPRE no "TV ao Vivo" já MARCADO (o harness focaria "Servidor")
     // PERFIS: avatar do topo abre o "Quem está assistindo?"
     try {
@@ -2477,6 +2525,61 @@ function homeRecentHtml() {
             + '</div></a>';
     });
     return '<section class="zh-recent">' + head + '<div class="zh-posters">' + cards + '</div></section>';
+}
+function homeRecommendationItems() {
+    var boost = {}, excluded = {}, out = [];
+    function key(kind, id) { return kind + ':' + String(parseInt(id, 10) || id); }
+    function markList(kind, list) { for (var i = 0; i < (list || []).length; i++) excluded[key(kind, list[i])] = 1; }
+    markList('movies', S.fav.movie); markList('series', S.fav.series);
+    var cv = (lsGet('zx_cont_vod') || {}).items || [], cs = (lsGet('zx_cont_series') || {}).items || [];
+    for (var ci = 0; ci < cv.length; ci++) excluded[key('movies', cv[ci].id)]=1;
+    for (var cj = 0; cj < cs.length; cj++) excluded[key('series', cs[cj].id)]=1;
+    var defs = [{ kind: 'movies', fav: S.fav.movie }, { kind: 'series', fav: S.fav.series }];
+    for (var di = 0; di < defs.length; di++) {
+        var def = defs[di], cat = S.cat[def.kind], all = cat && cat.all || [];
+        for (var fi = 0; fi < (def.fav || []).length; fi++) {
+            var fid = parseInt(def.fav[fi], 10);
+            for (var fj = 0; fj < all.length; fj++) {
+                var fitem = all[fj], fId = parseInt((def.kind === 'series' ? (fitem.series_id || fitem.stream_id) : fitem.stream_id) || 0, 10);
+                if (fId === fid && fitem.category_id != null) boost[String(fitem.category_id)] = (boost[String(fitem.category_id)] || 0) + 12;
+            }
+        }
+    }
+    for (var ki = 0; ki < defs.length; ki++) {
+        var d = defs[ki], c = S.cat[d.kind], items = c && c.all || [];
+        for (var ii = 0; ii < items.length; ii++) {
+            var item = items[ii], id = parseInt((d.kind === 'series' ? (item.series_id || item.stream_id) : item.stream_id) || 0, 10);
+            if (!id || excluded[key(d.kind, id)] || !kidsAllows(item)) continue;
+            var newest = parseInt(item.added || item.last_modified || item.last_modified_at || 0, 10) || 0;
+            var score = (boost[String(item.category_id)] || 0) + Math.min(8, newest > 0 ? 2 : 0);
+            out.push({ kind: d.kind, id: id, item: item, score: score, newest: newest });
+        }
+    }
+    out.sort(function (a, b) { return (b.score - a.score) || (b.newest - a.newest); });
+    return out.slice(0, 12);
+}
+function homeRecommendationCards(items) {
+    var h = '';
+    for (var i = 0; i < (items || []).length; i++) {
+        var r = items[i], it = r.item || {}, name = it.name || it.title || (r.kind === 'movies' ? 'Filme' : 'Série');
+        var poster = it.stream_icon || it.cover_big || it.cover || it.movie_image || it.poster || '', img = tmdbResize(poster), raw = name.replace(/\s+/g, ' ').trim(), initials = raw.split(' ').slice(0, 2).map(function (x) { return x.charAt(0); }).join('').toUpperCase() || 'UP';
+        h += '<a class="zh-poster" href="/' + r.kind + '/' + enc(r.id) + '"><div class="pt-img zh-art"' + (img ? ' data-src="' + attr(img) + '"' : '') + '><span class="zh-art-fallback">' + esc(initials) + '</span></div><div class="zh-cbody"><div class="zh-cyear">' + (r.kind === 'movies' ? 'Filme' : 'Série') + '</div><div class="zh-cname">' + esc(raw) + '</div><div class="zh-cleft">Para você</div></div></a>';
+    }
+    return h;
+}
+function homeRecommendationsHtml() {
+    if (!S.server) return '';
+    var head = '<h2 class="zh-h2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3z"></path></svg> Para você</h2>';
+    return '<section class="zh-recent zh-recommend" id="zhReco" style="display:none">' + head + '<div class="zh-posters" id="zhRecoRow"></div></section>';
+}
+function fillHomeRecommendations() {
+    if (!S.server || !document.querySelector('.zx-home2')) return;
+    Promise.all([ensureCatalog('movies'), ensureCatalog('series')]).then(function () {
+        var sec = $('zhReco'), row = $('zhRecoRow'); if (!sec || !row) return;
+        var items = homeRecommendationItems(); if (!items.length) { sec.style.display = 'none'; return; }
+        row.innerHTML = homeRecommendationCards(items); sec.style.display = '';
+        loadHomePosters(); try { fitHomeAll(); } catch (e) {}
+    }).catch(function () {});
 }
 /* Carrega as capas da home na mão (o lazy-loader global só varre grids). */
 function loadHomePosters() {
@@ -3882,7 +3985,7 @@ function settingsStyles() {
 }
 function renderSettings() {
     var info = S.info || {}; var lic = info.license || {};
-    var exp = (lic.exp_display || 'Sem expiração'); if (!lic.exp_display && info.exp_date) { var dt = new Date(info.exp_date * 1000); exp = p2(dt.getDate()) + '/' + p2(dt.getMonth() + 1) + '/' + dt.getFullYear(); }
+    var exp = (lic.exp_display || ''); var expTs = expiryTimestamp(lic.exp_date || info.exp_date || info.expire_date || listExpiryValue(info)); if (!exp && expTs) { var dt = new Date(expTs * 1000); if (!isNaN(dt.getTime())) exp = p2(dt.getDate()) + '/' + p2(dt.getMonth() + 1) + '/' + dt.getFullYear(); } if (!exp) exp = 'Sem expiração';
     var status = info.status || '';
     // "Tela do app" (Celular x TV) — só no Android (UI empacotada com HdxNative)
     var ffMenu = nativeAvail() ? '<a href="#screen" class="sm-item" data-pane="pane-screen"><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"></rect><line x1="12" y1="18" x2="12" y2="18"></line></svg></span><span class="sm-label">Tela do app</span></a>' : '';
@@ -3902,7 +4005,9 @@ function renderSettings() {
         + APP_THEMES.map(function (th) { return '<button type="button" class="theme-btn' + (th.id === thNow.id ? ' is-active' : '') + '" data-theme-set="' + th.id + '"><span class="theme-swatch" style="background:' + th.bg + ';box-shadow:inset 0 0 0 7px ' + th.accent + '"></span><span>' + esc(th.name) + '</span></button>'; }).join('')
         + '</div></div></div>';
     var pinCss = 'display:block;width:100%;box-sizing:border-box;margin-bottom:10px;padding:13px 16px;background:#0c0f0d;border:1.5px solid rgba(255,255,255,.16);border-radius:12px;color:#fff;font-size:18px;text-align:center;letter-spacing:6px;outline:none';
-    var parentalMenu = '<a href="#parental" class="sm-item" data-pane="pane-parental"><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></span><span class="sm-label">Controle parental</span></a>';
+        var parentalMenu = '<a href="#parental" class="sm-item" data-pane="pane-parental"><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></span><span class="sm-label">Controle parental</span></a>';
+    var accessibilityMenu = '<a href="#accessibility" class="sm-item" data-pane="pane-accessibility"><span class="sm-ico">Aa</span><span class="sm-label">Acessibilidade</span></a>';
+    var accessibilityPane = '<div class="settings-pane" id="pane-accessibility" style="display:none;"><div class="pane-title">Acessibilidade e diagnóstico</div><div class="pane-sub">Ajustes opcionais para facilitar a leitura e verificar o estado do aplicativo.</div><div class="pane-section"><div class="opt-row"><button type="button" class="opt-btn" data-a11y-set="large">Texto maior</button><button type="button" class="opt-btn" data-a11y-set="high">Alto contraste</button></div></div><div class="pane-section"><button type="button" class="action-btn" id="zx-run-diagnostics"><div class="ab-title">Verificar conexão e catálogo</div><div class="ab-sub" id="zx-diagnostics-result">Toque ou pressione OK para executar.</div></button></div></div>';
     var parentalPane = '<div class="settings-pane" id="pane-parental" style="display:none;"><div class="pane-title">Controle parental</div>'
         + '<div class="pane-sub">A senha bloqueia as categorias <strong>adultas (XXX)</strong>. Fica guardada <strong>só neste aparelho</strong> (nada no servidor). Padrão: <strong>1234</strong>.</div>'
         + '<div class="pane-section" style="max-width:340px">'
@@ -3917,7 +4022,7 @@ function renderSettings() {
         + '<div class="settings-layout"><div class="settings-menu" id="settings-menu">'
         + '<a href="#info" class="sm-item is-active" data-pane="pane-info" autofocus><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></span><span class="sm-label">Informação Geral</span></a>'
         + '<a href="#player" class="sm-item" data-pane="pane-player"><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg></span><span class="sm-label">Player de Vídeo</span></a>'
-        + ffMenu + langMenu + themeMenu + parentalMenu
+                + ffMenu + langMenu + themeMenu + parentalMenu + accessibilityMenu
         + '<a href="#clear" class="sm-item" data-pane="pane-clear"><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1.5 14a2 2 0 0 1-2 1.8H8.5a2 2 0 0 1-2-1.8L5 6"></path></svg></span><span class="sm-label">Limpar Cache</span></a>'
         + '<button type="button" class="sm-item sm-logout" id="btn-logout"><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></span><span class="sm-label">Sair da conta</span></button>'
         + '</div><div class="settings-content">'
@@ -3930,7 +4035,7 @@ function renderSettings() {
         + '<div class="settings-pane" id="pane-player" style="display:none;"><div class="pane-title">Configurações do Player</div><div class="pane-sub">Vale só <strong>neste aparelho</strong>. <strong>Nativo</strong> é o padrão; <strong>HTML5</strong> oferece mais recursos.</div>'
         + '<div class="pane-section"><div class="pane-section-title">Canais ao vivo</div><div class="opt-row"><button type="button" class="opt-btn" data-player-key="zx:player:live" data-player-value="native">Nativo</button><button type="button" class="opt-btn" data-player-key="zx:player:live" data-player-value="html5">HTML5</button></div></div>'
         + '<div class="pane-section"><div class="pane-section-title">Filmes e séries (VOD)</div><div class="opt-row"><button type="button" class="opt-btn" data-player-key="zx:player:vod" data-player-value="native">Nativo</button><button type="button" class="opt-btn" data-player-key="zx:player:vod" data-player-value="html5">HTML5</button></div></div></div>'
-        + ffPane + langPane + themePane + parentalPane
+                + ffPane + langPane + themePane + parentalPane + accessibilityPane
         + '<div class="settings-pane" id="pane-clear" style="display:none;"><div class="pane-title">Limpar Cache</div><div class="pane-sub">Use caso esteja tendo problemas com o app.</div><div class="pane-section"><button type="button" class="action-btn" id="btn-clear-cache"><div class="ab-title">Limpar cache local</div><div class="ab-sub">Remove dados temporários armazenados.</div></button></div></div>'
         + '</div></div></div>');
     applyHomePanelWall();
@@ -3968,7 +4073,10 @@ function wireSettings() {
         })(lb[i]);
     })();
     var cc = $('btn-clear-cache'); if (cc) cc.addEventListener('click', function (e) { e.preventDefault(); try { if (global.HdxCache) HdxCache.bust(); } catch (err) {} S.cat = { movies: null, series: null, live: null }; var sub = cc.querySelector('.ab-sub'); if (sub) sub.textContent = t('✓ Cache local removido.'); });
-    var lo = $('btn-logout'); if (lo) lo.addEventListener('click', function (e) { e.preventDefault(); doLogout(); });
+        var lo = $('btn-logout'); if (lo) lo.addEventListener('click', function (e) { e.preventDefault(); doLogout(); });
+    var a11y = document.querySelectorAll('[data-a11y-set]');
+    for (var ai = 0; ai < a11y.length; ai++) (function (el) { var key = el.getAttribute('data-a11y-set'); if (accessibilityEnabled(key)) el.className += ' is-on'; el.addEventListener('click', function (e) { e.preventDefault(); var on = !accessibilityEnabled(key); try { localStorage.setItem('zx_a11y_' + key, on ? '1' : '0'); } catch (err) {} el.className = el.className.replace(/\bis-on\b/g, '').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '') + (on ? ' is-on' : ''); applyAccessibility(); }); })(a11y[ai]);
+    var diag = $('zx-run-diagnostics'); if (diag) diag.addEventListener('click', function (e) { e.preventDefault(); var sub = $('zx-diagnostics-result'); if (sub) sub.textContent = ultraDiagnosticsText(); });
     // Temas globais — a troca é imediata e fica salva no aparelho.
     (function () {
         var tb = document.querySelectorAll('[data-theme-set]'); if (!tb.length) return;
@@ -5334,6 +5442,7 @@ function injectAndroidCss() {
 
 function boot() {
     applyAppTheme(appThemeId(), false);
+    applyAccessibility();
     S.directAuth = !!directModeStored();
     S.did = getDid();
     fetchUltraConfig();
