@@ -44,6 +44,7 @@ public final class MainActivity extends Activity {
     private ImageButton miniCloseButton;
     private View miniExpandHit;
     private android.widget.LinearLayout fullControls;
+    private android.widget.Button fullMenuButton;
     private FrameLayout fullChannelMenu;
     private android.widget.LinearLayout fullCategoryBar;
     private android.widget.LinearLayout fullChannelList;
@@ -405,6 +406,9 @@ public final class MainActivity extends Activity {
         miniContainer.addView(fullControls, cp);
 
         android.widget.Button menu = fullButton("☰", "Abrir menu de canais");
+        fullMenuButton = menu;
+        menu.setFocusable(true);
+        menu.setFocusableInTouchMode(true);
         menu.setOnClickListener(v -> toggleFullChannelMenu());
         fullControls.addView(menu, new android.widget.LinearLayout.LayoutParams(dp(54), -1));
 
@@ -482,8 +486,13 @@ public final class MainActivity extends Activity {
             return;
         }
         populateFullChannelMenu();
-        fullChannelMenu.bringToFront();
-        fullChannelMenu.setVisibility(View.VISIBLE);
+            fullChannelMenu.bringToFront();
+            fullChannelMenu.setVisibility(View.VISIBLE);
+            if (fullCategoryBar != null && fullCategoryBar.getChildCount() > 0) {
+                View firstCategory = fullCategoryBar.getChildAt(0);
+                firstCategory.setFocusable(true);
+                firstCategory.requestFocus();
+            }
     }
 
     private void populateFullChannelMenu() {
@@ -698,6 +707,7 @@ public final class MainActivity extends Activity {
                             | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                             | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
             if (miniPlayer != null && !miniPlayer.isPlaying()) miniPlayer.play();
+            if (fullMenuButton != null) fullMenuButton.postDelayed(() -> fullMenuButton.requestFocus(), 120);
         } catch (Throwable ignored) { }
     }
 
@@ -817,6 +827,14 @@ public final class MainActivity extends Activity {
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
+        // Controles Android/Google TV podem enviar teclas diferentes para o
+        // botão físico de microfone. Todas abrem o mesmo reconhecimento em PT-BR.
+        if (keyCode == KeyEvent.KEYCODE_VOICE_ASSIST
+                || keyCode == KeyEvent.KEYCODE_ASSIST
+                || keyCode == KeyEvent.KEYCODE_SEARCH) {
+            launchVoiceRecognizer();
+            return true;
+        }
         if (webView != null && keyCode == KeyEvent.KEYCODE_MENU) {
             webView.evaluateJavascript("try{document.dispatchEvent(new KeyboardEvent('keydown',{key:'ContextMenu',bubbles:true,cancelable:true}))}catch(e){}", null);
             return true;

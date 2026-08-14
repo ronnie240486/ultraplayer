@@ -2706,10 +2706,12 @@ function liveStyles() {
         // é % da tela, a conta continua dando 4 com a sidebar larga).
         + 'body.zx-ff-tv .cat-sidebar,body.ui-tv .cat-sidebar{width:17vw !important;max-width:17vw !important;padding:.55vw .3vw .55vw .5vw !important;}'
         + 'body.zx-ff-tv .sidebar-content,body.ui-tv .sidebar-content{left:17vw !important;padding:.55vw .7vw .7vw !important;}'
-        + 'body.zx-ff-tv .cat-sidebar .cat-pill,body.ui-tv .cat-sidebar .cat-pill{font-size:.9vw !important;padding:.46vw 1.8vw .46vw .65vw !important;margin-bottom:.26vw !important;border-radius:.5vw !important;line-height:1.12 !important;}'
+        + 'body.zx-ff-tv .cat-sidebar .cat-pill,body.ui-tv .cat-sidebar .cat-pill{font-size:.9vw !important;padding-top:.78vw !important;padding-bottom:.78vw !important;padding-left:.65vw !important;padding-right:1.8vw !important;margin-bottom:.26vw !important;min-height:54px !important;border-radius:.5vw !important;line-height:1.12 !important;display:flex !important;align-items:center !important;}'
         + 'body.zx-ff-tv .cat-sidebar .cat-pill>span:first-child,body.ui-tv .cat-sidebar .cat-pill>span:first-child{white-space:normal !important;overflow:visible !important;text-overflow:clip !important;line-height:1.12 !important;}'
         + 'body.zx-ff-tv .cat-sidebar .cat-pill .cat-count{font-size:.9vw;right:.8vw;margin-top:-.45vw;line-height:1vw;}'
         + 'body.zx-ff-tv .cat-sidebar .cat-lock{width:.8vw;height:.8vw;}'
+        + 'body.zx-ff-tv .cat-sidebar{overflow-y:auto !important;scroll-behavior:auto !important;}'
+        + 'body.zx-ff-tv .cat-sidebar .cat-pill:focus-visible{scroll-margin-top:12px;scroll-margin-bottom:12px;}'
         + 'body.zx-ff-tv .sidebar-content .sc-title{font-size:1.8vw;margin-bottom:1.1vw;}'
         + 'body.zx-ff-tv .live-split .channel-tile-tv,body.ui-tv .live-split .channel-tile-tv{min-height:44px !important;height:50px !important;padding:4px 6px !important;margin-bottom:3px !important;border-radius:7px !important;}'
         + 'body.zx-ff-tv .live-split .channel-tile-tv .ct-logo,body.ui-tv .live-split .channel-tile-tv .ct-logo{width:22px !important;height:22px !important;margin-right:4px !important;border-radius:4px !important;}'
@@ -2817,6 +2819,30 @@ if (!global.__zxLiveResizeBound) {
     global.__zxLiveResizeBound = true;
     global.addEventListener('resize', function () { setTimeout(enforceLiveLayout, 50); });
 }
+function wireLiveRemoteFocus() {
+    if (!nativeAvail() || getFormFactor() !== 'tv') return;
+    var side = document.querySelector('.cat-sidebar'), content = document.getElementById('content-grid');
+    if (!side || !content || side.getAttribute('data-remote-focus')) return;
+    side.setAttribute('data-remote-focus', '1');
+    side.addEventListener('keydown', function (e) {
+        var key = e.key || '';
+        var target = e.target;
+        if (key === 'ArrowRight' && target && target.className && String(target.className).indexOf('cat-pill') >= 0) {
+            var first = content.querySelector('.channel-tile-tv');
+            if (first) { e.preventDefault(); e.stopPropagation(); first.focus(); }
+        } else if (key === 'ArrowUp' && target && target.className && String(target.className).indexOf('cat-pill') >= 0) {
+            var back = side.querySelector('.cat-pill-back');
+            if (back && target !== back) { var links = side.querySelectorAll('.cat-pill'); if (links.length && target === links[1]) { e.preventDefault(); e.stopPropagation(); back.focus(); } }
+        }
+    }, true);
+    content.addEventListener('keydown', function (e) {
+        var key = e.key || '', target = e.target;
+        if (key === 'ArrowLeft' && target && target.className && String(target.className).indexOf('channel-tile-tv') >= 0) {
+            var active = side.querySelector('.cat-pill.is-active') || side.querySelector('.cat-pill');
+            if (active) { e.preventDefault(); e.stopPropagation(); active.focus(); }
+        }
+    }, true);
+}
 function renderLiveSection(cat, opts) {
     var selCat = null, selName = '', tiles = '', virtual = opts.virtual || '';
     // PC: voltando de um canal (history.back → /live SEM categoria) → restaura a
@@ -2856,6 +2882,7 @@ function renderLiveSection(cat, opts) {
         runScript('assets/category_browser.js');
         wireLiveSearch();
         wireLiveEpg();
+        wireLiveRemoteFocus();
         loadChannelLogos();
         setTimeout(enforceLiveLayout, 30); setTimeout(enforceLiveLayout, 420);
         afterRender();
