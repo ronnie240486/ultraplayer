@@ -44,7 +44,8 @@ var S = {
     online: true,               // VPS (painel) alcançável?
     rawCss: '',
     cat: { movies: null, series: null, live: null },   // {cats, byCat:{id:[...]}, all:[...]}
-    radioCache: {}, radioPromises: {}
+    radioCache: {}, radioPromises: {},
+    catPromises: {}
 };
 
 /* ---------- helpers ---------- */
@@ -867,12 +868,44 @@ function posterTile(s, kind) {
         sid = parseInt(s.series_id || s.stream_id || 0, 10); href = '/series/' + sid; name = s.name || 'Série';
         poster = tmdbResize(s.cover || s.stream_icon || '');
     }
-    return '<a class="poster-tile-tv" href="' + href + '">'
+    var directTrailer = s.youtube_trailer || s.trailer_url || s.trailer || '';
+    return '<a class="poster-tile-tv" href="' + href + '">' 
         + '<div class="pt-img"' + (poster ? ' data-src="' + attr(poster) + '"' : '') + '>'
         + '<div class="pt-fallback">' + esc((name || '').slice(0, 2)) + '</div></div>'
-        + '<div class="pt-name">' + esc(name) + '</div></a>';
+        + '<div class="pt-name">' + esc(name) + '</div>'
+        + '<button type="button" class="poster-trailer-btn" data-trailer-title="' + attr(name) + '" data-trailer-kind="' + (kind === 'series' ? 'series' : 'movie') + '"' + (directTrailer ? ' data-trailer-url="' + attr(directTrailer) + '"' : '') + ' aria-label="Assistir trailer de ' + attr(name) + '">▶ Trailer</button></a>';
 }
 function posterTiles(list, kind) { var h = ''; for (var i = 0; i < list.length; i++) h += posterTile(list[i], kind); return h; }
+function trailerSearchUrl(title, kind) {
+    var suffix = kind === 'series' ? ' série trailer oficial' : ' filme trailer oficial';
+    return 'https://www.youtube.com/results?search_query=' + encodeURIComponent(String(title || '') + suffix);
+}
+function openTrailer(title, kind, direct) {
+    var raw = String(direct || ''), u = /^https?:\/\//i.test(raw) ? raw : trailerSearchUrl(title, kind);
+    try { if (global.HdxNative && typeof global.HdxNative.openUrl === 'function') { global.HdxNative.openUrl(u); return; } } catch (e) {}
+    try { global.open(u, '_blank'); } catch (e2) { try { location.href = u; } catch (e3) {} }
+}
+function trailerFromTarget(target) {
+    var n = target;
+    while (n && n !== document) { if (n.getAttribute && n.getAttribute('data-trailer-title')) return n; n = n.parentNode; }
+    return null;
+}
+function trailerClickFirst(e) {
+    var btn = trailerFromTarget(e.target); if (!btn) return false;
+    e.preventDefault(); if (e.stopImmediatePropagation) e.stopImmediatePropagation(); else e.stopPropagation();
+    openTrailer(btn.getAttribute('data-trailer-title') || '', btn.getAttribute('data-trailer-kind') || 'movie', btn.getAttribute('data-trailer-url') || '');
+    return true;
+}
+function installTrailerStyles() {
+    if (document.getElementById('zx-trailer-css')) return;
+    var st = document.createElement('style'); st.id = 'zx-trailer-css';
+    st.textContent = '.poster-tile-tv{position:relative;}'
+        + '.poster-trailer-btn{display:block;width:calc(100% - 14px);margin:5px auto 0;padding:7px 6px;border:1px solid rgba(16,185,129,.55);border-radius:8px;background:rgba(16,185,129,.16);color:#eafff6;font:700 12px system-ui;cursor:pointer;text-align:center;}'
+        + '.poster-trailer-btn:focus{outline:none;background:rgba(16,185,129,.4);border-color:#10b981;box-shadow:0 0 0 3px rgba(16,185,129,.35);}'
+        + 'body.zx-ff-tv .poster-trailer-btn{font-size:15px;padding:9px 7px;}'
+        + '@media(max-width:600px){.poster-trailer-btn{font-size:10px;padding:5px 4px;}}';
+    (document.head || document.documentElement).appendChild(st);
+}
 // Ajusta os tiles de PÔSTER pra ENCHER a fileira do grid ATUAL. Favoritos e
 // busca são FULL-WIDTH (sem sidebar) e NÃO carregam o category_browser; sem isto
 // herdavam a % do CATÁLOGO (estreito por causa da sidebar) → pôsteres GIGANTES.
@@ -945,11 +978,15 @@ function xtreamCatalog(kind) {
 function ensureCatalog(kind) {
     // kind: 'movies' | 'series' | 'live'. Resolve → { cats:[{category_id,category_name,num,adult}], byCat:{}, all:[] }
     if (S.cat[kind]) return Promise.resolve(S.cat[kind]);
+    if (S.catPromises[kind]) return S.catPromises[kind];
     var isM3u = (S.playlistType || '').indexOf('m3u') === 0;
     if (isM3u && !S.xtreamDerived && !S.xtreamUnavailable) xtreamCreds();
-    if (isM3u && (!S.xtreamDerived || S.xtreamUnavailable)) return catalogFromM3U();
+    if (isM3u && (!S.xtreamDerived || S.xtreamUnavailable)) {
+        S.catPromises[kind] = catalogFromM3U().then(function (result) { delete S.catPromises[kind]; return result; }, function (err) { delete S.catPromises[kind]; throw err; });
+        return S.catPromises[kind];
+    }
     var work = xtreamCatalog(kind);
-    return work.catch(function (err) {
+    S.catPromises[kind] = work.catch(function (err) {
         if (isM3u && S.xtreamDerived) {
             S.xtreamUnavailable = true;
             S.xtreamDerived = null;
@@ -957,7 +994,8 @@ function ensureCatalog(kind) {
             return catalogFromM3U();
         }
         throw err;
-    });
+    }).then(function (result) { delete S.catPromises[kind]; return result; }, function (err) { delete S.catPromises[kind]; throw err; });
+    return S.catPromises[kind];
 }
 function streamsForCat(kind, catId) {
     var c = S.cat[kind]; if (!c) return [];
@@ -1126,7 +1164,14 @@ function installShim() {
  * ROTEADOR (History API → tv.js history.back() funciona)
  * ============================================================ */
 function setHtml(html) { try { if (global.HdxNative && global.HdxNative.miniStop) global.HdxNative.miniStop(); } catch (e) {} root().innerHTML = brandLogoHtmlStyles() + html; translateTree(root()); applyAppTheme(appThemeId(), false); }
-function afterRender() { try { if (global.__hdxTv && global.__hdxTv.afterSwap) global.__hdxTv.afterSwap(); } catch (e) {} }
+function afterRender() {
+    try { if (global.__hdxTv && global.__hdxTv.afterSwap) global.__hdxTv.afterSwap(); } catch (e) {}
+    try { installTrailerStyles(); } catch (e2) {}
+    try {
+        var d = document.querySelectorAll('.trailer-detail-btn');
+        for (var i = 0; i < d.length; i++) (function (btn) { if (btn.getAttribute('data-trailer-wired')) return; btn.setAttribute('data-trailer-wired', '1'); btn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); openTrailer(btn.getAttribute('data-trailer-title') || '', btn.getAttribute('data-trailer-kind') || 'movie', btn.getAttribute('data-trailer-url') || ''); }); })(d[i]);
+    } catch (e3) {}
+}
 function runScript(src) { var s = document.createElement('script'); s.src = src; document.body.appendChild(s); }
 
 // ⚠️ Em file:// NÃO se pode mexer na URL (pushState('/movies/123') viraria
@@ -1209,6 +1254,7 @@ function installRouter() {
     // /category/\d+. Cliques sem <a>/sem href — teclado, coração de canal,
     // tile de canal por data-href — caem nos `return` e passam adiante intactos.)
     global.addEventListener('click', function (e) {
+        if (trailerClickFirst(e)) return;
         var a = findAnchor(e.target);
         if (!a) return;
         var href = a.getAttribute('href') || '';
@@ -3173,7 +3219,8 @@ function renderDetailMovie(id) {
             + '<div class="detail-hero"><a href="javascript:history.back()" class="dh-back">← Voltar</a>'
             + '<div class="dh-content"><h1>' + esc(name) + '</h1><div class="dh-meta">' + badges + '</div><p class="dh-plot">' + esc(plot) + '</p>'
             + '<div class="dh-buttons">'
-            + playBtns
+                        + playBtns
+            + '<button type="button" class="btn-tv trailer-detail-btn" data-trailer-title="' + attr(name) + '" data-trailer-kind="movie" data-trailer-url="' + attr(info.youtube_trailer || md.youtube_trailer || info.trailer || '') + '"><span class="btn-icon">▶</span>Trailer</button>'
             + '<button type="button" class="btn-tv" id="btn-favorite" data-kind="movie" data-id="' + attr(id) + '" data-name="' + attr(name) + '" data-poster="' + attr(cover) + '"><span class="btn-icon" id="fav-icon">' + (isFav ? '♥' : '+') + '</span><span id="fav-text">' + (isFav ? 'Remover dos Favoritos' : 'Favoritos') + '</span></button>'
             + '</div></div></div>'
             + '<div class="dh-similar-lazy" data-cat="' + attr(info.category_id || md.category_id || '') + '"></div></div>' + detailStyles());
@@ -3202,6 +3249,7 @@ function m3uDetail(kind, id) {
         + '<div class="dh-meta"><span class="dh-badge">' + badge + '</span></div><h1>' + esc(name) + '</h1>'
         + '<p class="dh-plot">Conteúdo disponível na sua lista.</p><div class="dh-buttons">'
         + '<a class="btn-tv is-primary" href="' + playHref + '" data-ext="' + attr(ext) + '" autofocus><span class="btn-icon">▶</span>Reproduzir</a>'
+        + '<button type="button" class="btn-tv trailer-detail-btn" data-trailer-title="' + attr(name) + '" data-trailer-kind="' + (kind === 'series' ? 'series' : 'movie') + '" data-trailer-url=""><span class="btn-icon">▶</span>Trailer</button>'
         + '<button type="button" class="btn-tv" id="btn-favorite" data-kind="' + (kind === 'movies' ? 'movie' : 'series') + '" data-id="' + attr(id) + '" data-name="' + attr(name) + '" data-poster="' + attr(poster) + '"><span class="btn-icon" id="fav-icon">' + (isFav ? '♥' : '+') + '</span><span id="fav-text">' + (isFav ? 'Remover dos Favoritos' : 'Favoritos') + '</span></button>'
         + '</div></div></div></div>' + detailStyles());
     S.playName = name; S.playPoster = poster; S.playExt = ext;
@@ -3261,7 +3309,7 @@ function renderDetailSeries(id) {
         setHtml('<div class="detail-screen" id="series-detail"><div class="detail-bg"' + (bg ? ' style="background-image:url(\'' + attr(bg) + '\')"' : '') + '></div>'
             + '<div class="detail-hero"><a href="javascript:history.back()" class="dh-back">← Voltar</a>'
             + '<div class="dh-content"><h1>' + esc(name) + '</h1><div class="dh-meta">' + badges + '</div><p class="dh-plot">' + esc(plot) + '</p>'
-            + '<div class="dh-buttons">' + playBtn + '<button type="button" class="btn-tv" id="btn-favorite" data-kind="series" data-id="' + attr(id) + '" data-name="' + attr(name) + '" data-poster="' + attr(cover) + '"><span class="btn-icon" id="fav-icon">' + (isFav ? '♥' : '+') + '</span><span id="fav-text">' + (isFav ? 'Remover dos Favoritos' : 'Favoritos') + '</span></button></div>'
+            + '<div class="dh-buttons">' + playBtn + '<button type="button" class="btn-tv trailer-detail-btn" data-trailer-title="' + attr(name) + '" data-trailer-kind="series" data-trailer-url="' + attr(info.youtube_trailer || info.trailer || '') + '"><span class="btn-icon">▶</span>Trailer</button><button type="button" class="btn-tv" id="btn-favorite" data-kind="series" data-id="' + attr(id) + '" data-name="' + attr(name) + '" data-poster="' + attr(cover) + '"><span class="btn-icon" id="fav-icon">' + (isFav ? '♥' : '+') + '</span><span id="fav-text">' + (isFav ? 'Remover dos Favoritos' : 'Favoritos') + '</span></button></div>'
             + '</div></div>' + seasonsBlock + '</div>' + detailStyles());
         // contexto da série p/ o "Continue Assistindo" do player de episódio
         // (o continue de série usa o series_id + nome/capa da SÉRIE, não do ep).

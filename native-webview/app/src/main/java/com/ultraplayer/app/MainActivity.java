@@ -312,6 +312,15 @@ public final class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void openUrl(String url) {
+            final String target = url == null ? "" : url.trim();
+            if (target.isEmpty() || !(target.startsWith("https://") || target.startsWith("http://"))) return;
+            runOnUiThread(() -> {
+                try { startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(target))); } catch (Throwable ignored) { }
+            });
+        }
+
+        @JavascriptInterface
         public void play(String payload) {
             runOnUiThread(() -> {
                 try {
