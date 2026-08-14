@@ -3426,7 +3426,9 @@ function settingsStyles() {
         + '.settings-screen{position:relative;overflow:hidden;background:transparent !important;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}'
         + '.zx-settings-wall{position:absolute;inset:0;z-index:0;pointer-events:none;background-color:#080808;background-position:center center;background-repeat:no-repeat;background-size:cover;}'
         + '.settings-screen::before{display:none !important;}'
-        + '.settings-screen .settings-back,.settings-screen .settings-header,.settings-screen .settings-layout{position:relative;z-index:1;}'
+        + '.settings-screen .settings-back,.settings-screen .settings-header{position:relative;z-index:2;}'
+        + '.settings-screen .settings-layout{position:absolute;z-index:2;}'
+        + '.settings-screen .settings-menu,.settings-screen .settings-content{z-index:2;}'
         // ⚠️ NÃO usar .settings-screen>*{position:relative} — mataria o position:absolute
         // do .settings-layout (menu+conteúdo) e a tela colapsa. Só o header precisa subir.
         + '.settings-header{position:relative;z-index:1;}'
