@@ -590,7 +590,7 @@ public final class MainActivity extends Activity {
         boolean large = tvMode;
         int screenWidth = getResources().getDisplayMetrics().widthPixels;
         int width = large ? Math.max(dp(360), Math.round(screenWidth * 0.32f)) : dp(300);
-        int height = large ? Math.round(width * 0.5625f) : dp(185);
+        int height = large ? Math.round(width * 0.70f) : dp(230);
         FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(width, height, android.view.Gravity.TOP | android.view.Gravity.RIGHT);
         p.rightMargin = large ? dp(16) : dp(12);
         p.topMargin = large ? dp(76) : dp(78);
@@ -609,6 +609,10 @@ public final class MainActivity extends Activity {
         int height = Math.max(dp(100), (int) Math.round(heightCss * scale));
         int maxW = Math.max(dp(180), root.getWidth() - left - dp(4));
         int maxH = Math.max(dp(100), root.getHeight() - top - dp(4));
+        // Mantém a largura medida pelo WebView, mas dá mais altura vertical ao
+        // quadro nativo nos dois modos, conforme o ajuste visual solicitado.
+        int extraHeight = isTv ? dp(34) : dp(45);
+        height = Math.min(maxH, height + extraHeight);
         width = Math.min(width, maxW);
         height = Math.min(height, maxH);
         FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(width, height, android.view.Gravity.TOP | android.view.Gravity.LEFT);
