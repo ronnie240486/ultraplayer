@@ -15,6 +15,8 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Arrays;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.zip.ZipFile;
 
 /** Download and validation layer for the user-confirmed in-app APK update. */
@@ -32,7 +34,7 @@ public final class ApkUpdateManager {
     private ApkUpdateManager() { }
 
     public static void download(Activity activity, String rawUrl, Callback callback) {
-        final String url = rawUrl == null ? "" : rawUrl.trim();
+        final String url = normalizeApkUrl(rawUrl);
         new Thread(() -> {
             File target = null;
             HttpURLConnection connection = null;
@@ -117,6 +119,15 @@ public final class ApkUpdateManager {
                 if (connection != null) connection.disconnect();
             }
         }, "UltraPlayer-ApkUpdate").start();
+    }
+
+    private static String normalizeApkUrl(String rawUrl) {
+        String value = rawUrl == null ? "" : rawUrl.trim();
+        // Corrige apenas o erro conhecido em que o painel concatena um segundo
+        // nome de arquivo depois de uma URL que já termina em .apk.
+        Matcher m = Pattern.compile("(?i)^(https://.+\\.apk)-[^/?#]+\\.apk([?#].*)?$").matcher(value);
+        if (m.matches()) return m.group(1) + (m.group(2) == null ? "" : m.group(2));
+        return value;
     }
 
     private static void post(Activity activity, Runnable runnable) {
