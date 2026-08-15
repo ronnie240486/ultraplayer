@@ -5310,16 +5310,19 @@ function profSetActive(i) {
     try { localStorage.setItem('zx_prof_active', String(i)); } catch (e) {}
     S.profNs = profActive().ns;
 }
-function profCreate(name, av, kids, limit) {
+function profTimeValue(v) { var s = String(v || '').trim(), m = s.match(/^(\d{1,2}):(\d{2})$/); if (!m) return ''; var h = Math.max(0, Math.min(23, parseInt(m[1], 10) || 0)), mm = Math.max(0, Math.min(59, parseInt(m[2], 10) || 0)); return p2(h) + ':' + p2(mm); }
+function profScheduleAllowed(p) { if (!p || !p.kids) return true; var from = profTimeValue(p.from), to = profTimeValue(p.to); if (!from || !to || from === to) return true; var f = parseInt(from.slice(0, 2), 10) * 60 + parseInt(from.slice(3), 10), t = parseInt(to.slice(0, 2), 10) * 60 + parseInt(to.slice(3), 10), n = new Date(), now = n.getHours() * 60 + n.getMinutes(); return f < t ? (now >= f && now <= t) : (now >= f || now <= t); }
+function showKidsScheduleModal() { if ($('zx-kids-schedule-modal') || !$('app')) return; var ov = document.createElement('div'); ov.id = 'zx-kids-schedule-modal'; ov.className = 'zx-ff-ask tv-modal'; ov.innerHTML = '<div class="zx-ffa-card" style="text-align:center"><div class="zx-ffa-title">Fora do horário permitido</div><div class="zx-ffa-sub">Este perfil infantil só pode usar o aplicativo dentro do horário definido pelo responsável.</div><button type="button" class="zx-pf-save" id="zxKidsScheduleOk">OK</button></div>'; document.body.appendChild(ov); var b = $('zxKidsScheduleOk'); if (b) b.addEventListener('click', function () { try { ov.parentNode.removeChild(ov); } catch (e) {} go('/home', true); }); try { b.focus(); } catch (e) {} }
+function profCreate(name, av, kids, limit, from, to) {
     var a = profAll();
     if (a.length >= 4) return false;
     var seq = 2;
     try { seq = parseInt(localStorage.getItem('zx_prof_seq') || '2', 10) || 2; localStorage.setItem('zx_prof_seq', String(seq + 1)); } catch (e) {}
-    a.push({ n: name, a: av, ns: 'p' + seq + '_', kids: !!kids, limit: kids ? Math.max(0, Math.min(480, parseInt(limit, 10) || 0)) : 0 });
+    a.push({ n: name, a: av, ns: 'p' + seq + '_', kids: !!kids, limit: kids ? Math.max(0, Math.min(480, parseInt(limit, 10) || 0)) : 0, from: kids ? profTimeValue(from) : '', to: kids ? profTimeValue(to) : '' });
     profSave(a);
     return true;
 }
-function profUpdate(i, name, av, kids, limit) { var a = profAll(); if (i < 0 || i >= a.length) return; a[i].n = name; a[i].a = av; a[i].kids = !!kids; a[i].limit = kids ? Math.max(0, Math.min(480, parseInt(limit, 10) || 0)) : 0; profSave(a); }
+function profUpdate(i, name, av, kids, limit, from, to) { var a = profAll(); if (i < 0 || i >= a.length) return; a[i].n = name; a[i].a = av; a[i].kids = !!kids; a[i].limit = kids ? Math.max(0, Math.min(480, parseInt(limit, 10) || 0)) : 0; a[i].from = kids ? profTimeValue(from) : ''; a[i].to = kids ? profTimeValue(to) : ''; profSave(a); }
 function profDelete(i) {
     var a = profAll();
     if (a.length <= 1 || i < 0 || i >= a.length) return;
@@ -5363,13 +5366,14 @@ function showKidsLimitModal() {
     var ov = document.createElement('div'); ov.id = 'zx-kids-limit-modal'; ov.className = 'zx-ff-ask tv-modal'; ov.innerHTML = '<div class="zx-ffa-card" style="text-align:center"><div class="zx-ffa-title">Tempo de hoje concluído</div><div class="zx-ffa-sub">O limite diário deste perfil infantil foi atingido. Volte amanhã ou peça ao responsável para ajustar o limite.</div><button type="button" class="zx-pf-save" id="zxKidsLimitOk">OK</button></div>'; document.body.appendChild(ov); var b = $('zxKidsLimitOk'); if (b) b.addEventListener('click', function () { try { ov.parentNode.removeChild(ov); } catch (e) {} go('/home', true); }); try { b.focus(); } catch (e) {}
 }
 function profileUsageTick() {
-    var lim = profLimit(profActive()); if (!lim || document.hidden || !S.server) return;
+    var active = profActive(); if (!profScheduleAllowed(active)) { if (!global.__zxKidsScheduleShown) { global.__zxKidsScheduleShown = true; showKidsScheduleModal(); } return; }
+    var lim = profLimit(active); if (!lim || document.hidden || !S.server) return;
     var next = profileUsageSeconds() + 60; try { localStorage.setItem(profileUsageKey(), String(next)); } catch (e) {}
     if (next >= lim * 60 && !global.__zxKidsLimitShown) { global.__zxKidsLimitShown = true; showKidsLimitModal(); }
 }
 function startProfileUsageWatch() { if (global.__zxProfileUsageWatch) return; global.__zxProfileUsageWatch = setInterval(profileUsageTick, 60000); }
 function profApplyData() {
-    global.__zxKidsLimitShown = false;
+    global.__zxKidsLimitShown = false; global.__zxKidsScheduleShown = false;
     S.profNs = profActive().ns;
     S.cat = { movies: null, series: null, live: null };
     S.m3uCatalogPromise = null;
@@ -5378,6 +5382,7 @@ function profApplyData() {
     S.favDirty = { live: [], movie: [], series: [] };
     S.favMeta = {};
     loadFav();
+    if (!profScheduleAllowed(profActive())) setTimeout(showKidsScheduleModal, 180);
     try { if (typeof updateFavCounts === 'function') updateFavCounts(); } catch (e) {}
 }
 /* Encaixa o card do modal NA TELA: mede e aplica scale() — todo o conteúdo
@@ -5567,6 +5572,7 @@ function showProfEditor(idx, onDone) {
     var nome = (idx >= 0) ? a[idx].n : '';
     var kids = (idx >= 0) ? !!a[idx].kids : false;
     var limit = (idx >= 0) ? Math.max(0, parseInt(a[idx].limit, 10) || 0) : 0;
+    var from = (idx >= 0) ? profTimeValue(a[idx].from) : '', to = (idx >= 0) ? profTimeValue(a[idx].to) : '';
     var av = (idx >= 0) ? a[idx].a : (a.length % PROF_AVS.length);
     if (kids && av >= PROF_KIDS.length) av = 0;
     var armDel = false;
@@ -5581,7 +5587,7 @@ function showProfEditor(idx, onDone) {
         var avatarSet = kids ? PROF_KIDS : PROF_AVS;
         var h = '<div class="zx-ffa-card"><div class="zx-ffa-title">' + te(idx < 0 ? 'Novo perfil' : 'Editar perfil') + '</div>'
             + '<div class="zx-pf-kids"><div><div class="zx-pf-kids-title">' + te('Perfil infantil') + '</div><div class="zx-pf-kids-sub">' + te('Sem canais e filmes adultos — nem com PIN, o conteúdo simplesmente não aparece') + '</div></div><button type="button" class="zx-pf-switch' + (kids ? ' on' : '') + '" id="zxPfKidsSwitch" aria-label="' + te('Perfil infantil') + '"></button></div>'
-            + '<div id="zxPfLimitWrap" style="display:' + (kids ? 'block' : 'none') + ';margin:9px 0 8px"><label class="zx-ffa-sub" for="zxPfLimit">Limite diário do perfil infantil (minutos; 0 = sem limite)</label><input type="number" id="zxPfLimit" min="0" max="480" inputmode="numeric" value="' + attr(limit) + '" class="zx-pf-input" style="margin-top:6px"></div>'
+            + '<div id="zxPfLimitWrap" style="display:' + (kids ? 'block' : 'none') + ';margin:9px 0 8px"><label class="zx-ffa-sub" for="zxPfLimit">Limite diário do perfil infantil (minutos; 0 = sem limite)</label><input type="number" id="zxPfLimit" min="0" max="480" inputmode="numeric" value="' + attr(limit) + '" class="zx-pf-input" style="margin-top:6px"><label class="zx-ffa-sub" for="zxPfFrom" style="display:block;margin-top:10px">Horário permitido (opcional)</label><div style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="time" id="zxPfFrom" value="' + attr(from) + '" class="zx-pf-input"><span class="zx-ffa-sub">até</span><input type="time" id="zxPfTo" value="' + attr(to) + '" class="zx-pf-input"></div><div class="zx-pf-kids-sub" style="margin-top:5px">Deixe vazio para não limitar por horário. Pode atravessar a meia-noite.</div></div>'
             + '<div class="zx-pf-prev" id="zxPfPrev" style="text-align:center;margin:4px 0 10px">' + profAvatarHtml(av, 96, kids) + '</div>'
             + '<input type="text" class="zx-pf-input" id="zxPfName" maxlength="16" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="' + te('Nome do perfil') + '">'
             + '<div class="zx-ffa-sub" style="margin:8px 0 0">' + te('Escolha um avatar') + '</div>'
@@ -5595,7 +5601,7 @@ function showProfEditor(idx, onDone) {
             + '</div></div>';
         ov.innerHTML = h;
         var kidsBtn = $('zxPfKidsSwitch');
-        if (kidsBtn) kidsBtn.addEventListener('click', function () { var flip = function () { var nameEl = $('zxPfName'); if (nameEl) nome = nameEl.value; var limitEl = $('zxPfLimit'); if (limitEl) limit = parseInt(limitEl.value, 10) || 0; kids = !kids; if (kids && av >= PROF_KIDS.length) av = 0; paint(); var newName = $('zxPfName'); if (newName) { newName.value = nome; try { newName.focus(); } catch (e) {} } }; if (kids) parentPinGate(flip); else flip(); });
+        if (kidsBtn) kidsBtn.addEventListener('click', function () { var flip = function () { var nameEl = $('zxPfName'); if (nameEl) nome = nameEl.value; var limitEl = $('zxPfLimit'); if (limitEl) limit = parseInt(limitEl.value, 10) || 0; var fromEl = $('zxPfFrom'), toEl = $('zxPfTo'); if (fromEl) from = profTimeValue(fromEl.value); if (toEl) to = profTimeValue(toEl.value); kids = !kids; if (kids && av >= PROF_KIDS.length) av = 0; paint(); var newName = $('zxPfName'); if (newName) { newName.value = nome; try { newName.focus(); } catch (e) {} } }; if (kids) parentPinGate(flip); else flip(); });
         var inp = $('zxPfName');
         if (inp) inp.value = nome;
         // escolher avatar: troca classes + preview EM-PLACE (o rebuild matava o
@@ -5616,11 +5622,13 @@ function showProfEditor(idx, onDone) {
             if (!n) { try { inp.focus(); } catch (e) {} return; }
             if (n.length > 16) n = n.slice(0, 16);
             var limitEl = $('zxPfLimit'); if (limitEl) limit = parseInt(limitEl.value, 10) || 0;
+            var fromEl = $('zxPfFrom'), toEl = $('zxPfTo'); if (fromEl) from = profTimeValue(fromEl.value); if (toEl) to = profTimeValue(toEl.value);
+            if (from && !to || !from && to) { try { if (fromEl) fromEl.focus(); } catch (e) {} return; }
             if (idx >= 0) {
-                profUpdate(idx, n, av, kids, limit);
+                profUpdate(idx, n, av, kids, limit, from, to);
                 profApplyData();                       // pode ter editado o ativo
             } else {
-                profCreate(n, av, kids, limit);
+                profCreate(n, av, kids, limit, from, to);
                 profSetActive(profAll().length - 1);   // criar já entra no novo
                 profApplyData();
             }
