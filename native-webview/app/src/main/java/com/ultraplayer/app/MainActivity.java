@@ -223,6 +223,9 @@ public final class MainActivity extends Activity {
         public boolean isTv() { return isTv; }
 
         @JavascriptInterface
+        public String getTmdbApiKey() { return BuildConfig.TMDB_API_KEY == null ? "" : BuildConfig.TMDB_API_KEY; }
+
+        @JavascriptInterface
         public void startVoice() {
             runOnUiThread(() -> {
                 try {

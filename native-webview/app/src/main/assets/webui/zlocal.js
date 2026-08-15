@@ -468,6 +468,49 @@ function api(path, qs, timeoutMs) {
 function lsGet(k) { try { return JSON.parse(localStorage.getItem(profKey(k)) || 'null'); } catch (e) { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(profKey(k), JSON.stringify(v)); } catch (e) {} }
 
+/* ---------- TMDB: notas e metadados opcionais ----------
+ * A chave chega somente pelo BuildConfig/ponte Android. Nunca é desenhada na UI.
+ * O cache é local por perfil e expira em sete dias para não bloquear o catálogo. */
+var ZTMDB = { key: null, pending: {}, enabled: null };
+function tmdbApiKey() {
+    if (ZTMDB.key != null) return ZTMDB.key;
+    try { ZTMDB.key = (global.HdxNative && typeof global.HdxNative.getTmdbApiKey === 'function') ? String(global.HdxNative.getTmdbApiKey() || '').trim() : ''; } catch (e) { ZTMDB.key = ''; }
+    ZTMDB.enabled = !!ZTMDB.key;
+    return ZTMDB.key;
+}
+function tmdbTextKey(s) { var raw = String(s || '').toLowerCase(); try { if (raw.normalize) raw = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch (e) {} return raw.replace(/\((?:19|20)\d{2}\)/g, '').replace(/[^a-z0-9]+/g, ' ').replace(/^\s+|\s+$/g, ''); }
+function tmdbCacheGet(key) { try { var d = lsGet('zx_tmdb_cache') || {}, v = d[key]; return v && v.ts > Date.now() - 604800000 ? v.data : null; } catch (e) { return null; } }
+function tmdbCacheSet(key, data) { try { var d = lsGet('zx_tmdb_cache') || {}; d[key] = { ts: Date.now(), data: data }; var ks = Object.keys(d); if (ks.length > 600) { ks.sort(function (a, b) { return (d[a].ts || 0) - (d[b].ts || 0); }); for (var i = 0; i < ks.length - 600; i++) delete d[ks[i]]; } lsSet('zx_tmdb_cache', d); } catch (e) {} }
+function tmdbFetch(path, params) {
+    var key = tmdbApiKey(); if (!key) return Promise.reject(new Error('TMDB indisponível'));
+    var q = [], p = params || {}; for (var k in p) if (p.hasOwnProperty(k) && p[k] != null && p[k] !== '') q.push(encodeURIComponent(k) + '=' + encodeURIComponent(p[k]));
+    q.push('api_key=' + encodeURIComponent(key)); q.push('language=pt-BR');
+    return fetchT('https://api.themoviedb.org/3' + path + '?' + q.join('&'), 9000).then(function (r) { if (!r || !r.ok) throw new Error('TMDB HTTP ' + (r && r.status)); return r.json(); });
+}
+function tmdbFind(kind, title, year) {
+    var tk = tmdbTextKey(title), ck = (kind === 'series' ? 'tv:' : 'movie:') + tk + ':' + (year || ''); if (!tk) return Promise.resolve(null);
+    var cached = tmdbCacheGet(ck); if (cached) return Promise.resolve(cached); if (ZTMDB.pending[ck]) return ZTMDB.pending[ck];
+    var path = kind === 'series' ? '/search/tv' : '/search/movie';
+    ZTMDB.pending[ck] = tmdbFetch(path, { query: title, include_adult: 'false', page: 1 }).then(function (j) {
+        var arr = (j && j.results) || [], best = null, bestDelta = 9999;
+        for (var i = 0; i < arr.length; i++) { var x = arr[i] || {}, date = x.release_date || x.first_air_date || '', y = parseInt(String(date).slice(0, 4), 10) || 0, delta = year && y ? Math.abs(y - year) : i; if (!best || delta < bestDelta) { best = x; bestDelta = delta; } }
+        if (!best) return null;
+        var out = { id: best.id || 0, title: best.title || best.name || title, vote_average: Number(best.vote_average || 0), vote_count: Number(best.vote_count || 0), popularity: Number(best.popularity || 0), date: best.release_date || best.first_air_date || '', poster_path: best.poster_path || '' };
+        tmdbCacheSet(ck, out); return out;
+    }).catch(function () { return null; }).then(function (v) { delete ZTMDB.pending[ck]; return v; });
+    return ZTMDB.pending[ck];
+}
+function tmdbCatalogMap(kind) { var cat = S.cat[kind]; if (!cat) return {}; if (!cat.tmdbMap) cat.tmdbMap = {}; return cat.tmdbMap; }
+function tmdbRatingFor(kind, item) { var name = item && (item.name || item.title) || '', key = tmdbTextKey(name), m = tmdbCatalogMap(kind)[key]; return m || null; }
+function tmdbYearFromItem(item) { var s = String(item && (item.name || item.title) || ''), m = s.match(/\b((?:19|20)\d{2})\b/); return m ? parseInt(m[1], 10) : 0; }
+function tmdbEnrichCatalog(kind, items, limit) {
+    if (!tmdbApiKey() || !items || !items.length) return Promise.resolve([]);
+    var list = items.slice(0, limit || 40), map = tmdbCatalogMap(kind), jobs = [];
+    for (var i = 0; i < list.length; i++) (function (it) { var title = it && (it.name || it.title) || ''; var k = tmdbTextKey(title); if (!k || map[k]) return; jobs.push(tmdbFind(kind, title.replace(/\s*\((?:19|20)\d{2}\)\s*$/, ''), tmdbYearFromItem(it)).then(function (v) { if (v) map[k] = v; })); })(list[i]);
+    return Promise.all(jobs).then(function () { return list; });
+}
+function tmdbRatingLabel(r) { return r && r.vote_average > 0 ? 'TMDB ' + r.vote_average.toFixed(1) : ''; }
+
 function setOnline(on) {
     if (S.online === on) return;
     S.online = on;
@@ -1115,10 +1158,12 @@ function posterTile(s, kind) {
         poster = tmdbResize(s.cover || s.stream_icon || '');
     }
     var directTrailer = s.youtube_trailer || s.trailer_url || s.trailer || '';
+    var rating = tmdbRatingLabel(tmdbRatingFor(kind, s));
     return '<a class="poster-tile-tv" href="' + href + '">' 
         + '<div class="pt-img"' + (poster ? ' data-src="' + attr(poster) + '"' : '') + '>'
         + '<div class="pt-fallback">' + esc((name || '').slice(0, 2)) + '</div></div>'
         + '<div class="pt-name">' + esc(name) + '</div>'
+        + (rating ? '<div class="pt-rating" style="color:#f6c453;font:700 12px system-ui;margin-top:3px;">★ ' + esc(rating.replace('TMDB ', '')) + '</div>' : '')
         + '<button type="button" class="poster-trailer-btn" data-trailer-title="' + attr(name) + '" data-trailer-kind="' + (kind === 'series' ? 'series' : 'movie') + '"' + (directTrailer ? ' data-trailer-url="' + attr(directTrailer) + '"' : '') + ' aria-label="Assistir trailer de ' + attr(name) + '">▶ Trailer</button></a>';
 }
 function posterTiles(list, kind) { var h = ''; for (var i = 0; i < list.length; i++) h += posterTile(list[i], kind); return h; }
@@ -1616,7 +1661,7 @@ function render(path) {
     if (p === '/alerts') return renderAlertsHome();
     if (p === '/movies' || p === '/series' || p === '/live') return renderSection(p.slice(1), {});
     m = p.match(/^\/(movies|series)\/search$/); if (m) return renderSearch(m[1]);
-    m = p.match(/^\/(movies|series)\/(favorites|recent|continue)$/); if (m) return renderSection(m[1], { virtual: m[2] });
+    m = p.match(/^\/(movies|series)\/(favorites|recent|continue|top-rated|most-watched)$/); if (m) return renderSection(m[1], { virtual: m[2] });
     m = p.match(/^\/live\/(favorites|recent)$/); if (m) return renderSection('live', { virtual: m[1] });
     m = p.match(/^\/(movies|series)\/category\/(\d+)$/); if (m) return renderSection(m[1], { catId: m[2] });
     m = p.match(/^\/live\/category\/(\d+)$/); if (m) return renderSection('live', { catId: m[1] });   // categorias live normalmente carregam in-place; esta rota é p/ o pós-PIN de adulto (go('/live/category/X'))
@@ -3394,7 +3439,9 @@ function vodSidebar(kind, cat, selName) {
         + '<a href="' + searchHref + '" class="cat-pill cat-pill-icon" autofocus><span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg> Pesquisar</span></a>'
         + '<a href="/' + kind + '/continue" data-replace="1" class="cat-pill ' + (selName === 'Continue Assistindo' ? 'is-active' : '') + '"><span>' + contLabel + '</span><span class="cat-count"></span></a>'
         + '<a href="/' + kind + '/favorites" data-replace="1" class="cat-pill ' + (selName === 'Favoritos' ? 'is-active' : '') + '"><span>Favoritos</span><span class="cat-count">' + (S.fav[kind === 'series' ? 'series' : 'movie'].length || '') + '</span></a>'
-        + '<a href="/' + kind + '/recent" data-replace="1" class="cat-pill ' + (selName === 'Recém adicionados' ? 'is-active' : '') + '"><span>Recém adicionados</span></a>';
+        + '<a href="/' + kind + '/recent" data-replace="1" class="cat-pill ' + (selName === 'Recém adicionados' ? 'is-active' : '') + '"><span>Recém adicionados</span></a>'
+        + '<a href="/' + kind + '/top-rated" data-replace="1" class="cat-pill ' + (selName === 'Maior nota' ? 'is-active' : '') + '"><span>Maior nota</span></a>'
+        + '<a href="/' + kind + '/most-watched" data-replace="1" class="cat-pill ' + (selName === 'Mais assistidos' ? 'is-active' : '') + '"><span>Mais assistidos</span></a>';
     for (var i = 0; i < cat.cats.length; i++) {
         var c = cat.cats[i];
         var active = (selName === c.category_name);
@@ -3404,6 +3451,13 @@ function vodSidebar(kind, cat, selName) {
     return h + '</div>';
 }
 function firstNonAdult(cat) { for (var i = 0; i < cat.cats.length; i++) if (!cat.cats[i].adult) return cat.cats[i]; return cat.cats[0] || null; }
+function vodItemId(kind, item) { return parseInt((kind === 'series' ? (item && (item.series_id || item.stream_id)) : (item && item.stream_id)) || 0, 10) || 0; }
+function mostWatchedVod(kind, list) {
+    var sec = kind === 'series' ? 'series' : 'vod', d = lsGet(kind === 'series' ? 'zx_cont_series' : 'zx_cont_vod') || {}, hist = d.items || [], scores = {}, fav = S.fav[kind === 'series' ? 'series' : 'movie'] || [];
+    for (var i = 0; i < hist.length; i++) { var h = hist[i] || {}, hid = parseInt(h.id || 0, 10); if (hid) scores[hid] = 1000000 + (parseInt(h.ts || 0, 10) || 0); }
+    return (list || []).slice().sort(function (a, b) { var ai = vodItemId(kind, a), bi = vodItemId(kind, b), as = (scores[ai] || 0) + (inArr(fav, ai) ? 500000 : 0), bs = (scores[bi] || 0) + (inArr(fav, bi) ? 500000 : 0); if (as !== bs) return bs - as; return (parseInt(b.added || b.last_modified || 0, 10) || 0) - (parseInt(a.added || a.last_modified || 0, 10) || 0); });
+}
+function topRatedVod(kind, list) { return (list || []).slice().sort(function (a, b) { var ar = tmdbRatingFor(kind, a) || {}, br = tmdbRatingFor(kind, b) || {}, av = Number(ar.vote_average || 0), bv = Number(br.vote_average || 0); if (av !== bv) return bv - av; return Number(br.vote_count || 0) - Number(ar.vote_count || 0); }); }
 
 function renderVodSection(kind, cat, opts) {
     var selCat = null, selName = '', tiles = '', hasMore = false, virtual = opts.virtual || '';
@@ -3475,8 +3529,13 @@ function renderVodSection(kind, cat, opts) {
     }
 
     if (virtual) {
-        selName = virtual === 'favorites' ? 'Favoritos' : virtual === 'continue' ? 'Continue Assistindo' : 'Recém adicionados';
+        selName = virtual === 'favorites' ? 'Favoritos' : virtual === 'continue' ? 'Continue Assistindo' : virtual === 'top-rated' ? 'Maior nota' : virtual === 'most-watched' ? 'Mais assistidos' : 'Recém adicionados';
         if (virtual === 'recent') { tiles = posterTiles(cat.all.slice(0, 200), kind); paint(); return; }
+        if (virtual === 'top-rated') {
+            tmdbEnrichCatalog(kind, cat.all, 32).then(function () { tiles = posterTiles(topRatedVod(kind, cat.all).slice(0, 120), kind); paint(); }).catch(function () { tiles = posterTiles(cat.all.slice(0, 120), kind); paint(); });
+            return;
+        }
+        if (virtual === 'most-watched') { tiles = posterTiles(mostWatchedVod(kind, cat.all).slice(0, 120), kind); paint(); return; }
         // favorites/continue via /api/r (com cache p/ offline)
         var k = kind === 'series' ? 'series' : 'movie';
         var sec = kind === 'series' ? 'series' : 'vod';
@@ -3504,7 +3563,15 @@ function renderVodSection(kind, cat, opts) {
         hasMore = list.length > initial;
         startPage = Math.max(1, Math.ceil(initial / PAGE));
     }
-    paint();
+        paint();
+    if (c && tmdbApiKey()) {
+        var tmdbScope = kind + ':category:' + String(selCat || 'all'); S._tmdbVodScope = tmdbScope;
+        tmdbEnrichCatalog(kind, list, 24).then(function () {
+            if (S._tmdbVodScope !== tmdbScope) return;
+            var grid = document.getElementById('content-grid');
+            if (grid) { grid.innerHTML = posterTiles(list.slice(0, initial), kind); afterRender(); }
+        });
+    }
 }
 function findCat(cat, id) { for (var i = 0; i < cat.cats.length; i++) if (String(cat.cats[i].category_id) === String(id)) return cat.cats[i]; return null; }
 
@@ -3952,6 +4019,7 @@ function renderDetailMovie(id) {
         if (year) badges += '<span class="dh-badge">' + esc(year) + '</span>';
         if (duration) badges += '<span class="dh-badge"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> ' + esc(duration) + '</span>';
         if (rating) badges += '<span class="dh-badge">★ ' + esc(rating) + '</span>';
+        badges += '<span id="tmdb-detail-rating" class="dh-badge" style="display:none"></span>';
         if (genre) badges += '<span class="dh-genre">' + esc(genre) + '</span>';
         // Retomar com BOTÃO (não calado): se há progresso, "Continuar de Xmin" +
         // "Recomeçar"; sem progresso, "Reproduzir". (Helper reusado p/ refresh Android.)
@@ -3971,6 +4039,7 @@ function renderDetailMovie(id) {
         wireQueueDetailBtn();
         loadSimilar('movies', id, info.category_id || md.category_id || '');
         afterRender();
+        tmdbFind('movies', name, parseInt(year, 10) || 0).then(function (r) { var el = $('tmdb-detail-rating'); if (el && r && r.vote_average > 0) { el.textContent = 'TMDB ' + r.vote_average.toFixed(1) + ' (' + r.vote_count + ')'; el.style.display = ''; } });
     }).catch(function () { showLoading(false); });
 }
 
@@ -3999,7 +4068,9 @@ function m3uDetail(kind, id) {
     S.playName = name; S.playPoster = poster; S.playExt = ext;
     if (kind === 'series') S.playSeries = { id: parseInt(id, 10), name: name, poster: poster, list: [{ id: parseInt(id, 10), ext: ext, s: 1, e: 1 }] };
     else S.playSeries = null;
-    wireFavBtn(); wireQueueDetailBtn(); afterRender(); return true;
+    wireFavBtn(); wireQueueDetailBtn(); afterRender();
+    tmdbFind(kind === 'series' ? 'series' : 'movies', name, tmdbYearFromItem({ name: name })).then(function (r) { var el = $('tmdb-detail-rating'); if (el && r && r.vote_average > 0) { el.textContent = 'TMDB ' + r.vote_average.toFixed(1) + ' (' + r.vote_count + ')'; el.style.display = ''; } });
+    return true;
 }
 function renderM3UDetail(kind, id) {
     if (m3uFindItem(kind, id)) { m3uDetail(kind, id); return; }
@@ -4024,6 +4095,7 @@ function renderDetailSeries(id) {
         var badges = '';
         if (year) badges += '<span class="dh-badge">' + esc(year) + '</span>';
         if (rating) badges += '<span class="dh-badge">★ ' + esc(rating) + '</span>';
+        badges += '<span id="tmdb-detail-rating" class="dh-badge" style="display:none"></span>';
         if (genre) badges += '<span class="dh-genre">' + esc(genre) + '</span>';
         var pills = '', rows = '', firstEp = null, epMap = {}, epList = [];
         for (var i = 0; i < seasons.length; i++) {
@@ -4063,6 +4135,7 @@ function renderDetailSeries(id) {
         wireQueueDetailBtn();
         wireSeasons();
         afterRender();
+        tmdbFind('series', name, parseInt(year, 10) || 0).then(function (r) { var el = $('tmdb-detail-rating'); if (el && r && r.vote_average > 0) { el.textContent = 'TMDB ' + r.vote_average.toFixed(1) + ' (' + r.vote_count + ')'; el.style.display = ''; } });
     }).catch(function () { showLoading(false); });
 }
 function wireSeasons() {
@@ -4289,7 +4362,53 @@ function settingsStyles() {
         + '@media (max-width:600px){.theme-grid{grid-template-columns:1fr;}}'
         + '</style>';
 }
+/* ---- backup local entre aparelhos (sem credenciais e sem segredos) ---- */
+function localBackupKeyAllowed(rawKey) {
+    var k = String(rawKey || ''), ns = S.profNs || '';
+    if (!k || k === 'zx_direct_mode' || k === 'zx_mac' || k === 'zx_code' || k === 'zx_user' || k === 'zx_pass' || k === 'zx_creds' || k === 'zx_snap') return false;
+    if (k === 'zx_profiles' || k === 'zx_prof_active' || k === 'zx_prof_seq' || k === 'zx_lang' || k === 'zx:ff' || k === 'zx:theme' || k.indexOf('zx_a11y_') === 0) return true;
+    var base = ns && k.indexOf(ns) === 0 ? k.slice(ns.length) : k;
+    return ns ? (k.indexOf(ns) === 0 && profIsPersonalKey(base)) : profIsPersonalKey(base);
+}
+function localBackupPayload() {
+    var data = {}, skipped = 0;
+    try {
+        for (var i = 0; i < localStorage.length; i++) {
+            var k = localStorage.key(i);
+            if (!localBackupKeyAllowed(k)) { skipped++; continue; }
+            data[k] = localStorage.getItem(k);
+        }
+    } catch (e) {}
+    return { app: 'UltraPlayer', format: 1, created_at: new Date().toISOString(), profile: profName(profActive()), keys: data, skipped: skipped };
+}
+function localBackupDownload() {
+    var payload = localBackupPayload(), text = JSON.stringify(payload, null, 2), blob = new Blob([text], { type: 'application/json;charset=utf-8' }), url = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = url; a.download = 'ultraplayer-backup-' + new Date().toISOString().slice(0, 10) + '.json'; document.body.appendChild(a); a.click(); setTimeout(function () { try { document.body.removeChild(a); URL.revokeObjectURL(url); } catch (e) {} }, 300);
+}
+function localBackupApply(text) {
+    var d;
+    try { d = JSON.parse(text); } catch (e) { return { ok: false, msg: 'Arquivo JSON inválido.' }; }
+    if (!d || d.app !== 'UltraPlayer' || d.format !== 1 || !d.keys || typeof d.keys !== 'object') return { ok: false, msg: 'Este arquivo não é um backup do UltraPlayer.' };
+    var n = 0;
+    try { for (var k in d.keys) if (d.keys.hasOwnProperty(k) && localBackupKeyAllowed(k)) { localStorage.setItem(k, String(d.keys[k] == null ? '' : d.keys[k])); n++; } } catch (e) { return { ok: false, msg: 'Não foi possível restaurar o backup.' }; }
+    try { S.profNs = profActive().ns; loadFav(); } catch (e) {}
+    return { ok: true, msg: n + ' dados restaurados. Reabra a tela para aplicar tudo.' };
+}
+function showLocalBackupPanel() {
+    var old = $('zx-local-backup-modal'); if (old && old.parentNode) old.parentNode.removeChild(old);
+    var ov = document.createElement('div'); ov.id = 'zx-local-backup-modal'; ov.className = 'zx-ff-ask tv-modal';
+    ov.innerHTML = '<div class="zx-ffa-card" style="max-width:620px;width:min(92vw,620px)"><div class="zx-ffa-title">Dados locais entre aparelhos</div><div class="zx-ffa-sub" style="text-align:left">Exporte um arquivo para levar favoritos, Minha Fila, progresso, perfis infantis, temas e preferências para outro aparelho. O backup não inclui MAC, usuário, senha, licença, playlist nem a chave TMDB.</div><div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin:14px 0"><button type="button" class="zx-pf-save" id="zxBackupExport">Exportar JSON</button><button type="button" class="zx-pf-save" id="zxBackupImport">Importar JSON</button><button type="button" class="zx-pf-save" id="zxBackupClose">Fechar</button></div><input type="file" id="zxBackupFile" accept="application/json,.json" style="display:none"><div id="zxBackupMsg" style="min-height:20px;color:#b9c9c1;font-size:14px;text-align:center"></div></div>';
+    document.body.appendChild(ov);
+    var msg = $('zxBackupMsg'), file = $('zxBackupFile');
+    var close = function () { try { ov.parentNode.removeChild(ov); } catch (e) {} };
+    var ex = $('zxBackupExport'); if (ex) ex.addEventListener('click', function () { localBackupDownload(); if (msg) msg.textContent = 'Backup exportado. Guarde o arquivo em local seguro.'; });
+    var im = $('zxBackupImport'); if (im) im.addEventListener('click', function () { if (file) file.click(); });
+    if (file) file.addEventListener('change', function () { var f = file.files && file.files[0]; if (!f) return; var rd = new FileReader(); rd.onload = function () { var r = localBackupApply(String(rd.result || '')); if (msg) { msg.textContent = r.msg; msg.style.color = r.ok ? '#10b981' : '#ff8c95'; } }; rd.onerror = function () { if (msg) msg.textContent = 'Não foi possível ler o arquivo.'; }; rd.readAsText(f); });
+    var cl = $('zxBackupClose'); if (cl) cl.addEventListener('click', close);
+    try { if (ex) ex.focus(); } catch (e) {}
+}
 function renderSettings() {
+
     var info = S.info || {}; var lic = info.license || {};
     var exp = (lic.exp_display || ''); var settingsList = null; try { var settingsLists = S.directPlaylists && S.directPlaylists.length ? S.directPlaylists : loadDirectPlaylists(), settingsPick = parseInt(S.listIndex || activeListIndex(), 10) || 0; settingsList = settingsLists[settingsPick] || settingsLists[0] || null; } catch (e) {} var settingsRawExpiry = listExpiryValue(settingsList) || expiryFromListUrl(S.playlistUrl); var expTs = expiryTimestamp(lic.exp_date || info.exp_date || info.expire_date || listExpiryValue(info) || settingsRawExpiry || S.listExpiryTs || 0); if (!exp && expTs) { var dt = new Date(expTs * 1000); if (!isNaN(dt.getTime())) exp = p2(dt.getDate()) + '/' + p2(dt.getMonth() + 1) + '/' + dt.getFullYear(); } if (!exp) exp = 'Sem expiração';
     var status = info.status || '';
@@ -4313,7 +4432,9 @@ function renderSettings() {
     var pinCss = 'display:block;width:100%;box-sizing:border-box;margin-bottom:10px;padding:13px 16px;background:#0c0f0d;border:1.5px solid rgba(255,255,255,.16);border-radius:12px;color:#fff;font-size:18px;text-align:center;letter-spacing:6px;outline:none';
         var parentalMenu = '<a href="#parental" class="sm-item" data-pane="pane-parental"><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></span><span class="sm-label">Controle parental</span></a>';
     var accessibilityMenu = '<a href="#accessibility" class="sm-item" data-pane="pane-accessibility"><span class="sm-ico">Aa</span><span class="sm-label">Acessibilidade</span></a>';
+    var backupMenu = '<a href="#backup" class="sm-item" data-pane="pane-backup"><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 21h14"></path></svg></span><span class="sm-label">Dados locais</span></a>';
     var accessibilityPane = '<div class="settings-pane" id="pane-accessibility" style="display:none;"><div class="pane-title">Acessibilidade e diagnóstico</div><div class="pane-sub">Ajustes opcionais para facilitar a leitura e verificar o estado do aplicativo.</div><div class="pane-section"><div class="opt-row"><button type="button" class="opt-btn" data-a11y-set="large">Texto maior</button><button type="button" class="opt-btn" data-a11y-set="high">Alto contraste</button><button type="button" class="opt-btn" data-a11y-set="ambient">Modo ambiente</button></div><div class="pane-sub" style="margin-top:10px;">Modo ambiente: após 45 segundos sem tocar ou apertar um botão na Home, mostra relógio, data, logo e fundo. Pressione qualquer botão para voltar.</div></div><div class="pane-section"><button type="button" class="action-btn" id="zx-run-diagnostics"><div class="ab-title">Verificar conexão e catálogo</div><div class="ab-sub" id="zx-diagnostics-result">Toque ou pressione OK para executar.</div></button></div></div>';
+    var backupPane = '<div class="settings-pane" id="pane-backup" style="display:none;"><div class="pane-title">Dados locais entre aparelhos</div><div class="pane-sub">O UltraPlayer mantém favoritos, progresso, Minha Fila, perfis e preferências neste aparelho. Como o backend atual não oferece sincronização desses dados, use um arquivo JSON para transportar os dados com segurança.</div><div class="pane-section"><button type="button" class="action-btn" id="zx-open-local-backup"><div class="ab-title">Exportar ou importar dados</div><div class="ab-sub">Não inclui MAC, usuário, senha, licença, playlist ou a chave TMDB.</div></button></div></div>';
     var parentalPane = '<div class="settings-pane" id="pane-parental" style="display:none;"><div class="pane-title">Controle parental</div>'
         + '<div class="pane-sub">A senha bloqueia as categorias <strong>adultas (XXX)</strong>. Fica guardada <strong>só neste aparelho</strong> (nada no servidor). Padrão: <strong>1234</strong>.</div>'
         + '<div class="pane-section" style="max-width:340px">'
@@ -4328,7 +4449,7 @@ function renderSettings() {
         + '<div class="settings-layout"><div class="settings-menu" id="settings-menu">'
         + '<a href="#info" class="sm-item is-active" data-pane="pane-info" autofocus><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></span><span class="sm-label">Informação Geral</span></a>'
         + '<a href="#player" class="sm-item" data-pane="pane-player"><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg></span><span class="sm-label">Player de Vídeo</span></a>'
-                + ffMenu + langMenu + themeMenu + parentalMenu + accessibilityMenu
+                + ffMenu + langMenu + themeMenu + parentalMenu + accessibilityMenu + backupMenu
         + '<a href="#clear" class="sm-item" data-pane="pane-clear"><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1.5 14a2 2 0 0 1-2 1.8H8.5a2 2 0 0 1-2-1.8L5 6"></path></svg></span><span class="sm-label">Limpar Cache</span></a>'
         + '<button type="button" class="sm-item sm-logout" id="btn-logout"><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></span><span class="sm-label">Sair da conta</span></button>'
         + '</div><div class="settings-content">'
@@ -4341,7 +4462,7 @@ function renderSettings() {
         + '<div class="settings-pane" id="pane-player" style="display:none;"><div class="pane-title">Configurações do Player</div><div class="pane-sub">Vale só <strong>neste aparelho</strong>. <strong>Nativo</strong> é o padrão; <strong>HTML5</strong> oferece mais recursos.</div>'
         + '<div class="pane-section"><div class="pane-section-title">Canais ao vivo</div><div class="opt-row"><button type="button" class="opt-btn" data-player-key="zx:player:live" data-player-value="native">Nativo</button><button type="button" class="opt-btn" data-player-key="zx:player:live" data-player-value="html5">HTML5</button></div></div>'
         + '<div class="pane-section"><div class="pane-section-title">Filmes e séries (VOD)</div><div class="opt-row"><button type="button" class="opt-btn" data-player-key="zx:player:vod" data-player-value="native">Nativo</button><button type="button" class="opt-btn" data-player-key="zx:player:vod" data-player-value="html5">HTML5</button></div></div></div>'
-                + ffPane + langPane + themePane + parentalPane + accessibilityPane
+                + ffPane + langPane + themePane + parentalPane + accessibilityPane + backupPane
         + '<div class="settings-pane" id="pane-clear" style="display:none;"><div class="pane-title">Limpar Cache</div><div class="pane-sub">Use caso esteja tendo problemas com o app.</div><div class="pane-section"><button type="button" class="action-btn" id="btn-clear-cache"><div class="ab-title">Limpar cache local</div><div class="ab-sub">Remove dados temporários armazenados.</div></button></div></div>'
         + '</div></div></div>');
     applyHomePanelWall();
@@ -4383,6 +4504,7 @@ function wireSettings() {
     var a11y = document.querySelectorAll('[data-a11y-set]');
     for (var ai = 0; ai < a11y.length; ai++) (function (el) { var key = el.getAttribute('data-a11y-set'); if (accessibilityEnabled(key)) el.className += ' is-on'; el.addEventListener('click', function (e) { e.preventDefault(); var on = !accessibilityEnabled(key); try { localStorage.setItem('zx_a11y_' + key, on ? '1' : '0'); } catch (err) {} el.className = el.className.replace(/\bis-on\b/g, '').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '') + (on ? ' is-on' : ''); applyAccessibility(); }); })(a11y[ai]);
     var diag = $('zx-run-diagnostics'); if (diag) diag.addEventListener('click', function (e) { e.preventDefault(); var sub = $('zx-diagnostics-result'); if (sub) sub.textContent = ultraDiagnosticsText(); });
+    var backupOpen = $('zx-open-local-backup'); if (backupOpen) backupOpen.addEventListener('click', function (e) { e.preventDefault(); showLocalBackupPanel(); });
     // Temas globais — a troca é imediata e fica salva no aparelho.
     (function () {
         var tb = document.querySelectorAll('[data-theme-set]'); if (!tb.length) return;

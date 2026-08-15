@@ -1,17 +1,32 @@
+import java.util.Properties
+
 plugins {
     id 'com.android.application'
 }
+
+def privateProperties = new Properties()
+def privatePropertiesFile = rootProject.file('local.properties')
+if (privatePropertiesFile.exists()) {
+    privatePropertiesFile.withInputStream { privateProperties.load(it) }
+}
+def tmdbApiKey = privateProperties.getProperty('TMDB_API_KEY', '')
+def tmdbApiKeyEscaped = tmdbApiKey.replace('\\', '\\\\').replace('"', '\\"')
 
 android {
     namespace 'com.ultraplayer.app'
     compileSdk 36
 
+    buildFeatures {
+        buildConfig true
+    }
+
     defaultConfig {
         applicationId 'com.ultraplayer.app'
         minSdk 21
         targetSdk 28
-        versionCode 104
-        versionName '4.66.0'
+        versionCode 105
+        versionName '4.67.0'
+        buildConfigField 'String', 'TMDB_API_KEY', '"' + tmdbApiKeyEscaped + '"'
     }
 
     buildTypes {
