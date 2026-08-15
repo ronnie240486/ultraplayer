@@ -764,6 +764,18 @@ function queueCurrentAction(remove) {
     queueToggle(kind, id, name, poster, remove ? false : true);
     return true;
 }
+function clearQueue() { lsSet('zx_queue', { ok: true, items: [] }); }
+function showQueueClearConfirm() {
+    var old = $('zxQueueClearConfirm'); if (old && old.parentNode) old.parentNode.removeChild(old);
+    var ov = document.createElement('div'); ov.id = 'zxQueueClearConfirm';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:120;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:20px;';
+    ov.innerHTML = '<div style="width:min(92vw,460px);padding:24px;border:1px solid rgba(16,185,129,.7);border-radius:18px;background:#07130f;color:#fff;box-shadow:0 16px 50px rgba(0,0,0,.6);text-align:center"><h2 style="margin:0 0 10px">Limpar Minha Fila?</h2><p style="margin:0 0 20px;color:#b9c9c1">Todos os conteúdos salvos serão removidos deste perfil.</p><div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap"><button type="button" class="btn-tv" id="zxQueueCancel" autofocus>Cancelar</button><button type="button" class="btn-tv is-primary" id="zxQueueConfirm">Limpar fila</button></div></div>';
+    document.body.appendChild(ov);
+    var close = function () { if (ov.parentNode) ov.parentNode.removeChild(ov); };
+    var cancel = $('zxQueueCancel'), confirm = $('zxQueueConfirm');
+    if (cancel) cancel.addEventListener('click', close);
+    if (confirm) confirm.addEventListener('click', function () { clearQueue(); close(); if ((history.state && history.state.p) === '/queue') renderQueueHome(); else assistantToast('Minha Fila foi limpa'); });
+}
 function queueTile(it) {
     var obj = { id: it.id, name: it.name, poster: it.poster, logo: it.logo };
     return favTile(obj, it.kind);
@@ -2091,6 +2103,7 @@ function runVoiceIntent(text) {
     else if (/^(series?|novelas?|animes?)$/.test(cmd)) { path = '/series'; label = 'abrindo Séries'; }
     else if (/^(favoritos?|meus favoritos)$/.test(cmd)) { path = '/favorites'; label = 'abrindo Favoritos'; }
     else if (/^(minha fila|fila pessoal|fila de espera|o que guardei)$/.test(cmd)) { path = '/queue'; label = 'abrindo Minha Fila'; }
+    else if (/^(limpar|esvaziar|apagar) (a )?(minha )?fila$/.test(cmd)) { if (queueList().length) showQueueClearConfirm(); else assistantToast('Sua fila já está vazia'); return true; }
     else if (/^(meus alertas|meus alarmes|avisos programados|alertas)$/ .test(cmd)) { path = '/alerts'; label = 'abrindo Meus Alertas'; }
     else if (/^(adicionar a fila|adicionar a minha fila|guardar na fila|ver depois|salvar para depois)$/.test(cmd)) { if (queueCurrentAction(false)) { assistantToast('adicionado à Minha Fila'); } else { assistantToast('Abra um conteúdo para adicionar à fila'); } return true; }
     else if (/^(remover da fila|tirar da fila|retirar da minha fila)$/.test(cmd)) { if (queueCurrentAction(true)) { assistantToast('removido da Minha Fila'); } else { assistantToast('Abra um conteúdo para remover da fila'); } return true; }
@@ -3289,9 +3302,11 @@ function renderQueueHome() {
     var body = tiles
         ? '<div class="poster-grid-tv" id="content-grid">' + tiles + '</div>'
         : '<div style="color:#aaa;padding:50px 20px;text-align:center;">Sua fila está vazia.<br>Abra um conteúdo e diga <strong>“adicionar à fila”</strong> para guardá-lo.</div>';
-    setHtml('<div class="search-screen"><div class="search-topbar"><a href="/home" class="gt-back" autofocus>← Voltar</a><div class="search-title">Minha Fila</div></div>'
+    var clearBtn = items.length ? '<button type="button" class="btn-tv" id="zxQueueClear" style="margin-left:auto;padding:8px 12px;font-size:13px">Limpar fila</button>' : '';
+    setHtml('<div class="search-screen"><div class="search-topbar"><a href="/home" class="gt-back" autofocus>← Voltar</a><div class="search-title">Minha Fila</div>' + clearBtn + '</div>'
         + '<div class="search-body">' + body + '</div></div>' + flatStyles());
     if (tiles) { fitPosterGrid($('content-grid')); lazyGrid($('content-grid')); }
+    var clear = $('zxQueueClear'); if (clear) clear.addEventListener('click', showQueueClearConfirm);
     afterRender();
 }
 function renderAlertsHome() {
