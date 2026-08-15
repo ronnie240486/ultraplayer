@@ -5725,14 +5725,27 @@ function boot() {
         go('/home', true);
         refresh(snap);                               // re-verifica em segundo plano
     } else {
-        // 1º acesso (ou >30 dias sem verificar) → precisa da VPS p/ DNS+licença.
-        showLoading(true);
+        // Primeiro acesso sem snapshot: se já existe uma playlist salva, libera a Home
+        // imediatamente usando o servidor da própria URL e confirma a licença em segundo
+        // plano. Assim a TV Box não fica parada esperando a VPS antes da primeira pintura.
+        var eagerServer = '', eagerCreds = null;
+        try {
+            eagerCreds = playlistToXtream({ playlist_url: S.playlistUrl }, 'Lista ativa');
+            eagerServer = eagerCreds ? eagerCreds.server : '';
+            if (!eagerServer && S.playlistUrl) { var eu = new URL(S.playlistUrl); eagerServer = eu.protocol + '//' + eu.host; }
+        } catch (e) {}
+        var eagerHome = !!(S.directAuth && S.playlistUrl && eagerServer);
+        if (eagerHome) {
+            S.server = eagerServer; S.xtreamDerived = eagerCreds || S.xtreamDerived;
+            applyResolve({ ok: true, dns: { base: eagerServer, name: '' }, license: { mac: S.user || '', exp_date: 0 } }, true);
+            go('/home', true);
+        } else showLoading(true);
         api('resolve', '', 12000).then(function (d) {
-            showLoading(false);
-            if (d && d.error === 'license') { if (applyPush(d)) return; renderPaywall(d); return; }
-            if (d && d.ok && d.dns && d.dns.base) { applyResolve(d, false); saveSnap(d); go('/home', true); }
-            else if (snap) { applyResolve(snap.d, true); go('/home', true); }   // tinha snapshot velho mas sem net: deixa usar
-            else { renderOfflineFirst(); }
+            if (!eagerHome) showLoading(false);
+            if (d && d.error === 'license') { if (applyPush(d)) return; if (!eagerHome) renderPaywall(d); return; }
+            if (d && d.ok && d.dns && d.dns.base) { applyResolve(d, false); saveSnap(d); if (!eagerHome) go('/home', true); }
+            else if (!eagerHome && snap) { applyResolve(snap.d, true); go('/home', true); }
+            else if (!eagerHome) renderOfflineFirst();
         });
     }
     // MAC: atualiza a validade real do painel mesmo quando a Home abriu de um snapshot antigo.
