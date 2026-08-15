@@ -3868,6 +3868,7 @@ function detailStyles() {
         + '.detail-hero .dh-buttons>.btn-tv{height:auto;}'
         + '.detail-hero .dh-buttons .btn-icon{flex:0 0 auto;width:18px;height:18px;margin-right:7px;}'
         + '.detail-hero .dh-buttons .btn-tv.is-fav{border-color:' + a + ';}'
+        + '.detail-hero .dh-buttons .btn-tv.is-queued{border-color:' + a + ';background:' + a + '18;}'
         + 'body.zx-ff-mobile .detail-hero .dh-buttons{gap:6px;}'
         + 'body.zx-ff-mobile .detail-hero .dh-buttons>*{padding:9px 9px;font-size:clamp(10px,1.85vw,14px);}'
         + 'body.zx-ff-mobile .detail-hero .dh-buttons .btn-icon{width:16px;height:16px;margin-right:5px;}'
@@ -3917,11 +3918,12 @@ function renderDetailMovie(id) {
                         + playBtns
             + '<button type="button" class="btn-tv trailer-detail-btn" data-trailer-title="' + attr(name) + '" data-trailer-kind="movie" data-trailer-url="' + attr(info.youtube_trailer || md.youtube_trailer || info.trailer || '') + '"><span class="btn-icon">▶</span>Trailer</button>'
                         + '<button type="button" class="btn-tv" id="btn-favorite" data-kind="movie" data-id="' + attr(id) + '" data-name="' + attr(name) + '" data-poster="' + attr(cover) + '"><span class="btn-icon" id="fav-icon">' + (isFav ? '♥' : '+') + '</span><span id="fav-text">' + 'Favoritos' + '</span></button>'
-
+                        + '<button type="button" class="btn-tv" id="btn-queue-detail" data-kind="movie" data-id="' + attr(id) + '" data-name="' + attr(name) + '" data-poster="' + attr(cover) + '"><span class="btn-icon" id="queue-detail-icon">+</span><span id="queue-detail-text">Minha Fila</span></button>'
             + '</div></div></div>'
             + '<div class="dh-similar-lazy" data-cat="' + attr(info.category_id || md.category_id || '') + '"></div></div>' + detailStyles());
         S.playExt = ext; S.playName = name; S.playPoster = cover; S.playSeries = null;
         wireFavBtn();
+        wireQueueDetailBtn();
         loadSimilar('movies', id, info.category_id || md.category_id || '');
         afterRender();
     }).catch(function () { showLoading(false); });
@@ -3947,11 +3949,12 @@ function m3uDetail(kind, id) {
         + '<a class="btn-tv is-primary" href="' + playHref + '" data-ext="' + attr(ext) + '" autofocus><span class="btn-icon">▶</span>Reproduzir</a>'
         + '<button type="button" class="btn-tv trailer-detail-btn" data-trailer-title="' + attr(name) + '" data-trailer-kind="' + (kind === 'series' ? 'series' : 'movie') + '" data-trailer-url=""><span class="btn-icon">▶</span>Trailer</button>'
         + '<button type="button" class="btn-tv" id="btn-favorite" data-kind="' + (kind === 'movies' ? 'movie' : 'series') + '" data-id="' + attr(id) + '" data-name="' + attr(name) + '" data-poster="' + attr(poster) + '"><span class="btn-icon" id="fav-icon">' + (isFav ? '♥' : '+') + '</span><span id="fav-text">' + 'Favoritos' + '</span></button>'
+        + '<button type="button" class="btn-tv" id="btn-queue-detail" data-kind="' + (kind === 'movies' ? 'movie' : 'series') + '" data-id="' + attr(id) + '" data-name="' + attr(name) + '" data-poster="' + attr(poster) + '"><span class="btn-icon" id="queue-detail-icon">+</span><span id="queue-detail-text">Minha Fila</span></button>'
         + '</div></div></div></div>' + detailStyles());
     S.playName = name; S.playPoster = poster; S.playExt = ext;
     if (kind === 'series') S.playSeries = { id: parseInt(id, 10), name: name, poster: poster, list: [{ id: parseInt(id, 10), ext: ext, s: 1, e: 1 }] };
     else S.playSeries = null;
-    wireFavBtn(); afterRender(); return true;
+    wireFavBtn(); wireQueueDetailBtn(); afterRender(); return true;
 }
 function renderM3UDetail(kind, id) {
     if (m3uFindItem(kind, id)) { m3uDetail(kind, id); return; }
@@ -4005,13 +4008,14 @@ function renderDetailSeries(id) {
         setHtml('<div class="detail-screen" id="series-detail"><div class="detail-bg"' + (bg ? ' style="background-image:url(\'' + attr(bg) + '\')"' : '') + '></div>'
             + '<div class="detail-hero"><a href="javascript:history.back()" class="dh-back">← Voltar</a>'
             + '<div class="dh-content"><h1>' + esc(name) + '</h1><div class="dh-meta">' + badges + '</div><p class="dh-plot">' + esc(plot) + '</p>'
-                        + '<div class="dh-buttons">' + playBtn + '<button type="button" class="btn-tv trailer-detail-btn" data-trailer-title="' + attr(name) + '" data-trailer-kind="series" data-trailer-url="' + attr(info.youtube_trailer || info.trailer || '') + '"><span class="btn-icon">▶</span>Trailer</button><button type="button" class="btn-tv" id="btn-favorite" data-kind="series" data-id="' + attr(id) + '" data-name="' + attr(name) + '" data-poster="' + attr(cover) + '"><span class="btn-icon" id="fav-icon">' + (isFav ? '♥' : '+') + '</span><span id="fav-text">' + 'Favoritos' + '</span></button></div>'
+                        + '<div class="dh-buttons">' + playBtn + '<button type="button" class="btn-tv trailer-detail-btn" data-trailer-title="' + attr(name) + '" data-trailer-kind="series" data-trailer-url="' + attr(info.youtube_trailer || info.trailer || '') + '"><span class="btn-icon">▶</span>Trailer</button><button type="button" class="btn-tv" id="btn-favorite" data-kind="series" data-id="' + attr(id) + '" data-name="' + attr(name) + '" data-poster="' + attr(cover) + '"><span class="btn-icon" id="fav-icon">' + (isFav ? '♥' : '+') + '</span><span id="fav-text">' + 'Favoritos' + '</span></button><button type="button" class="btn-tv" id="btn-queue-detail" data-kind="series" data-id="' + attr(id) + '" data-name="' + attr(name) + '" data-poster="' + attr(cover) + '"><span class="btn-icon" id="queue-detail-icon">+</span><span id="queue-detail-text">Minha Fila</span></button></div>'
 
             + '</div></div>' + seasonsBlock + '</div>' + detailStyles());
         // contexto da série p/ o "Continue Assistindo" do player de episódio
         // (o continue de série usa o series_id + nome/capa da SÉRIE, não do ep).
         S.playSeries = { id: parseInt(id, 10), name: name, poster: cover, list: epList };
         wireFavBtn();
+        wireQueueDetailBtn();
         wireSeasons();
         afterRender();
     }).catch(function () { showLoading(false); });
@@ -4039,6 +4043,25 @@ function wireFavBtn() {
         var on = favToggle(btn.getAttribute('data-kind'), btn.getAttribute('data-id'), btn.getAttribute('data-name'), btn.getAttribute('data-poster'));
         paint(on);
         updateFavCounts();   // se a sidebar estiver visível atrás, o contador já muda
+    });
+}
+function wireQueueDetailBtn() {
+    var btn = $('btn-queue-detail'); if (!btn) return;
+    function paint(on) {
+        var icon = $('queue-detail-icon'), text = $('queue-detail-text');
+        if (icon) icon.textContent = on ? '✓' : '+';
+        if (text) text.textContent = on ? 'Na fila' : 'Minha Fila';
+        btn.setAttribute('aria-label', on ? 'Remover da Minha Fila' : 'Adicionar à Minha Fila');
+        btn.setAttribute('title', on ? 'Remover da Minha Fila' : 'Adicionar à Minha Fila');
+        btn.className = btn.className.replace(/\s*is-queued\b/g, '') + (on ? ' is-queued' : '');
+    }
+    var kind = btn.getAttribute('data-kind') || 'movie', id = btn.getAttribute('data-id') || '';
+    paint(queueHas(kind === 'series' ? 'series' : 'movies', id));
+    btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        var normalized = kind === 'series' ? 'series' : 'movies';
+        var on = queueToggle(normalized, id, btn.getAttribute('data-name') || '', btn.getAttribute('data-poster') || '', null);
+        paint(on);
     });
 }
 // Contador "Favoritos" da sidebar SEM esperar re-render (favoritar canal pelo
