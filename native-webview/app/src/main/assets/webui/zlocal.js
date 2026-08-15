@@ -2517,6 +2517,7 @@ function renderHome() {
     var svSer = '<rect x="3" y="7" width="18" height="13" rx="2"></rect><path d="M8 7 5 3M16 7l3-4M12 7 12 3"></path>';
     var svPl = '<line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="16" y2="18"></line><circle cx="18.5" cy="18.5" r="3.2"></circle><path d="M18.5 17.1v2.8M17.1 18.5h2.8"></path>';
     var svQueue = '<path d="M4 6h16M4 12h16M4 18h10"></path><path d="m16 17 2 2 4-4"></path>';
+    var svBell = '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path><path d="M10 21h4"></path>';
     var svHeart = '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 1 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8z"></path>';
     var svSearch = '<circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path>';
     function tile(href, ic, label, subTxt, subId, atf, elId, remoteKey) {
@@ -2535,6 +2536,7 @@ function renderHome() {
     }
         var favN = 0; try { favN = (S.fav.live.length || 0) + (S.fav.movie.length || 0) + (S.fav.series.length || 0); } catch (e) {}
     var queueN = 0; try { queueN = queueList().length; } catch (e) {}
+    var alertN = 0; try { alertN = epgAlarms().filter(function (a) { return a && a.when > Date.now(); }).length; } catch (e) {}
     // SEM lista adicionada → TODOS os botões levam pra tela de ADICIONAR LISTA
     // (cliente novo não sabe que é no "Playlist" — pedido 19/07). O /lists sem
     // lista já abre direto no formulário.
@@ -2555,6 +2557,7 @@ function renderHome() {
         + '<div class="zh-navbot">'
         + stile(dest('/favorites'), svHeart, 'Favoritos', favN + ' ' + t('itens'))
         + stile(dest('/queue'), svQueue, 'Minha Fila', queueN + ' ' + t('itens'))
+        + stile('/alerts', svBell, 'Meus Alertas', alertN + (alertN === 1 ? ' aviso' : ' avisos'))
         + stile('/lists', svPl, 'Playlist', te('Adicionar / gerenciar'))
         + '</div>'
         + '</div></nav>';
@@ -2577,7 +2580,7 @@ function renderHome() {
     if (!srvName) startHomeClock();   // com nome de parceiro no topo não há relógio pra atualizar
     loadHomePosters();   // capas do "Assistido Recentemente" (o lazy-loader global é escopado a grid)
     fillHomeNewest();    // catálogo já em cache → "Recém adicionados" entra ANTES do 1º paint
-    try { setTimeout(fillHomeCounts, 400); } catch (e) { fillHomeCounts(); }   // contagens em FILA, começando só depois da home assentar (TV fraca)
+    try { setTimeout(fillHomeCounts, getFormFactor() === 'tv' ? 850 : 400); } catch (e) { fillHomeCounts(); }   // contagens em FILA, começando só depois da home assentar (TV fraca)
     fitHomeAll();               // SÍNCRONO (antes do 1º paint): sem o "abre grande e encolhe" ao voltar pra home
     setTimeout(fitHomeAll, 160);   // segurança: re-mede depois da UI assentar (fontes etc.)
     if (!S._homeFitBound) {   // girar/redimensionar → re-mede (zera o inline e ajusta de novo)
@@ -2594,8 +2597,8 @@ function renderHome() {
     }
     wireAnnounce(ann);
     afterRender();
-    try { setTimeout(warmHomeCatalogs, 220); } catch (e) {}
-    try { setTimeout(fillHomeRecommendations, 480); } catch (e) {}
+    try { setTimeout(warmHomeCatalogs, getFormFactor() === 'tv' ? 700 : 220); } catch (e) {}
+    try { setTimeout(fillHomeRecommendations, getFormFactor() === 'tv' ? 1300 : 480); } catch (e) {}
     focusHomeStart();   // foco SEMPRE no "TV ao Vivo" já MARCADO (o harness focaria "Servidor")
     // PERFIS: avatar do topo abre o "Quem está assistindo?"
     try {
@@ -2764,9 +2767,9 @@ function fillHomeRecommendations() {
 }
 /* Carrega as capas da home na mão (o lazy-loader global só varre grids). */
 function loadHomePosters() {
-    try {
-        var imgs = document.querySelectorAll('.zh-art[data-src]');
-        for (var i = 0; i < imgs.length; i++) {
+        try { var imgs = document.querySelectorAll('.zh-art[data-src]');
+        var firstBatch = getFormFactor() === 'tv' ? Math.min(8, imgs.length) : imgs.length;
+        for (var i = 0; i < firstBatch; i++) {
             (function (el) {
                 if (el.getAttribute('data-loaded')) return;
                 var src = el.getAttribute('data-src'); if (!src) return;
@@ -2776,6 +2779,7 @@ function loadHomePosters() {
                 im.src = src;
             })(imgs[i]);
         }
+        if (firstBatch < imgs.length) setTimeout(loadHomePosters, 900);
     } catch (e) {}
 }
 /* Número com separador de milhar pt-BR (5685 -> "5.685"). */
