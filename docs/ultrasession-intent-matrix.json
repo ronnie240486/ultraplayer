@@ -1,0 +1,84 @@
+{
+  "actions": [
+    "quero assistir",
+    "gostaria de ver",
+    "me mostre",
+    "escolha para mim",
+    "monte uma sessão",
+    "me indique",
+    "selecione",
+    "procure",
+    "me dê uma lista",
+    "faça uma seleção"
+  ],
+  "quantities": [
+    {"surface": "um", "value": 1},
+    {"surface": "dois", "value": 2},
+    {"surface": "três", "value": 3},
+    {"surface": "cinco", "value": 5},
+    {"surface": "oito", "value": 8},
+    {"surface": "dez", "value": 10},
+    {"surface": "12", "value": 12},
+    {"surface": "15", "value": 15},
+    {"surface": "alguns", "value": 0},
+    {"surface": "vários", "value": 0},
+    {"surface": "uma lista de", "value": 0},
+    {"surface": "uma seleção de", "value": 0}
+  ],
+  "durations": [
+    {"surface": "meia hora", "minutes": 30},
+    {"surface": "30 minutos", "minutes": 30},
+    {"surface": "40 minutos", "minutes": 40},
+    {"surface": "20 min", "minutes": 20},
+    {"surface": "uma hora", "minutes": 60},
+    {"surface": "90 minutos", "minutes": 90},
+    {"surface": "pouco tempo", "minutes": 0},
+    {"surface": "algo rápido", "minutes": 0}
+  ],
+  "media": [
+    {"surface": "filmes", "type": "movies", "genre": ""},
+    {"surface": "filmes de comédia", "type": "movies", "genre": "comedy"},
+    {"surface": "filmes de suspense", "type": "movies", "genre": "thriller"},
+    {"surface": "filmes de romance", "type": "movies", "genre": "romance"},
+    {"surface": "filmes de ação", "type": "movies", "genre": "action"},
+    {"surface": "filmes de terror", "type": "movies", "genre": "horror"},
+    {"surface": "séries de comédia", "type": "series", "genre": "comedy"},
+    {"surface": "séries de suspense", "type": "series", "genre": "thriller"},
+    {"surface": "desenhos", "type": "animation", "genre": "animation"},
+    {"surface": "animes", "type": "animation", "genre": "anime"},
+    {"surface": "documentários", "type": "movies", "genre": "documentary"},
+    {"surface": "canais ao vivo", "type": "live", "genre": ""}
+  ],
+  "moods": [
+    "leve",
+    "para relaxar",
+    "engraçado",
+    "emocionante",
+    "tenso",
+    "para dormir"
+  ],
+  "constraints": [
+    "",
+    "sem repetir",
+    "dublado",
+    "legendado",
+    "com meus filhos",
+    "sem violência",
+    "para a família",
+    "que eu ainda não vi"
+  ],
+  "references": [
+    "",
+    "parecido com The Walking Dead",
+    "como Harry Potter",
+    "no estilo de Toy Story",
+    "parecido com Stranger Things",
+    "como uma animação da Pixar"
+  ],
+  "templates": [
+    "{action} {quantity} {media} {duration} {mood} {constraint} {reference}",
+    "{duration} {action} {media} {constraint} {reference}",
+    "tenho {duration}, {action} {media} {constraint}",
+    "{action} {media} {duration} {constraint} {reference}"
+  ]
+}

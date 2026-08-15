@@ -1,0 +1,3505 @@
+{
+  "count": 500,
+  "cases": [
+    {
+      "text": "quero assistir um filmes meia hora",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "meia hora quero assistir filmes sem repetir parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho meia hora, quero assistir filmes dublado",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir filmes meia hora legendado no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um filmes meia hora com meus filhos parecido com Stranger Things",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "meia hora quero assistir filmes sem violência como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho meia hora, quero assistir filmes para a família",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir filmes meia hora que eu ainda não vi parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "meia hora quero assistir filmes de comédia parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho meia hora, quero assistir filmes de comédia sem repetir",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir filmes de comédia meia hora dublado no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um filmes de comédia meia hora legendado parecido com Stranger Things",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "meia hora quero assistir filmes de comédia com meus filhos como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho meia hora, quero assistir filmes de comédia sem violência",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir filmes de comédia meia hora para a família parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um filmes de comédia meia hora que eu ainda não vi como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho meia hora, quero assistir filmes de suspense",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir filmes de suspense meia hora sem repetir no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um filmes de suspense meia hora dublado parecido com Stranger Things",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "meia hora quero assistir filmes de suspense legendado como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho meia hora, quero assistir filmes de suspense com meus filhos",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir filmes de suspense meia hora sem violência parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um filmes de suspense meia hora para a família como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "meia hora quero assistir filmes de suspense que eu ainda não vi no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir filmes de romance meia hora no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um filmes de romance meia hora sem repetir parecido com Stranger Things",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "meia hora quero assistir filmes de romance dublado como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho meia hora, quero assistir filmes de romance legendado",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir filmes de romance meia hora com meus filhos parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um filmes de romance meia hora sem violência como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "meia hora quero assistir filmes de romance para a família no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho meia hora, quero assistir filmes de romance que eu ainda não vi",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um filmes de ação meia hora parecido com Stranger Things",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "meia hora quero assistir filmes de ação sem repetir como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho meia hora, quero assistir filmes de ação dublado",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir filmes de ação meia hora legendado parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um filmes de ação meia hora com meus filhos como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "meia hora quero assistir filmes de ação sem violência no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho meia hora, quero assistir filmes de ação para a família",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir filmes de ação meia hora que eu ainda não vi como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "meia hora quero assistir filmes de terror como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho meia hora, quero assistir filmes de terror sem repetir",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir filmes de terror meia hora dublado parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um filmes de terror meia hora legendado como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "meia hora quero assistir filmes de terror com meus filhos no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho meia hora, quero assistir filmes de terror sem violência",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir filmes de terror meia hora para a família como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um filmes de terror meia hora que eu ainda não vi",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho meia hora, quero assistir séries de comédia",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir séries de comédia meia hora sem repetir parecido com The Walking Dead",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um séries de comédia meia hora dublado como Harry Potter",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "meia hora quero assistir séries de comédia legendado no estilo de Toy Story",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho meia hora, quero assistir séries de comédia com meus filhos",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir séries de comédia meia hora sem violência como uma animação da Pixar",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um séries de comédia meia hora para a família",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "meia hora quero assistir séries de comédia que eu ainda não vi parecido com The Walking Dead",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir séries de suspense meia hora parecido com The Walking Dead",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um séries de suspense meia hora sem repetir como Harry Potter",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "meia hora quero assistir séries de suspense dublado no estilo de Toy Story",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho meia hora, quero assistir séries de suspense legendado",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir séries de suspense meia hora com meus filhos como uma animação da Pixar",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um séries de suspense meia hora sem violência",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "meia hora quero assistir séries de suspense para a família parecido com The Walking Dead",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho meia hora, quero assistir séries de suspense que eu ainda não vi",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um desenhos meia hora como Harry Potter",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "meia hora quero assistir desenhos sem repetir no estilo de Toy Story",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho meia hora, quero assistir desenhos dublado",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir desenhos meia hora legendado como uma animação da Pixar",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um desenhos meia hora com meus filhos",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "meia hora quero assistir desenhos sem violência parecido com The Walking Dead",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho meia hora, quero assistir desenhos para a família",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir desenhos meia hora que eu ainda não vi no estilo de Toy Story",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "meia hora quero assistir animes no estilo de Toy Story",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho meia hora, quero assistir animes sem repetir",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir animes meia hora dublado como uma animação da Pixar",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um animes meia hora legendado",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "meia hora quero assistir animes com meus filhos parecido com The Walking Dead",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho meia hora, quero assistir animes sem violência",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir animes meia hora para a família no estilo de Toy Story",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um animes meia hora que eu ainda não vi parecido com Stranger Things",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho meia hora, quero assistir documentários",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir documentários meia hora sem repetir como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um documentários meia hora dublado",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "meia hora quero assistir documentários legendado parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho meia hora, quero assistir documentários com meus filhos",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir documentários meia hora sem violência no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um documentários meia hora para a família parecido com Stranger Things",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "meia hora quero assistir documentários que eu ainda não vi como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir canais ao vivo meia hora como uma animação da Pixar",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um canais ao vivo meia hora sem repetir",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "meia hora quero assistir canais ao vivo dublado parecido com The Walking Dead",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho meia hora, quero assistir canais ao vivo legendado",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir canais ao vivo meia hora com meus filhos no estilo de Toy Story",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um canais ao vivo meia hora sem violência parecido com Stranger Things",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "meia hora quero assistir canais ao vivo para a família como uma animação da Pixar",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho meia hora, quero assistir canais ao vivo que eu ainda não vi",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "30 minutos quero assistir filmes parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho 30 minutos, quero assistir filmes sem repetir",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir filmes 30 minutos dublado no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um filmes 30 minutos legendado parecido com Stranger Things",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "30 minutos quero assistir filmes com meus filhos como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho 30 minutos, quero assistir filmes sem violência",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir filmes 30 minutos para a família parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um filmes 30 minutos que eu ainda não vi como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho 30 minutos, quero assistir filmes de comédia",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir filmes de comédia 30 minutos sem repetir no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um filmes de comédia 30 minutos dublado parecido com Stranger Things",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "30 minutos quero assistir filmes de comédia legendado como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho 30 minutos, quero assistir filmes de comédia com meus filhos",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir filmes de comédia 30 minutos sem violência parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um filmes de comédia 30 minutos para a família como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "30 minutos quero assistir filmes de comédia que eu ainda não vi no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir filmes de suspense 30 minutos no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um filmes de suspense 30 minutos sem repetir parecido com Stranger Things",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "30 minutos quero assistir filmes de suspense dublado como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho 30 minutos, quero assistir filmes de suspense legendado",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir filmes de suspense 30 minutos com meus filhos parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um filmes de suspense 30 minutos sem violência como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "30 minutos quero assistir filmes de suspense para a família no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho 30 minutos, quero assistir filmes de suspense que eu ainda não vi",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um filmes de romance 30 minutos parecido com Stranger Things",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "30 minutos quero assistir filmes de romance sem repetir como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho 30 minutos, quero assistir filmes de romance dublado",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir filmes de romance 30 minutos legendado parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um filmes de romance 30 minutos com meus filhos como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "30 minutos quero assistir filmes de romance sem violência no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho 30 minutos, quero assistir filmes de romance para a família",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir filmes de romance 30 minutos que eu ainda não vi como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "30 minutos quero assistir filmes de ação como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho 30 minutos, quero assistir filmes de ação sem repetir",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir filmes de ação 30 minutos dublado parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um filmes de ação 30 minutos legendado como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "30 minutos quero assistir filmes de ação com meus filhos no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho 30 minutos, quero assistir filmes de ação sem violência",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir filmes de ação 30 minutos para a família como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um filmes de ação 30 minutos que eu ainda não vi",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho 30 minutos, quero assistir filmes de terror",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir filmes de terror 30 minutos sem repetir parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um filmes de terror 30 minutos dublado como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "30 minutos quero assistir filmes de terror legendado no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho 30 minutos, quero assistir filmes de terror com meus filhos",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir filmes de terror 30 minutos sem violência como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um filmes de terror 30 minutos para a família",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "30 minutos quero assistir filmes de terror que eu ainda não vi parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir séries de comédia 30 minutos parecido com The Walking Dead",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um séries de comédia 30 minutos sem repetir como Harry Potter",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "30 minutos quero assistir séries de comédia dublado no estilo de Toy Story",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho 30 minutos, quero assistir séries de comédia legendado",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir séries de comédia 30 minutos com meus filhos como uma animação da Pixar",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um séries de comédia 30 minutos sem violência",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "30 minutos quero assistir séries de comédia para a família parecido com The Walking Dead",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho 30 minutos, quero assistir séries de comédia que eu ainda não vi",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um séries de suspense 30 minutos como Harry Potter",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "30 minutos quero assistir séries de suspense sem repetir no estilo de Toy Story",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho 30 minutos, quero assistir séries de suspense dublado",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir séries de suspense 30 minutos legendado como uma animação da Pixar",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um séries de suspense 30 minutos com meus filhos",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "30 minutos quero assistir séries de suspense sem violência parecido com The Walking Dead",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho 30 minutos, quero assistir séries de suspense para a família",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir séries de suspense 30 minutos que eu ainda não vi no estilo de Toy Story",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "30 minutos quero assistir desenhos no estilo de Toy Story",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho 30 minutos, quero assistir desenhos sem repetir",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir desenhos 30 minutos dublado como uma animação da Pixar",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um desenhos 30 minutos legendado",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "30 minutos quero assistir desenhos com meus filhos parecido com The Walking Dead",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho 30 minutos, quero assistir desenhos sem violência",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir desenhos 30 minutos para a família no estilo de Toy Story",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um desenhos 30 minutos que eu ainda não vi parecido com Stranger Things",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho 30 minutos, quero assistir animes",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir animes 30 minutos sem repetir como uma animação da Pixar",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um animes 30 minutos dublado",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "30 minutos quero assistir animes legendado parecido com The Walking Dead",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho 30 minutos, quero assistir animes com meus filhos",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir animes 30 minutos sem violência no estilo de Toy Story",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um animes 30 minutos para a família parecido com Stranger Things",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "30 minutos quero assistir animes que eu ainda não vi como uma animação da Pixar",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir documentários 30 minutos como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um documentários 30 minutos sem repetir",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "30 minutos quero assistir documentários dublado parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho 30 minutos, quero assistir documentários legendado",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir documentários 30 minutos com meus filhos no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um documentários 30 minutos sem violência parecido com Stranger Things",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "30 minutos quero assistir documentários para a família como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho 30 minutos, quero assistir documentários que eu ainda não vi",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um canais ao vivo 30 minutos",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "30 minutos quero assistir canais ao vivo sem repetir parecido com The Walking Dead",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho 30 minutos, quero assistir canais ao vivo dublado",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir canais ao vivo 30 minutos legendado no estilo de Toy Story",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir um canais ao vivo 30 minutos com meus filhos parecido com Stranger Things",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 1,
+      "expected_minutes": 30
+    },
+    {
+      "text": "30 minutos quero assistir canais ao vivo sem violência como uma animação da Pixar",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho 30 minutos, quero assistir canais ao vivo para a família",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "quero assistir canais ao vivo 30 minutos que eu ainda não vi parecido com The Walking Dead",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 30
+    },
+    {
+      "text": "tenho 40 minutos, quero assistir filmes",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir filmes 40 minutos sem repetir no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir um filmes 40 minutos dublado parecido com Stranger Things",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 1,
+      "expected_minutes": 40
+    },
+    {
+      "text": "40 minutos quero assistir filmes legendado como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "tenho 40 minutos, quero assistir filmes com meus filhos",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir filmes 40 minutos sem violência parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir um filmes 40 minutos para a família como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 1,
+      "expected_minutes": 40
+    },
+    {
+      "text": "40 minutos quero assistir filmes que eu ainda não vi no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir filmes de comédia 40 minutos no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir um filmes de comédia 40 minutos sem repetir parecido com Stranger Things",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 1,
+      "expected_minutes": 40
+    },
+    {
+      "text": "40 minutos quero assistir filmes de comédia dublado como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "tenho 40 minutos, quero assistir filmes de comédia legendado",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir filmes de comédia 40 minutos com meus filhos parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir um filmes de comédia 40 minutos sem violência como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 1,
+      "expected_minutes": 40
+    },
+    {
+      "text": "40 minutos quero assistir filmes de comédia para a família no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "tenho 40 minutos, quero assistir filmes de comédia que eu ainda não vi",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir um filmes de suspense 40 minutos parecido com Stranger Things",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 1,
+      "expected_minutes": 40
+    },
+    {
+      "text": "40 minutos quero assistir filmes de suspense sem repetir como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "tenho 40 minutos, quero assistir filmes de suspense dublado",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir filmes de suspense 40 minutos legendado parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir um filmes de suspense 40 minutos com meus filhos como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 1,
+      "expected_minutes": 40
+    },
+    {
+      "text": "40 minutos quero assistir filmes de suspense sem violência no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "tenho 40 minutos, quero assistir filmes de suspense para a família",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir filmes de suspense 40 minutos que eu ainda não vi como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "40 minutos quero assistir filmes de romance como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "tenho 40 minutos, quero assistir filmes de romance sem repetir",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir filmes de romance 40 minutos dublado parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir um filmes de romance 40 minutos legendado como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 1,
+      "expected_minutes": 40
+    },
+    {
+      "text": "40 minutos quero assistir filmes de romance com meus filhos no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "tenho 40 minutos, quero assistir filmes de romance sem violência",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir filmes de romance 40 minutos para a família como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir um filmes de romance 40 minutos que eu ainda não vi",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 1,
+      "expected_minutes": 40
+    },
+    {
+      "text": "tenho 40 minutos, quero assistir filmes de ação",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir filmes de ação 40 minutos sem repetir parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir um filmes de ação 40 minutos dublado como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 1,
+      "expected_minutes": 40
+    },
+    {
+      "text": "40 minutos quero assistir filmes de ação legendado no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "tenho 40 minutos, quero assistir filmes de ação com meus filhos",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir filmes de ação 40 minutos sem violência como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir um filmes de ação 40 minutos para a família",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 1,
+      "expected_minutes": 40
+    },
+    {
+      "text": "40 minutos quero assistir filmes de ação que eu ainda não vi parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir filmes de terror 40 minutos parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir um filmes de terror 40 minutos sem repetir como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 1,
+      "expected_minutes": 40
+    },
+    {
+      "text": "40 minutos quero assistir filmes de terror dublado no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "tenho 40 minutos, quero assistir filmes de terror legendado",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir filmes de terror 40 minutos com meus filhos como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir um filmes de terror 40 minutos sem violência",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 1,
+      "expected_minutes": 40
+    },
+    {
+      "text": "40 minutos quero assistir filmes de terror para a família parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "tenho 40 minutos, quero assistir filmes de terror que eu ainda não vi",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir um séries de comédia 40 minutos como Harry Potter",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 1,
+      "expected_minutes": 40
+    },
+    {
+      "text": "40 minutos quero assistir séries de comédia sem repetir no estilo de Toy Story",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "tenho 40 minutos, quero assistir séries de comédia dublado",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir séries de comédia 40 minutos legendado como uma animação da Pixar",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir um séries de comédia 40 minutos com meus filhos",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 1,
+      "expected_minutes": 40
+    },
+    {
+      "text": "40 minutos quero assistir séries de comédia sem violência parecido com The Walking Dead",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "tenho 40 minutos, quero assistir séries de comédia para a família",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir séries de comédia 40 minutos que eu ainda não vi no estilo de Toy Story",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "40 minutos quero assistir séries de suspense no estilo de Toy Story",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "tenho 40 minutos, quero assistir séries de suspense sem repetir",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir séries de suspense 40 minutos dublado como uma animação da Pixar",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir um séries de suspense 40 minutos legendado",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 1,
+      "expected_minutes": 40
+    },
+    {
+      "text": "40 minutos quero assistir séries de suspense com meus filhos parecido com The Walking Dead",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "tenho 40 minutos, quero assistir séries de suspense sem violência",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir séries de suspense 40 minutos para a família no estilo de Toy Story",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir um séries de suspense 40 minutos que eu ainda não vi parecido com Stranger Things",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 1,
+      "expected_minutes": 40
+    },
+    {
+      "text": "tenho 40 minutos, quero assistir desenhos",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir desenhos 40 minutos sem repetir como uma animação da Pixar",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir um desenhos 40 minutos dublado",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 1,
+      "expected_minutes": 40
+    },
+    {
+      "text": "40 minutos quero assistir desenhos legendado parecido com The Walking Dead",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "tenho 40 minutos, quero assistir desenhos com meus filhos",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir desenhos 40 minutos sem violência no estilo de Toy Story",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir um desenhos 40 minutos para a família parecido com Stranger Things",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 1,
+      "expected_minutes": 40
+    },
+    {
+      "text": "40 minutos quero assistir desenhos que eu ainda não vi como uma animação da Pixar",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir animes 40 minutos como uma animação da Pixar",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir um animes 40 minutos sem repetir",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 1,
+      "expected_minutes": 40
+    },
+    {
+      "text": "40 minutos quero assistir animes dublado parecido com The Walking Dead",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "tenho 40 minutos, quero assistir animes legendado",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir animes 40 minutos com meus filhos no estilo de Toy Story",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir um animes 40 minutos sem violência parecido com Stranger Things",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 1,
+      "expected_minutes": 40
+    },
+    {
+      "text": "40 minutos quero assistir animes para a família como uma animação da Pixar",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "tenho 40 minutos, quero assistir animes que eu ainda não vi",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir um documentários 40 minutos",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 1,
+      "expected_minutes": 40
+    },
+    {
+      "text": "40 minutos quero assistir documentários sem repetir parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "tenho 40 minutos, quero assistir documentários dublado",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir documentários 40 minutos legendado no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir um documentários 40 minutos com meus filhos parecido com Stranger Things",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 1,
+      "expected_minutes": 40
+    },
+    {
+      "text": "40 minutos quero assistir documentários sem violência como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "tenho 40 minutos, quero assistir documentários para a família",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir documentários 40 minutos que eu ainda não vi parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "40 minutos quero assistir canais ao vivo parecido com The Walking Dead",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "tenho 40 minutos, quero assistir canais ao vivo sem repetir",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir canais ao vivo 40 minutos dublado no estilo de Toy Story",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir um canais ao vivo 40 minutos legendado parecido com Stranger Things",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 1,
+      "expected_minutes": 40
+    },
+    {
+      "text": "40 minutos quero assistir canais ao vivo com meus filhos como uma animação da Pixar",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "tenho 40 minutos, quero assistir canais ao vivo sem violência",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir canais ao vivo 40 minutos para a família parecido com The Walking Dead",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir um canais ao vivo 40 minutos que eu ainda não vi como Harry Potter",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 1,
+      "expected_minutes": 40
+    },
+    {
+      "text": "quero assistir filmes 20 min no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir um filmes 20 min sem repetir parecido com Stranger Things",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 1,
+      "expected_minutes": 20
+    },
+    {
+      "text": "20 min quero assistir filmes dublado como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "tenho 20 min, quero assistir filmes legendado",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir filmes 20 min com meus filhos parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir um filmes 20 min sem violência como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 1,
+      "expected_minutes": 20
+    },
+    {
+      "text": "20 min quero assistir filmes para a família no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "tenho 20 min, quero assistir filmes que eu ainda não vi",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir um filmes de comédia 20 min parecido com Stranger Things",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 1,
+      "expected_minutes": 20
+    },
+    {
+      "text": "20 min quero assistir filmes de comédia sem repetir como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "tenho 20 min, quero assistir filmes de comédia dublado",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir filmes de comédia 20 min legendado parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir um filmes de comédia 20 min com meus filhos como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 1,
+      "expected_minutes": 20
+    },
+    {
+      "text": "20 min quero assistir filmes de comédia sem violência no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "tenho 20 min, quero assistir filmes de comédia para a família",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir filmes de comédia 20 min que eu ainda não vi como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "20 min quero assistir filmes de suspense como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "tenho 20 min, quero assistir filmes de suspense sem repetir",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir filmes de suspense 20 min dublado parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir um filmes de suspense 20 min legendado como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 1,
+      "expected_minutes": 20
+    },
+    {
+      "text": "20 min quero assistir filmes de suspense com meus filhos no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "tenho 20 min, quero assistir filmes de suspense sem violência",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir filmes de suspense 20 min para a família como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir um filmes de suspense 20 min que eu ainda não vi",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 1,
+      "expected_minutes": 20
+    },
+    {
+      "text": "tenho 20 min, quero assistir filmes de romance",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir filmes de romance 20 min sem repetir parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir um filmes de romance 20 min dublado como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 1,
+      "expected_minutes": 20
+    },
+    {
+      "text": "20 min quero assistir filmes de romance legendado no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "tenho 20 min, quero assistir filmes de romance com meus filhos",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir filmes de romance 20 min sem violência como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir um filmes de romance 20 min para a família",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 1,
+      "expected_minutes": 20
+    },
+    {
+      "text": "20 min quero assistir filmes de romance que eu ainda não vi parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir filmes de ação 20 min parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir um filmes de ação 20 min sem repetir como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 1,
+      "expected_minutes": 20
+    },
+    {
+      "text": "20 min quero assistir filmes de ação dublado no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "tenho 20 min, quero assistir filmes de ação legendado",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir filmes de ação 20 min com meus filhos como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir um filmes de ação 20 min sem violência",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 1,
+      "expected_minutes": 20
+    },
+    {
+      "text": "20 min quero assistir filmes de ação para a família parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "tenho 20 min, quero assistir filmes de ação que eu ainda não vi",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir um filmes de terror 20 min como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 1,
+      "expected_minutes": 20
+    },
+    {
+      "text": "20 min quero assistir filmes de terror sem repetir no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "tenho 20 min, quero assistir filmes de terror dublado",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir filmes de terror 20 min legendado como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir um filmes de terror 20 min com meus filhos",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 1,
+      "expected_minutes": 20
+    },
+    {
+      "text": "20 min quero assistir filmes de terror sem violência parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "tenho 20 min, quero assistir filmes de terror para a família",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir filmes de terror 20 min que eu ainda não vi no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "20 min quero assistir séries de comédia no estilo de Toy Story",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "tenho 20 min, quero assistir séries de comédia sem repetir",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir séries de comédia 20 min dublado como uma animação da Pixar",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir um séries de comédia 20 min legendado",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 1,
+      "expected_minutes": 20
+    },
+    {
+      "text": "20 min quero assistir séries de comédia com meus filhos parecido com The Walking Dead",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "tenho 20 min, quero assistir séries de comédia sem violência",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir séries de comédia 20 min para a família no estilo de Toy Story",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir um séries de comédia 20 min que eu ainda não vi parecido com Stranger Things",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 1,
+      "expected_minutes": 20
+    },
+    {
+      "text": "tenho 20 min, quero assistir séries de suspense",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir séries de suspense 20 min sem repetir como uma animação da Pixar",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir um séries de suspense 20 min dublado",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 1,
+      "expected_minutes": 20
+    },
+    {
+      "text": "20 min quero assistir séries de suspense legendado parecido com The Walking Dead",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "tenho 20 min, quero assistir séries de suspense com meus filhos",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir séries de suspense 20 min sem violência no estilo de Toy Story",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir um séries de suspense 20 min para a família parecido com Stranger Things",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 1,
+      "expected_minutes": 20
+    },
+    {
+      "text": "20 min quero assistir séries de suspense que eu ainda não vi como uma animação da Pixar",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir desenhos 20 min como uma animação da Pixar",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir um desenhos 20 min sem repetir",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 1,
+      "expected_minutes": 20
+    },
+    {
+      "text": "20 min quero assistir desenhos dublado parecido com The Walking Dead",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "tenho 20 min, quero assistir desenhos legendado",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir desenhos 20 min com meus filhos no estilo de Toy Story",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir um desenhos 20 min sem violência parecido com Stranger Things",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 1,
+      "expected_minutes": 20
+    },
+    {
+      "text": "20 min quero assistir desenhos para a família como uma animação da Pixar",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "tenho 20 min, quero assistir desenhos que eu ainda não vi",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir um animes 20 min",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 1,
+      "expected_minutes": 20
+    },
+    {
+      "text": "20 min quero assistir animes sem repetir parecido com The Walking Dead",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "tenho 20 min, quero assistir animes dublado",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir animes 20 min legendado no estilo de Toy Story",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir um animes 20 min com meus filhos parecido com Stranger Things",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 1,
+      "expected_minutes": 20
+    },
+    {
+      "text": "20 min quero assistir animes sem violência como uma animação da Pixar",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "tenho 20 min, quero assistir animes para a família",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir animes 20 min que eu ainda não vi parecido com The Walking Dead",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "20 min quero assistir documentários parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "tenho 20 min, quero assistir documentários sem repetir",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir documentários 20 min dublado no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir um documentários 20 min legendado parecido com Stranger Things",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 1,
+      "expected_minutes": 20
+    },
+    {
+      "text": "20 min quero assistir documentários com meus filhos como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "tenho 20 min, quero assistir documentários sem violência",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir documentários 20 min para a família parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir um documentários 20 min que eu ainda não vi como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 1,
+      "expected_minutes": 20
+    },
+    {
+      "text": "tenho 20 min, quero assistir canais ao vivo",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir canais ao vivo 20 min sem repetir no estilo de Toy Story",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir um canais ao vivo 20 min dublado parecido com Stranger Things",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 1,
+      "expected_minutes": 20
+    },
+    {
+      "text": "20 min quero assistir canais ao vivo legendado como uma animação da Pixar",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "tenho 20 min, quero assistir canais ao vivo com meus filhos",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir canais ao vivo 20 min sem violência parecido com The Walking Dead",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir um canais ao vivo 20 min para a família como Harry Potter",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 1,
+      "expected_minutes": 20
+    },
+    {
+      "text": "20 min quero assistir canais ao vivo que eu ainda não vi no estilo de Toy Story",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 20
+    },
+    {
+      "text": "quero assistir um filmes uma hora parecido com Stranger Things",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 1,
+      "expected_minutes": 60
+    },
+    {
+      "text": "uma hora quero assistir filmes sem repetir como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "tenho uma hora, quero assistir filmes dublado",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir filmes uma hora legendado parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir um filmes uma hora com meus filhos como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 1,
+      "expected_minutes": 60
+    },
+    {
+      "text": "uma hora quero assistir filmes sem violência no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "tenho uma hora, quero assistir filmes para a família",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir filmes uma hora que eu ainda não vi como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "uma hora quero assistir filmes de comédia como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "tenho uma hora, quero assistir filmes de comédia sem repetir",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir filmes de comédia uma hora dublado parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir um filmes de comédia uma hora legendado como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 1,
+      "expected_minutes": 60
+    },
+    {
+      "text": "uma hora quero assistir filmes de comédia com meus filhos no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "tenho uma hora, quero assistir filmes de comédia sem violência",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir filmes de comédia uma hora para a família como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir um filmes de comédia uma hora que eu ainda não vi",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 1,
+      "expected_minutes": 60
+    },
+    {
+      "text": "tenho uma hora, quero assistir filmes de suspense",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir filmes de suspense uma hora sem repetir parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir um filmes de suspense uma hora dublado como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 1,
+      "expected_minutes": 60
+    },
+    {
+      "text": "uma hora quero assistir filmes de suspense legendado no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "tenho uma hora, quero assistir filmes de suspense com meus filhos",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir filmes de suspense uma hora sem violência como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir um filmes de suspense uma hora para a família",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 1,
+      "expected_minutes": 60
+    },
+    {
+      "text": "uma hora quero assistir filmes de suspense que eu ainda não vi parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir filmes de romance uma hora parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir um filmes de romance uma hora sem repetir como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 1,
+      "expected_minutes": 60
+    },
+    {
+      "text": "uma hora quero assistir filmes de romance dublado no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "tenho uma hora, quero assistir filmes de romance legendado",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir filmes de romance uma hora com meus filhos como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir um filmes de romance uma hora sem violência",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 1,
+      "expected_minutes": 60
+    },
+    {
+      "text": "uma hora quero assistir filmes de romance para a família parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "tenho uma hora, quero assistir filmes de romance que eu ainda não vi",
+      "expected_type": "movies",
+      "expected_genre": "romance",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir um filmes de ação uma hora como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 1,
+      "expected_minutes": 60
+    },
+    {
+      "text": "uma hora quero assistir filmes de ação sem repetir no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "tenho uma hora, quero assistir filmes de ação dublado",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir filmes de ação uma hora legendado como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir um filmes de ação uma hora com meus filhos",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 1,
+      "expected_minutes": 60
+    },
+    {
+      "text": "uma hora quero assistir filmes de ação sem violência parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "tenho uma hora, quero assistir filmes de ação para a família",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir filmes de ação uma hora que eu ainda não vi no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "action",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "uma hora quero assistir filmes de terror no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "tenho uma hora, quero assistir filmes de terror sem repetir",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir filmes de terror uma hora dublado como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir um filmes de terror uma hora legendado",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 1,
+      "expected_minutes": 60
+    },
+    {
+      "text": "uma hora quero assistir filmes de terror com meus filhos parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "tenho uma hora, quero assistir filmes de terror sem violência",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir filmes de terror uma hora para a família no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir um filmes de terror uma hora que eu ainda não vi parecido com Stranger Things",
+      "expected_type": "movies",
+      "expected_genre": "horror",
+      "expected_count": 1,
+      "expected_minutes": 60
+    },
+    {
+      "text": "tenho uma hora, quero assistir séries de comédia",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir séries de comédia uma hora sem repetir como uma animação da Pixar",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir um séries de comédia uma hora dublado",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 1,
+      "expected_minutes": 60
+    },
+    {
+      "text": "uma hora quero assistir séries de comédia legendado parecido com The Walking Dead",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "tenho uma hora, quero assistir séries de comédia com meus filhos",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir séries de comédia uma hora sem violência no estilo de Toy Story",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir um séries de comédia uma hora para a família parecido com Stranger Things",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 1,
+      "expected_minutes": 60
+    },
+    {
+      "text": "uma hora quero assistir séries de comédia que eu ainda não vi como uma animação da Pixar",
+      "expected_type": "series",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir séries de suspense uma hora como uma animação da Pixar",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir um séries de suspense uma hora sem repetir",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 1,
+      "expected_minutes": 60
+    },
+    {
+      "text": "uma hora quero assistir séries de suspense dublado parecido com The Walking Dead",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "tenho uma hora, quero assistir séries de suspense legendado",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir séries de suspense uma hora com meus filhos no estilo de Toy Story",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir um séries de suspense uma hora sem violência parecido com Stranger Things",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 1,
+      "expected_minutes": 60
+    },
+    {
+      "text": "uma hora quero assistir séries de suspense para a família como uma animação da Pixar",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "tenho uma hora, quero assistir séries de suspense que eu ainda não vi",
+      "expected_type": "series",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir um desenhos uma hora",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 1,
+      "expected_minutes": 60
+    },
+    {
+      "text": "uma hora quero assistir desenhos sem repetir parecido com The Walking Dead",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "tenho uma hora, quero assistir desenhos dublado",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir desenhos uma hora legendado no estilo de Toy Story",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir um desenhos uma hora com meus filhos parecido com Stranger Things",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 1,
+      "expected_minutes": 60
+    },
+    {
+      "text": "uma hora quero assistir desenhos sem violência como uma animação da Pixar",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "tenho uma hora, quero assistir desenhos para a família",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir desenhos uma hora que eu ainda não vi parecido com The Walking Dead",
+      "expected_type": "animation",
+      "expected_genre": "animation",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "uma hora quero assistir animes parecido com The Walking Dead",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "tenho uma hora, quero assistir animes sem repetir",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir animes uma hora dublado no estilo de Toy Story",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir um animes uma hora legendado parecido com Stranger Things",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 1,
+      "expected_minutes": 60
+    },
+    {
+      "text": "uma hora quero assistir animes com meus filhos como uma animação da Pixar",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "tenho uma hora, quero assistir animes sem violência",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir animes uma hora para a família parecido com The Walking Dead",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir um animes uma hora que eu ainda não vi como Harry Potter",
+      "expected_type": "animation",
+      "expected_genre": "anime",
+      "expected_count": 1,
+      "expected_minutes": 60
+    },
+    {
+      "text": "tenho uma hora, quero assistir documentários",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir documentários uma hora sem repetir no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir um documentários uma hora dublado parecido com Stranger Things",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 1,
+      "expected_minutes": 60
+    },
+    {
+      "text": "uma hora quero assistir documentários legendado como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "tenho uma hora, quero assistir documentários com meus filhos",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir documentários uma hora sem violência parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir um documentários uma hora para a família como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 1,
+      "expected_minutes": 60
+    },
+    {
+      "text": "uma hora quero assistir documentários que eu ainda não vi no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "documentary",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir canais ao vivo uma hora no estilo de Toy Story",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir um canais ao vivo uma hora sem repetir parecido com Stranger Things",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 1,
+      "expected_minutes": 60
+    },
+    {
+      "text": "uma hora quero assistir canais ao vivo dublado como uma animação da Pixar",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "tenho uma hora, quero assistir canais ao vivo legendado",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir canais ao vivo uma hora com meus filhos parecido com The Walking Dead",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "quero assistir um canais ao vivo uma hora sem violência como Harry Potter",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 1,
+      "expected_minutes": 60
+    },
+    {
+      "text": "uma hora quero assistir canais ao vivo para a família no estilo de Toy Story",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "tenho uma hora, quero assistir canais ao vivo que eu ainda não vi",
+      "expected_type": "live",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 60
+    },
+    {
+      "text": "90 minutos quero assistir filmes como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 90
+    },
+    {
+      "text": "tenho 90 minutos, quero assistir filmes sem repetir",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 90
+    },
+    {
+      "text": "quero assistir filmes 90 minutos dublado parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 90
+    },
+    {
+      "text": "quero assistir um filmes 90 minutos legendado como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 1,
+      "expected_minutes": 90
+    },
+    {
+      "text": "90 minutos quero assistir filmes com meus filhos no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 90
+    },
+    {
+      "text": "tenho 90 minutos, quero assistir filmes sem violência",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 90
+    },
+    {
+      "text": "quero assistir filmes 90 minutos para a família como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 0,
+      "expected_minutes": 90
+    },
+    {
+      "text": "quero assistir um filmes 90 minutos que eu ainda não vi",
+      "expected_type": "movies",
+      "expected_genre": "",
+      "expected_count": 1,
+      "expected_minutes": 90
+    },
+    {
+      "text": "tenho 90 minutos, quero assistir filmes de comédia",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 90
+    },
+    {
+      "text": "quero assistir filmes de comédia 90 minutos sem repetir parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 90
+    },
+    {
+      "text": "quero assistir um filmes de comédia 90 minutos dublado como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 1,
+      "expected_minutes": 90
+    },
+    {
+      "text": "90 minutos quero assistir filmes de comédia legendado no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 90
+    },
+    {
+      "text": "tenho 90 minutos, quero assistir filmes de comédia com meus filhos",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 90
+    },
+    {
+      "text": "quero assistir filmes de comédia 90 minutos sem violência como uma animação da Pixar",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 90
+    },
+    {
+      "text": "quero assistir um filmes de comédia 90 minutos para a família",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 1,
+      "expected_minutes": 90
+    },
+    {
+      "text": "90 minutos quero assistir filmes de comédia que eu ainda não vi parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "comedy",
+      "expected_count": 0,
+      "expected_minutes": 90
+    },
+    {
+      "text": "quero assistir filmes de suspense 90 minutos parecido com The Walking Dead",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 90
+    },
+    {
+      "text": "quero assistir um filmes de suspense 90 minutos sem repetir como Harry Potter",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 1,
+      "expected_minutes": 90
+    },
+    {
+      "text": "90 minutos quero assistir filmes de suspense dublado no estilo de Toy Story",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 90
+    },
+    {
+      "text": "tenho 90 minutos, quero assistir filmes de suspense legendado",
+      "expected_type": "movies",
+      "expected_genre": "thriller",
+      "expected_count": 0,
+      "expected_minutes": 90
+    }
+  ]
+}

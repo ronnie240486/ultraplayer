@@ -2531,7 +2531,59 @@ function runVoiceCommand(text) {
 /* ---- UltraSession: intenção local + seleção explicável ---- */
 function ultraSessionIntent(text) {
     var q = normVoiceText(text);
-    return /\b(sessao|sessao personalizada|monte uma sessao|montar uma sessao|escolha para mim|escolher para mim|decida por mim|tenho \d+ minutos|quero algo para assistir|programacao para mim|o que posso assistir|me indique|recomendacoes?|parecid[oa]s? com|similar a)\b/.test(q) || /\b(me avise|avise|alerta)\b.*\b(escolha|escolher|monte|montar|crie|criar)\b/.test(q) || /\b(monte|montar|crie|criar)\b.*\b(sessao|programacao|programação)\b/.test(q) || /\b(?:\d{1,2}|um|uma|dois|duas|tres|três|quatro|cinco|seis|sete|oito|nove|dez|onze|doze)\s+(?:filmes?|series?|séries?)\b/.test(q);
+    return /\b(sessao|sessao personalizada|monte uma sessao|montar uma sessao|escolha para mim|escolher para mim|decida por mim|tenho \d+ minutos|tenho meia hora|tenho uma hora|quero algo para assistir|programacao para mim|o que posso assistir|me indique|recomendacoes?|parecid[oa]s? com|similar a)\b/.test(q) || /\b(me avise|avise|alerta)\b.*\b(escolha|escolher|monte|montar|crie|criar)\b/.test(q) || /\b(monte|montar|crie|criar)\b.*\b(sessao|programacao|programação)\b/.test(q) || /\b(?:\d{1,2}|um|uma|dois|duas|tres|três|quatro|cinco|seis|sete|oito|nove|dez|onze|doze)\s+(?:filmes?|series?|séries?|desenhos?|animes?|documentarios?|documentários?|canais?)\b/.test(q) || /\b(filmes?|series?|séries?|desenhos?|animes?|documentarios?|documentários?|canais?)\s+(?:de|com)\s+\w+/.test(q) || /\b(?:quero|gostaria|me mostre|me de|me dê|escolha|indique)\b.*\b(filmes?|series?|séries?|desenhos?|animes?|documentarios?|documentários?|canais?)\b/.test(q) || (/\b(desenho|desenhos|cartoon|animacao|anime|animes?)\b/.test(q) && /\b(quero|quero assistir|gostaria|assistir|ver|escolha|monte|indique|tenho|meia hora|uma hora)\b/.test(q));
+}
+var ULTRA_PARSE_GENRES = [
+    ['comedy', ['comedia', 'comedias', 'comédia', 'comédias', 'comedy', 'sitcom', 'sitcoms', 'humor', 'engracado', 'engraçados', 'engraçada', 'engraçadas']],
+    ['thriller', ['suspense', 'suspenses', 'thriller', 'thrillers', 'tensao', 'tensão']],
+    ['mystery', ['misterio', 'misterios', 'mistério', 'mistérios', 'enigma', 'enigmas']],
+    ['crime', ['crime', 'crimes', 'policial', 'policiais', 'mafioso', 'mafiosos', 'gangster', 'gangsters', 'investigacao criminal', 'investigação criminal']],
+    ['action', ['acao', 'acoes', 'ação', 'ações', 'aventura', 'aventuras', 'adrenalina', 'super heroi', 'super-heroi']],
+    ['horror', ['terror', 'terrores', 'horror', 'horrors', 'assustador', 'assustadores']],
+    ['romance', ['romance', 'romances', 'romantico', 'românticos', 'romântico', 'romântica', 'românticas', 'amor', 'amores']],
+    ['drama', ['drama', 'dramas', 'emocionante', 'emocionantes']],
+    ['documentary', ['documentario', 'documentarios', 'documentário', 'documentários', 'fatos reais']],
+    ['fantasy', ['fantasia', 'fantasias', 'magia', 'magias', 'reino fantastico', 'reino fantástico']],
+    ['scifi', ['ficcao cientifica', 'ficcoes cientificas', 'ficção científica', 'ficções científicas', 'sci fi', 'sci-fi', 'espaco', 'espaço', 'futuro', 'futuros']],
+    ['family', ['familia', 'familias', 'família', 'famílias', 'para a familia', 'para a família']],
+    ['war', ['guerra', 'guerras', 'militar', 'militares', 'batalha', 'batalhas']],
+    ['history', ['historico', 'historicos', 'histórico', 'históricos', 'de epoca', 'de época']],
+    ['music', ['musical', 'musicais', 'concerto', 'concertos', 'show', 'shows', 'musica', 'música']],
+    ['western', ['faroeste', 'faroestes', 'velho oeste', 'western']],
+    ['kids', ['infantil', 'infantis', 'kids', 'criancas', 'crianças']]
+];
+function ultraTermInText(text, term) { var n = normVoiceText(term).replace(/^\s+|\s+$/g, ''); if (!n) return false; var e = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); return new RegExp('(^|\\s)' + e + '(?=\\s|$)').test(normVoiceText(text)); }
+function ultraParseHas(q, words) { for (var i = 0; i < words.length; i++) if (ultraTermInText(q, words[i])) return true; return false; }
+function ultraParseNumber(s) { var n = parseInt(s, 10); if (n) return n; return ({ um: 1, uma: 1, dois: 2, duas: 2, tres: 3, três: 3, quatro: 4, cinco: 5, seis: 6, sete: 7, oito: 8, nove: 9, dez: 10, onze: 11, doze: 12 }[s] || 0); }
+function ultraSessionParseV2(raw) {
+    var q = normVoiceText(raw), req = { raw: String(raw || ''), count: 0, duration_minutes: 0, mode: 'mixed', media_type: '', animation_subtype: '', genre: '', genres: [], mood: '', reference: '', avoid_repeats: false, family: false, safe_family: false, language: '', dubbed: false, subtitled: false, sort: '', alert_query: '' };
+    var alertRe = /(?:me avise|avise|alerta|me lembra|me lembre)(?:\s+quando\s+(?:comecar|começar|iniciar))?\s+(?:o|a|um|uma)?\s*([^,;]+?)(?=\s+e\s+(?:escolha|monte|crie|quero)|$)/, am = q.match(alertRe);
+    if (am) { req.alert_query = am[1].replace(/^\s+|\s+$/g, ''); q = q.replace(alertRe, ' '); }
+    var cm = q.match(/\b(\d{1,2}|um|uma|dois|duas|tres|três|quatro|cinco|seis|sete|oito|nove|dez|onze|doze)\s+(?:filmes?|series?|séries?|desenhos?|animes?|documentarios?|documentários?|canais?)\b/); if (cm) req.count = Math.max(1, Math.min(30, ultraParseNumber(cm[1])));
+    var dm = q.match(/\b(\d{1,3})\s*(?:minuto|minutos|min|m)\b/); if (dm) req.duration_minutes = Math.max(5, Math.min(480, parseInt(dm[1], 10) || 0));
+    if (!req.duration_minutes && /\b(meia hora|trinta minutos)\b/.test(q)) req.duration_minutes = 30;
+    if (!req.duration_minutes && /\b(uma hora|uma hora de duracao|uma hora de duração)\b/.test(q)) req.duration_minutes = 60;
+    if (!req.duration_minutes && /\b(uma hora e meia)\b/.test(q)) req.duration_minutes = 90;
+    var explicitSeries = /\b(series?|novelas?|temporadas?|episodios?)\b/.test(q), explicitMovies = /\b(filmes?|cinema|vod|documentarios?|documentários?)\b/.test(q), explicitLive = /\b(canais?|tv ao vivo|ao vivo|televisao|televisão)\b/.test(q);
+    if (explicitSeries) req.mode = 'series'; else if (explicitMovies) req.mode = 'movies'; else if (explicitLive) req.mode = 'live'; else if (/\b(radios?|rádios?|radio online)\b/.test(q)) req.mode = 'radio';
+    var anime = /\b(anime|animes)\b/.test(q), animation = /\b(desenho|desenhos|cartoon|animacao|anime|animes?)\b/.test(q); if (animation) { req.media_type = 'animation'; req.animation_subtype = anime ? 'anime' : 'cartoon'; if (!explicitSeries && !explicitMovies) req.mode = 'mixed'; req.genres.push('animation'); }
+    for (var gi = 0; gi < ULTRA_PARSE_GENRES.length; gi++) { var pair = ULTRA_PARSE_GENRES[gi]; if (ultraParseHas(q, pair[1]) && req.genres.indexOf(pair[0]) < 0) req.genres.push(pair[0]); }
+    var kidsAt = req.genres.indexOf('kids'); if (kidsAt >= 0) req.genres.splice(kidsAt, 1);
+    req.genre = req.genres[0] || '';
+    req.family = /\b(com meus filhos|com as criancas|com as crianças|para criancas|para crianças|familia|família|infantil|kids)\b/.test(q);
+    req.safe_family = req.family || /\b(sem violencia|sem violência|seguro para criancas|seguro para crianças|para a familia|para a família)\b/.test(q);
+    req.avoid_repeats = /\b(sem repetir|nao repetir|não repetir|novo|novidade|que eu ainda nao vi|que eu ainda não vi|diferente do que assisti)\b/.test(q);
+    req.dubbed = /\b(dublado|dublada|dublados|dubladas)\b/.test(q); req.subtitled = /\b(legendado|legendada|legendados|legendadas)\b/.test(q);
+    if (/\b(portugues|português|brasileiro|brasileira)\b/.test(q)) req.language = 'pt'; else if (/\b(ingles|inglês|english)\b/.test(q)) req.language = 'en'; else if (/\b(espanhol|espanhol)\b/.test(q)) req.language = 'es';
+    if (/\b(maior nota|melhor avaliado|melhores notas|bem avaliado)\b/.test(q)) req.sort = 'top_rated'; else if (/\b(recem adicionados|recém adicionados|novos|novidades)\b/.test(q)) req.sort = 'recent'; else if (/\b(mais assistidos|mais vistos|populares)\b/.test(q)) req.sort = 'most_watched';
+    var ref = q.match(/(?:parecid[oa]s?\s+com|similar\s+a|igual\s+a|como|no estilo de)\s+(.+)$/); if (ref) req.reference = ref[1].replace(/\s+(?:sem repetir|nao repetir|não repetir|novo|novidade)\b.*$/,'').trim();
+    if (!req.reference) {
+        var clean = q.replace(/\b\d{1,3}\s*(?:minuto|minutos|min|m)\b/g, ' ').replace(/\b(meia hora|trinta minutos|uma hora e meia|uma hora)\b/g, ' ');
+        for (var ci = 0; ci < ULTRA_PARSE_GENRES.length; ci++) for (var cj = 0; cj < ULTRA_PARSE_GENRES[ci][1].length; cj++) clean = clean.replace(new RegExp('\\b' + ULTRA_PARSE_GENRES[ci][1][cj].replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&') + '\\b', 'g'), ' ');
+        req.reference = clean.replace(/\b(monte|montar|crie|criar|sessao|sessão|escolha|escolher|decida|decidir|por mim|para mim|pra mim|para|pra|tenho|quero|gostaria|assistir|assistindo|ver|me mostre|me indique|o que posso|o que|posso|uma?|um|dois|duas|tres|três|quatro|cinco|seis|sete|oito|nove|dez|onze|doze|filme|filmes|serie|series|série|séries|desenho|desenhos|cartoon|animacao|anime|animes?|canais?|ao vivo|com|e|de|meus|minhas|filhos|criancas|crianças|familia|família|algo|leve|agora|hoje|sem repetir|nao repetir|não repetir|dublado|legendado|maior nota|recem adicionados|recém adicionados|mais assistidos|bem avaliado)\b/g, ' ').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
+    }
+    if (/\b(leve|leveza|engracado|engraçado|comedia|comédia|rir|relaxar|calmo|dormir)\b/.test(q)) req.mood = 'leve'; else if (/\b(acao|ação|aventura|adrenalina)\b/.test(q)) req.mood = 'acao'; else if (/\b(suspense|terror|misterio|mistério|tenso)\b/.test(q)) req.mood = 'suspense'; else if (/\b(romance|romantico|romântico)\b/.test(q)) req.mood = 'romance'; else if (/\b(documentario|documentário|aprender|educativo)\b/.test(q)) req.mood = 'educativo';
+    return req;
 }
 function ultraSessionParse(raw) {
     var q = normVoiceText(raw), req = { raw: String(raw || ''), count: 0, duration_minutes: 0, mode: 'mixed', genre: '', mood: '', reference: '', avoid_repeats: false, family: false, alert_query: '' };
@@ -2582,25 +2634,47 @@ function ultraSessionReason(req, kind, item, rating, duration) {
     return reasons.slice(0, 3).join(' · ') || 'disponível na sua lista';
 }
 var ULTRA_GENRE_TERMS = {
-    comedy: ['comedia', 'comedy', 'sitcom', 'humor', 'stand up', 'stand-up'],
-    crime: ['crime', 'policial', 'investigacao', 'investigação', 'mafioso', 'gangster'],
-    action: ['acao', 'ação', 'aventura', 'super heroi', 'super-heroi'],
-    horror: ['terror', 'horror'], romance: ['romance', 'romantico', 'romântico'],
-    documentary: ['documentario', 'documentário'], drama: ['drama'], scifi: ['ficcao cientifica', 'ficção científica', 'sci fi', 'sci-fi']
+    animation: ['desenho', 'desenhos', 'animacao', 'animacoes', 'animação', 'animações', 'cartoon', 'anime', 'animes'],
+    comedy: ['comedia', 'comedias', 'comédia', 'comédias', 'comedy', 'sitcom', 'sitcoms', 'humor', 'stand up', 'stand-up'],
+    thriller: ['suspense', 'suspenses', 'thriller', 'thrillers', 'tensao', 'tensão'],
+    mystery: ['misterio', 'misterios', 'mistério', 'mistérios', 'enigma', 'enigmas', 'investigacao', 'investigação'],
+    crime: ['crime', 'crimes', 'policial', 'policiais', 'investigacao criminal', 'investigação criminal', 'mafioso', 'mafiosos', 'gangster', 'gangsters'],
+    action: ['acao', 'acoes', 'ação', 'ações', 'aventura', 'aventuras', 'super heroi', 'super-heroi', 'adrenalina'],
+    horror: ['terror', 'terrores', 'horror', 'horrors', 'assustador', 'assustadores'],
+    romance: ['romance', 'romances', 'romantico', 'românticos', 'romântico', 'romântica', 'românticas', 'amor', 'amores'],
+    documentary: ['documentario', 'documentarios', 'documentário', 'documentários', 'fatos reais'],
+    drama: ['drama', 'dramas', 'emocionante', 'emocionantes'],
+    fantasy: ['fantasia', 'fantasias', 'magia', 'magias', 'reino fantastico', 'reino fantástico'],
+    scifi: ['ficcao cientifica', 'ficcoes cientificas', 'ficção científica', 'ficções científicas', 'sci fi', 'sci-fi', 'espaco', 'espaço', 'futuro', 'futuros'],
+    family: ['familia', 'familias', 'família', 'famílias', 'para criancas', 'para crianças'],
+    kids: ['infantil', 'infantis', 'kids', 'criancas', 'crianças'],
+    war: ['guerra', 'guerras', 'militar', 'militares', 'batalha', 'batalhas'],
+    history: ['historico', 'historicos', 'histórico', 'históricos', 'de epoca', 'de época'],
+    music: ['musical', 'musicais', 'concerto', 'concertos', 'show', 'shows', 'musica', 'música'],
+    western: ['faroeste', 'faroestes', 'velho oeste', 'western']
 };
-var ULTRA_TMDB_GENRES = { movies: { comedy: 35, crime: 80, action: 28, horror: 27, romance: 10749, documentary: 99, drama: 18, scifi: 878 }, series: { comedy: 35, crime: 80, action: 10759, horror: 27, romance: 10749, documentary: 99, drama: 18, scifi: 10765 } };
+var ULTRA_TMDB_GENRES = {
+    movies: { animation: [16], comedy: [35], crime: [80], action: [28], thriller: [53], mystery: [9648], horror: [27], romance: [10749], documentary: [99], drama: [18], fantasy: [14], scifi: [878], family: [10751], war: [10752], history: [36], music: [10402], western: [37] },
+    series: { animation: [16], comedy: [35], crime: [80], action: [10759], thriller: [9648, 80], mystery: [9648], horror: [27], romance: [10749], documentary: [99], drama: [18], fantasy: [10765], scifi: [10765], family: [10751, 10762], kids: [10762], war: [10768], history: [10768], music: [], western: [37] }
+};
 function ultraSessionGenrePass(req, kind, item, rating) {
-    if (!req.genre) return true;
-    var ids = rating && Array.isArray(rating.genre_ids) ? rating.genre_ids : [], wanted = ULTRA_TMDB_GENRES[kind] && ULTRA_TMDB_GENRES[kind][req.genre];
-    if (wanted && ids.length) return ids.indexOf(wanted) >= 0;
+    var wants = req.genres && req.genres.length ? req.genres.slice() : (req.genre ? [req.genre] : []); if (!wants.length) return true;
+    var ids = rating && Array.isArray(rating.genre_ids) ? rating.genre_ids : [], map = ULTRA_TMDB_GENRES[kind] || {}, hay = normVoiceText([item && item.name, item && item.title, item && item.category_name, item && item.group, item && item.group_title].join(' '));
     if (req._genreDeferred) return true;
-    var hay = normVoiceText([item && item.name, item && item.title, item && item.category_name, item && item.group, item && item.group_title].join(' ')), terms = ULTRA_GENRE_TERMS[req.genre] || [];
-    for (var i = 0; i < terms.length; i++) if (hay.indexOf(normVoiceText(terms[i])) >= 0) return true;
-    return false;
+    for (var w = 0; w < wants.length; w++) {
+        var wanted = map[wants[w]] || [], hasId = false;
+        for (var wi = 0; wi < wanted.length; wi++) if (ids.indexOf(wanted[wi]) >= 0) { hasId = true; break; }
+        if (hasId) continue;
+        if (ids.length && wanted.length) return false;
+        var terms = ULTRA_GENRE_TERMS[wants[w]] || (wants[w] === 'animation' ? ['desenho', 'animacao', 'cartoon', 'anime'] : []), hasText = false;
+        for (var ti = 0; ti < terms.length; ti++) if (ultraTermInText(hay, terms[ti])) { hasText = true; break; }
+        if (!hasText) return false;
+    }
+    return true;
 }
 function ultraSessionCandidate(req, kind, item) {
     item = item || {}; var id = ultraSessionId(kind, item), name = item.name || item.title || (kind === 'live' ? 'Canal' : kind === 'series' ? 'Série' : 'Filme'); if (!id || !name || isAdultName(name)) return null;
-    if (req.family && (isAdultName([name, item.category_name, item.group, item.group_title].join(' ')) || (kind !== 'live' && isAdultContent(kind === 'series' ? 'series' : 'movies', id, name)))) return null;
+    if ((req.family || req.safe_family) && (isAdultName([name, item.category_name, item.group, item.group_title].join(' ')) || (kind !== 'live' && isAdultContent(kind === 'series' ? 'series' : 'movies', id, name)))) return null;
     if (req.avoid_repeats && ultraSessionWasWatched(kind, id)) return null;
     var text = normVoiceText([name, item.category_name, item.group, item.group_title].join(' ')), score = 10, rating = kind === 'live' ? null : tmdbRatingFor(kind, item), duration = ultraSessionDuration(item), match = req.reference ? voiceMatchScore(item, normVoiceText(req.reference), kind) : 0;
     if (!ultraSessionGenrePass(req, kind, item, rating)) return null;
@@ -2609,7 +2683,7 @@ function ultraSessionCandidate(req, kind, item) {
     if (rating && rating.vote_average > 0) score += rating.vote_average * 18 + Math.min(30, (rating.vote_count || 0) / 1000);
     if (req.duration_minutes && duration) score += duration <= req.duration_minutes + 10 ? 45 : duration <= req.duration_minutes + 30 ? 10 : -35;
     if (req.mood && text.indexOf(req.mood) >= 0) score += 25;
-    if (req.genre) { var genreTerms = ULTRA_GENRE_TERMS[req.genre] || []; for (var gi = 0; gi < genreTerms.length; gi++) if (text.indexOf(normVoiceText(genreTerms[gi])) >= 0) { score += 200; break; } }
+    if (req.genre) { var genreTerms = ULTRA_GENRE_TERMS[req.genre] || []; for (var gi = 0; gi < genreTerms.length; gi++) if (ultraTermInText(text, genreTerms[gi])) { score += 200; break; } }
     if (inArr(S.fav[kind === 'live' ? 'live' : kind === 'series' ? 'series' : 'movie'], id)) score += 18;
     if (queueHas(kind === 'movies' ? 'movies' : kind, id)) score += 12;
     var added = parseInt(item.added || item.last_modified || item.created_at || 0, 10) || 0; if (added) score += Math.min(20, added > 10000000000 ? (Date.now() - added) < 1209600000 ? 20 : 0 : 0);
@@ -2617,15 +2691,16 @@ function ultraSessionCandidate(req, kind, item) {
 }
 function ultraSessionSort(a, b) { return (b.score || 0) - (a.score || 0); }
 function ultraSessionBuild(raw) {
-    var req = ultraSessionParse(raw), kinds = req.mode === 'movies' ? ['movies'] : req.mode === 'series' ? ['series'] : req.mode === 'live' ? ['live'] : req.mode === 'radio' ? [] : ['movies', 'series', 'live'];
-    if (req.family && kinds.indexOf('live') < 0 && req.mode === 'mixed') kinds.push('live');
+    var req = ultraSessionParseV2(raw), kinds = req.mode === 'movies' ? ['movies'] : req.mode === 'series' ? ['series'] : req.mode === 'live' ? ['live'] : req.mode === 'radio' ? [] : ['movies', 'series', 'live'];
+    if (req.media_type === 'animation' || (req.genres && req.genres.length)) { if (req.mode === 'mixed') kinds = ['movies', 'series']; else if (req.mode === 'live') kinds = []; }
+    if (req.family && !req.genres.length && req.media_type !== 'animation' && kinds.indexOf('live') < 0 && req.mode === 'mixed') kinds.push('live');
     if (profKidsActive() && !profScheduleAllowed(profActive())) { renderUltraSession({ id: 'us_' + Date.now(), created_at: Date.now(), request: req, candidates: [], selected: [], status: 'draft', message: 'Este perfil infantil está fora do horário permitido.' }); return; }
     if (profKidsActive() && profLimit(profActive()) && profileUsageSeconds() >= profLimit(profActive()) * 60) { renderUltraSession({ id: 'us_' + Date.now(), created_at: Date.now(), request: req, candidates: [], selected: [], status: 'draft', message: 'O limite diário deste perfil infantil já foi atingido.' }); return; }
-    req._genreDeferred = !!req.genre;
+    req._genreDeferred = !!(req.genres && req.genres.length);
     showLoading(true); S.ultraSessionBusy = true;
     if (!kinds.length) { S.ultraSessionBusy = false; showLoading(false); var empty = { id: 'us_' + Date.now(), created_at: Date.now(), request: req, candidates: [], selected: [], status: 'draft', message: 'Na primeira versão, o UltraSession monta sessões com canais, filmes e séries. As rádios continuam disponíveis pela tela Rádios.' }; lsSet('zx_ultrasession_last', empty); renderUltraSession(empty); return; }
     Promise.all(kinds.map(function (kind) { return ensureCatalog(kind).then(function (cat) { var src = kidsFilterList((cat && cat.all) || []), out = []; for (var i = 0; i < src.length; i++) { var c = ultraSessionCandidate(req, kind, src[i]); if (c) out.push(c); } return { kind: kind, rows: out }; }).catch(function () { return { kind: kind, rows: [] }; }); })).then(function (groups) {
-        var jobs = []; for (var j = 0; j < groups.length; j++) if (groups[j].kind !== 'live') { groups[j].rows.sort(ultraSessionSort); var lim = req.genre ? Math.max(30, (req.count || 10) * 2) : 12; jobs.push(tmdbEnrichCatalog(groups[j].kind, groups[j].rows.slice(0, lim).map(function (x) { return x.item; }), lim).catch(function () {})); }
+        var jobs = []; for (var j = 0; j < groups.length; j++) if (groups[j].kind !== 'live') { groups[j].rows.sort(ultraSessionSort); var lim = req.genres && req.genres.length ? Math.max(40, (req.count || 10) * 3) : 12; jobs.push(tmdbEnrichCatalog(groups[j].kind, groups[j].rows.slice(0, lim).map(function (x) { return x.item; }), lim).catch(function () {})); }
         return Promise.all(jobs).then(function () { req._genreDeferred = false; var all = []; for (var g = 0; g < groups.length; g++) for (var r = 0; r < groups[g].rows.length; r++) { var n = ultraSessionCandidate(req, groups[g].kind, groups[g].rows[r].item); if (n) all.push(n); } all.sort(ultraSessionSort); return all.slice(0, req.count || 18); });
     }).then(function (candidates) {
         var session = { id: 'us_' + Date.now(), created_at: Date.now(), request: req, constraints: { kids_profile: profKidsActive(), schedule_allowed: profScheduleAllowed(profActive()), daily_limit_remaining: Math.max(0, profLimit(profActive()) - Math.floor(profileUsageSeconds() / 60)), adult_blocked: profKidsActive() }, candidates: candidates || [], selected: candidates && candidates.length ? [candidates[0]] : [], status: candidates && candidates.length ? 'ready' : 'draft', message: candidates && candidates.length ? '' : 'Não encontrei candidatos suficientes na lista atual. Tente falar um gênero, título ou duração diferente.' };
