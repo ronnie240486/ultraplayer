@@ -1504,6 +1504,7 @@ function afterRender() {
         for (var i = 0; i < d.length; i++) (function (btn) { if (btn.getAttribute('data-trailer-wired')) return; btn.setAttribute('data-trailer-wired', '1'); btn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); openTrailer(btn.getAttribute('data-trailer-title') || '', btn.getAttribute('data-trailer-kind') || 'movie', btn.getAttribute('data-trailer-url') || ''); }); })(d[i]);
         } catch (e3) {}
     try { wireHomeQuickFavorites(); } catch (e4) {}
+    try { wireRecommendationDismissals(); } catch (e5) {}
 }
 function wireHomeQuickFavorites() {
     var buttons = document.querySelectorAll('.zh-fav-quick');
@@ -1529,6 +1530,34 @@ function wireHomeQuickFavorites() {
         paint(inArr(S.fav[kind === 'series' ? 'series' : (kind === 'live' ? 'live' : 'movie')], id));
         btn.addEventListener('click', toggle);
         btn.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') toggle(e); });
+    })(buttons[i]);
+}
+function recoHiddenList() { var d = lsGet('zx_reco_hidden'); return Array.isArray(d) ? d : []; }
+function recoHiddenKey(kind, id) { return (kind === 'series' ? 'series' : 'movies') + ':' + String(parseInt(id, 10) || id); }
+function hideRecommendation(kind, id) { var list = recoHiddenList(), k = recoHiddenKey(kind, id); if (list.indexOf(k) < 0) list.push(k); if (list.length > 120) list = list.slice(-120); lsSet('zx_reco_hidden', list); }
+function wireRecommendationDismissals() {
+    var cards = document.querySelectorAll('#zhRecoRow .zh-poster');
+    for (var ci = 0; ci < cards.length; ci++) {
+        var card = cards[ci], art = card.querySelector('.pt-img'), href = card.getAttribute('href') || '', mm = href.match(/^\/(movies|series)\/(\d+)/);
+        if (art && mm && !art.querySelector('.zh-reco-dismiss')) {
+            var rb = document.createElement('button'); rb.type = 'button'; rb.className = 'zh-reco-dismiss'; rb.textContent = '×'; rb.setAttribute('data-reco-kind', mm[1]); rb.setAttribute('data-reco-id', mm[2]); rb.setAttribute('aria-label', 'Não tenho interesse'); rb.setAttribute('title', 'Não tenho interesse'); rb.style.cssText = 'position:absolute;left:4px;top:4px;z-index:4;width:28px;height:28px;padding:0;border:1px solid rgba(255,255,255,.35);border-radius:50%;background:rgba(3,12,9,.86);color:#fff;font-size:22px;line-height:24px;text-align:center;cursor:pointer;'; art.appendChild(rb);
+        }
+    }
+    var buttons = document.querySelectorAll('.zh-reco-dismiss');
+    for (var i = 0; i < buttons.length; i++) (function (btn) {
+        if (btn.getAttribute('data-reco-wired')) return;
+        btn.setAttribute('data-reco-wired', '1');
+        function dismiss(e) {
+            if (e && e.preventDefault) e.preventDefault();
+            if (e && e.stopPropagation) e.stopPropagation();
+            hideRecommendation(btn.getAttribute('data-reco-kind') || 'movies', btn.getAttribute('data-reco-id') || '');
+            var card = btn.parentNode; while (card && card !== document.body && String(card.className || '').indexOf('zh-poster') < 0) card = card.parentNode;
+            if (card && card.parentNode) card.parentNode.removeChild(card);
+            var sec = $('zhReco'), row = $('zhRecoRow'); if (sec && row && !row.children.length) sec.style.display = 'none';
+            assistantToast('Recomendação ocultada');
+        }
+        btn.addEventListener('click', dismiss);
+        btn.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') dismiss(e); });
     })(buttons[i]);
 }
 function runScript(src) { var s = document.createElement('script'); s.src = src; document.body.appendChild(s); }
@@ -2749,9 +2778,10 @@ function homeRecentHtml() {
     return '<section class="zh-recent">' + head + '<div class="zh-posters">' + cards + '</div></section>';
 }
 function homeRecommendationItems() {
-    var boost = {}, excluded = {}, out = [];
+    var boost = {}, excluded = {}, out = [], hidden = recoHiddenList();
     function key(kind, id) { return kind + ':' + String(parseInt(id, 10) || id); }
     function markList(kind, list) { for (var i = 0; i < (list || []).length; i++) excluded[key(kind, list[i])] = 1; }
+    for (var hi = 0; hi < hidden.length; hi++) excluded[hidden[hi]] = 1;
     markList('movies', S.fav.movie); markList('series', S.fav.series);
     var cv = (lsGet('zx_cont_vod') || {}).items || [], cs = (lsGet('zx_cont_series') || {}).items || [];
     for (var ci = 0; ci < cv.length; ci++) excluded[key('movies', cv[ci].id)]=1;
