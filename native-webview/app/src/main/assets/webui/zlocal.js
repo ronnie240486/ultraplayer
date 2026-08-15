@@ -991,7 +991,7 @@ function warmHomeCatalogs() {
     // ao mesmo tempo. O catálogo será carregado sob demanda; Celular mantém o
     // aquecimento escalonado para abrir Filmes/Séries mais rápido.
     if (getFormFactor() === 'tv') {
-        setTimeout(function () { radioLoadCategory(radioCategory('gospel')).catch(function () {}); }, 2600);
+        setTimeout(function () { radioLoadCategory(radioCategory('gospel')).catch(function () {}); }, 6000);
         return;
     }
     var kinds = ['movies', 'series', 'live'];
@@ -2582,7 +2582,7 @@ function renderHome() {
     if (!srvName) startHomeClock();   // com nome de parceiro no topo não há relógio pra atualizar
     loadHomePosters();   // capas do "Assistido Recentemente" (o lazy-loader global é escopado a grid)
     fillHomeNewest();    // catálogo já em cache → "Recém adicionados" entra ANTES do 1º paint
-    try { setTimeout(fillHomeCounts, getFormFactor() === 'tv' ? 850 : 400); } catch (e) { fillHomeCounts(); }   // contagens em FILA, começando só depois da home assentar (TV fraca)
+    try { setTimeout(fillHomeCounts, getFormFactor() === 'tv' ? 5000 : 400); } catch (e) { fillHomeCounts(); }   // contagens em FILA, começando só depois da home assentar (TV fraca)
     fitHomeAll();               // SÍNCRONO (antes do 1º paint): sem o "abre grande e encolhe" ao voltar pra home
     setTimeout(fitHomeAll, 160);   // segurança: re-mede depois da UI assentar (fontes etc.)
     if (!S._homeFitBound) {   // girar/redimensionar → re-mede (zera o inline e ajusta de novo)
@@ -2600,7 +2600,7 @@ function renderHome() {
     wireAnnounce(ann);
     afterRender();
     try { setTimeout(warmHomeCatalogs, getFormFactor() === 'tv' ? 700 : 220); } catch (e) {}
-    try { setTimeout(fillHomeRecommendations, getFormFactor() === 'tv' ? 1300 : 480); } catch (e) {}
+    try { setTimeout(fillHomeRecommendations, getFormFactor() === 'tv' ? 5000 : 480); } catch (e) {}
     focusHomeStart();   // foco SEMPRE no "TV ao Vivo" já MARCADO (o harness focaria "Servidor")
     // PERFIS: avatar do topo abre o "Quem está assistindo?"
     try {
@@ -5697,7 +5697,6 @@ function boot() {
     startAmbientWatch();
     S.directAuth = !!directModeStored();
     S.did = getDid();
-    fetchUltraConfig();
     try { S.profNs = profActive().ns; } catch (e) { S.profNs = ''; }   // PERFIS: antes de qualquer leitura
     startProfileUsageWatch();
     patchHistory();
@@ -5749,9 +5748,12 @@ function boot() {
         });
     }
     // MAC: atualiza a validade real do painel mesmo quando a Home abriu de um snapshot antigo.
-    if (S.directAuth) syncDirectListCache(function () { if (document.querySelector('.zx-home2')) renderHome(); });
-    // branding standalone (atualiza se o resolve não trouxe) — silencioso
-    api('branding').then(function (b) { if (b && b.ok) applyBranding(b); });
+    if (S.directAuth) {
+        // Não competir com a primeira pintura: a validade/listas são sincronizadas
+        // depois que a Home já está navegável na TV Box.
+        var syncDelay = getFormFactor() === 'tv' ? 2500 : 250;
+        setTimeout(function () { syncDirectListCache(function () { if (document.querySelector('.zx-home2')) renderHome(); }); }, syncDelay);
+    }
 }
 
 /* ============================================================
