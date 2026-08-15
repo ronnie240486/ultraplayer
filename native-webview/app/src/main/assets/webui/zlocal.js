@@ -703,6 +703,42 @@ function continueList(sec) {
     var d = lsGet('zx_cont_' + sec) || { ok: true, items: [] };
     return Promise.resolve({ ok: true, items: d.items || [] });
 }
+// Minha Fila — armazenamento local por perfil. Não envia conteúdo ao painel.
+function queueList() {
+    var d = lsGet('zx_queue') || { ok: true, items: [] }, src = Array.isArray(d.items) ? d.items : [], out = [];
+    for (var i = 0; i < src.length; i++) {
+        var it = src[i] || {}, kind = it.kind === 'series' ? 'series' : (it.kind === 'live' ? 'live' : 'movies');
+        if (profKidsActive() && (it.adult || isAdultContent(kind === 'movies' ? 'movies' : kind, it.id, it.name))) continue;
+        out.push({ kind: kind, id: String(it.id || ''), name: it.name || '', poster: it.poster || it.logo || '', logo: it.logo || '', ts: it.ts || 0 });
+    }
+    out.sort(function (a, b) { return (b.ts || 0) - (a.ts || 0); });
+    return out;
+}
+function queueHas(kind, id) { var q = queueList(); for (var i = 0; i < q.length; i++) if (q[i].kind === kind && String(q[i].id) === String(id)) return true; return false; }
+function queueToggle(kind, id, name, poster, force) {
+    kind = kind === 'series' ? 'series' : (kind === 'live' ? 'live' : 'movies'); id = String(id || ''); if (!id) return false;
+    var d = lsGet('zx_queue') || { ok: true, items: [] }, items = Array.isArray(d.items) ? d.items : [], idx = -1;
+    for (var i = 0; i < items.length; i++) if (items[i] && items[i].kind === kind && String(items[i].id) === id) { idx = i; break; }
+    var remove = force === false || (force == null && idx >= 0);
+    if (remove) { if (idx >= 0) items.splice(idx, 1); }
+    else { if (idx >= 0) items.splice(idx, 1); items.unshift({ kind: kind, id: id, name: name || '', poster: poster || '', ts: Date.now(), adult: isAdultContent(kind === 'movies' ? 'movies' : kind, id, name) ? 1 : 0 }); }
+    if (items.length > 80) items = items.slice(0, 80);
+    lsSet('zx_queue', { ok: true, items: items });
+    return !remove;
+}
+function queueCurrentAction(remove) {
+    var p = S.nativePlaying, kind = '', id = '', name = '', poster = '';
+    if (p && p.zxId) { kind = p.zxKind === 'series' ? 'series' : (p.zxKind === 'live' ? 'live' : 'movies'); id = p.zxKind === 'series' ? (p.seriesId || p.zxId) : p.zxId; name = p.name || p.title || ''; poster = p.poster || ''; }
+    var btn = $('btn-favorite');
+    if (!id && btn) { kind = btn.getAttribute('data-kind') === 'series' ? 'series' : (btn.getAttribute('data-kind') === 'movie' ? 'movies' : 'live'); id = btn.getAttribute('data-id') || ''; name = btn.getAttribute('data-name') || ''; poster = btn.getAttribute('data-poster') || ''; }
+    if (!id) return false;
+    queueToggle(kind, id, name, poster, remove ? false : true);
+    return true;
+}
+function queueTile(it) {
+    var obj = { id: it.id, name: it.name, poster: it.poster, logo: it.logo };
+    return favTile(obj, it.kind);
+}
 // Progresso (posição) LOCAL — pra retomar de onde parou (resume).
 function saveProgress(kind, id, pos, dur, name, poster) {
     try { lsSet('zx_prog:' + kind + ':' + parseInt(id, 10), { pos: pos, dur: dur, ts: Date.now() }); } catch (e) {}
@@ -1484,6 +1520,8 @@ function render(path) {
         if (p === '/settings') return renderSettings();
     if (p === '/radio') return renderRadioScreen();
     if (p === '/favorites') return renderFavHome();   // TODOS os favoritos (filmes+séries+canais)
+    if (p === '/queue') return renderQueueHome();
+    if (p === '/alerts') return renderAlertsHome();
     if (p === '/movies' || p === '/series' || p === '/live') return renderSection(p.slice(1), {});
     m = p.match(/^\/(movies|series)\/search$/); if (m) return renderSearch(m[1]);
     m = p.match(/^\/(movies|series)\/(favorites|recent|continue)$/); if (m) return renderSection(m[1], { virtual: m[2] });
@@ -1997,6 +2035,10 @@ function runVoiceIntent(text) {
     else if (/^(filmes?|cinema|vod)$/.test(cmd)) { path = '/movies'; label = 'abrindo Filmes'; }
     else if (/^(series?|novelas?|animes?)$/.test(cmd)) { path = '/series'; label = 'abrindo Séries'; }
     else if (/^(favoritos?|meus favoritos)$/.test(cmd)) { path = '/favorites'; label = 'abrindo Favoritos'; }
+    else if (/^(minha fila|fila pessoal|fila de espera|o que guardei)$/.test(cmd)) { path = '/queue'; label = 'abrindo Minha Fila'; }
+    else if (/^(meus alertas|meus alarmes|avisos programados|alertas)$/ .test(cmd)) { path = '/alerts'; label = 'abrindo Meus Alertas'; }
+    else if (/^(adicionar a fila|adicionar a minha fila|guardar na fila|ver depois|salvar para depois)$/.test(cmd)) { if (queueCurrentAction(false)) { assistantToast('adicionado à Minha Fila'); } else { assistantToast('Abra um conteúdo para adicionar à fila'); } return true; }
+    else if (/^(remover da fila|tirar da fila|retirar da minha fila)$/.test(cmd)) { if (queueCurrentAction(true)) { assistantToast('removido da Minha Fila'); } else { assistantToast('Abra um conteúdo para remover da fila'); } return true; }
     else if (/^(playlist|listas?|servidor|trocar lista)$/.test(cmd)) { path = '/lists'; label = 'abrindo Playlist'; }
     else if (/^(configuracoes?|ajustes?)$/.test(cmd)) { path = '/settings'; label = 'abrindo Configurações'; }
     else if (/^(buscar|pesquisar|busca universal|buscar em tudo|pesquisar tudo)$/.test(cmd)) { path = '/search'; label = 'abrindo Busca em tudo'; }
@@ -2442,6 +2484,7 @@ function renderHome() {
     var svMov = '<rect x="2" y="4" width="20" height="16" rx="2.5"></rect><path d="M7 4v16M17 4v16M2 9h5M2 15h5M17 9h5M17 15h5"></path>';
     var svSer = '<rect x="3" y="7" width="18" height="13" rx="2"></rect><path d="M8 7 5 3M16 7l3-4M12 7 12 3"></path>';
     var svPl = '<line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="16" y2="18"></line><circle cx="18.5" cy="18.5" r="3.2"></circle><path d="M18.5 17.1v2.8M17.1 18.5h2.8"></path>';
+    var svQueue = '<path d="M4 6h16M4 12h16M4 18h10"></path><path d="m16 17 2 2 4-4"></path>';
     var svHeart = '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 1 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8z"></path>';
     var svSearch = '<circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path>';
     function tile(href, ic, label, subTxt, subId, atf, elId, remoteKey) {
@@ -2458,7 +2501,8 @@ function renderHome() {
             + '<span class="zh-stx"><b>' + label + '</b>'
             + (subTxt ? '<small class="zh-ssub">' + subTxt + '</small>' : '') + '</span></a>';
     }
-    var favN = 0; try { favN = (S.fav.live.length || 0) + (S.fav.movie.length || 0) + (S.fav.series.length || 0); } catch (e) {}
+        var favN = 0; try { favN = (S.fav.live.length || 0) + (S.fav.movie.length || 0) + (S.fav.series.length || 0); } catch (e) {}
+    var queueN = 0; try { queueN = queueList().length; } catch (e) {}
     // SEM lista adicionada → TODOS os botões levam pra tela de ADICIONAR LISTA
     // (cliente novo não sabe que é no "Playlist" — pedido 19/07). O /lists sem
     // lista já abre direto no formulário.
@@ -2478,6 +2522,7 @@ function renderHome() {
         + '</div>'
         + '<div class="zh-navbot">'
         + stile(dest('/favorites'), svHeart, 'Favoritos', favN + ' ' + t('itens'))
+        + stile(dest('/queue'), svQueue, 'Minha Fila', queueN + ' ' + t('itens'))
         + stile('/lists', svPl, 'Playlist', te('Adicionar / gerenciar'))
         + '</div>'
         + '</div></nav>';
@@ -3174,6 +3219,29 @@ function renderFavHome() {
     setHtml('<div class="search-screen"><div class="search-topbar"><a href="/home" class="gt-back" autofocus>← Voltar</a><div class="search-title">Favoritos</div></div>'
         + '<div class="search-body">' + body + '</div></div>' + flatStyles());
     if (tiles) { fitPosterGrid($('content-grid')); lazyGrid($('content-grid')); }
+    afterRender();
+}
+function renderQueueHome() {
+    var items = queueList(), tiles = '';
+    for (var i = 0; i < items.length; i++) tiles += queueTile(items[i]);
+    var body = tiles
+        ? '<div class="poster-grid-tv" id="content-grid">' + tiles + '</div>'
+        : '<div style="color:#aaa;padding:50px 20px;text-align:center;">Sua fila está vazia.<br>Abra um conteúdo e diga <strong>“adicionar à fila”</strong> para guardá-lo.</div>';
+    setHtml('<div class="search-screen"><div class="search-topbar"><a href="/home" class="gt-back" autofocus>← Voltar</a><div class="search-title">Minha Fila</div></div>'
+        + '<div class="search-body">' + body + '</div></div>' + flatStyles());
+    if (tiles) { fitPosterGrid($('content-grid')); lazyGrid($('content-grid')); }
+    afterRender();
+}
+function renderAlertsHome() {
+    var alarms = epgAlarms().filter(function (a) { return a && a.when > Date.now(); }).sort(function (a, b) { return a.when - b.when; }), html = '';
+    for (var i = 0; i < alarms.length; i++) {
+        var a = alarms[i], dt = new Date(a.when), date = p2(dt.getDate()) + '/' + p2(dt.getMonth() + 1) + ' ' + p2(dt.getHours()) + ':' + p2(dt.getMinutes());
+        html += '<div class="zx-alert-row"><div><strong>🔔 ' + esc(a.title || 'Programa') + '</strong><small>' + esc(a.channel || 'Canal') + ' • ' + esc(date) + '</small></div><button type="button" class="btn-tv zx-alert-remove" data-alert-key="' + attr(a.key || '') + '">Remover</button></div>';
+    }
+    var body = html || '<div style="color:#aaa;padding:50px 20px;text-align:center;">Você não tem alertas programados.<br>Na tela de EPG, toque no sino ou diga <strong>“me avise quando começar…”</strong>.</div>';
+    setHtml('<div class="search-screen"><div class="search-topbar"><a href="/home" class="gt-back" autofocus>← Voltar</a><div class="search-title">Meus Alertas</div></div><div class="search-body zx-alerts-body">' + body + '</div></div><style>.zx-alerts-body{padding:18px;max-width:900px;margin:0 auto}.zx-alert-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:15px 16px;margin-bottom:10px;border:1px solid rgba(16,185,129,.28);border-radius:15px;background:rgba(16,185,129,.08);color:#fff}.zx-alert-row strong{display:block;font-size:17px}.zx-alert-row small{display:block;margin-top:5px;color:#9db0a7}.zx-alert-remove{flex:0 0 auto;padding:9px 13px;font-size:13px}</style>');
+    var bs = document.querySelectorAll('.zx-alert-remove');
+    for (var j = 0; j < bs.length; j++) (function (b) { b.addEventListener('click', function () { var key = b.getAttribute('data-alert-key') || '', next = epgAlarms().filter(function (a) { return a.key !== key; }); saveEpgAlarms(next); renderAlertsHome(); }); })(bs[j]);
     afterRender();
 }
 
@@ -4669,6 +4737,19 @@ function parseQuery(q) { var o = {}; if (!q) return o; var ps = q.split('&'); fo
 /* ---- PIN adulto — LOCAL no aparelho (igual favoritos/continue/recentes; NADA no
    servidor). Padrão "1234". Trocável em Configurações → Controle parental. ---- */
 function getAdultPin() { var v = lsGet('zx_adultpin'); return (v != null && /^\d{4,6}$/.test(String(v))) ? String(v) : '1234'; }
+function parentPinGate(onOk) {
+    if ($('zx-parent-pin-gate')) return;
+    injectFfAskCss();
+    var ov = document.createElement('div'); ov.id = 'zx-parent-pin-gate'; ov.className = 'zx-ff-ask tv-modal';
+    ov.innerHTML = '<div class="zx-ffa-card" style="max-width:420px;text-align:center"><div class="zx-ffa-title">PIN do responsável</div><div class="zx-ffa-sub">Digite o PIN de 4 a 6 dígitos para continuar.</div><input id="zxParentPinInput" class="zx-pf-input" type="password" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="PIN"><div id="zxParentPinMsg" class="zx-ffa-sub" style="min-height:22px;color:#ff8c95"></div><div style="display:flex;gap:10px;justify-content:center"><button type="button" class="zx-pf-save" id="zxParentPinOk">Continuar</button><button type="button" class="zx-pf-del" id="zxParentPinCancel">Cancelar</button></div></div>';
+    document.body.appendChild(ov);
+    function close() { try { ov.parentNode.removeChild(ov); } catch (e) {} }
+    var inp = $('zxParentPinInput'), ok = $('zxParentPinOk'), cancel = $('zxParentPinCancel'), msg = $('zxParentPinMsg');
+    function verify() { var value = inp ? String(inp.value || '').trim() : ''; if (value !== getAdultPin()) { if (msg) msg.textContent = 'PIN incorreto.'; if (inp) { inp.value = ''; inp.focus(); } return; } close(); if (onOk) onOk(); }
+    if (ok) ok.addEventListener('click', verify); if (cancel) cancel.addEventListener('click', close); if (inp) inp.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.keyCode === 13) { e.preventDefault(); verify(); } });
+    ov.addEventListener('keydown', function (e) { if (e.key === 'Escape' || e.keyCode === 27) { e.preventDefault(); close(); } }, true);
+    try { if (inp) inp.focus(); } catch (e) {}
+}
 function promptPin(targetPath) {
     var ov = document.createElement('div'); ov.className = 'zx-ann-overlay';
     // Estilo INLINE: o CSS do .zx-ann-overlay só é injetado quando há um AVISO ativo;
@@ -5191,7 +5272,7 @@ function profDelete(i) {
 // nome-BASE (sem prefixo) é dado por pessoa?
 function profIsPersonalKey(k) {
     return k === 'zx_fav' || k === 'zx_favdirty' || k === 'zx_favmeta' || k === 'zx_pending'
-        || k === 'zx_recent_live' || k.indexOf('zx_cont_') === 0 || k.indexOf('zx_prog:') === 0
+        || k === 'zx_recent_live' || k === 'zx_queue' || k.indexOf('zx_cont_') === 0 || k.indexOf('zx_prog:') === 0
         || k.indexOf('zx_slast_') === 0 || k.indexOf('zx_favlist_') === 0;
 }
 function profKey(k) {
@@ -5389,7 +5470,7 @@ function showProfGate(reason) {
         for (i = 0; i < cards.length; i++) (function (b) {
             b.addEventListener('click', function () {
                 var di = b.getAttribute('data-i');
-                if (di === 'novo') { showProfEditor(-1, function () { paint(); }); return; }
+                if (di === 'novo') { parentPinGate(function () { showProfEditor(-1, function () { paint(); }); }); return; }
                 var idx = parseInt(di, 10);
                 if (edit) { showProfEditor(idx, function () { paint(); }); return; }
                 profSetActive(idx);
@@ -5398,7 +5479,7 @@ function showProfGate(reason) {
             });
         })(cards[i]);
         var ed = $('zxPfEdit');
-        if (ed) ed.addEventListener('click', function () { edit = !edit; paint(); try { ov.querySelector('.zx-pf-card').focus(); } catch (e) {} });
+        if (ed) ed.addEventListener('click', function () { if (!edit) return parentPinGate(function () { edit = true; paint(); try { ov.querySelector('.zx-pf-card').focus(); } catch (e) {} }); edit = false; paint(); try { ov.querySelector('.zx-pf-card').focus(); } catch (e) {} });
         (function (b) {
             if (!b) return;
             function f() { try { if (!ov.parentNode) return; if (ov.contains(document.activeElement)) return; b.focus(); } catch (e) {} }
@@ -5452,7 +5533,7 @@ function showProfEditor(idx, onDone) {
             + '</div></div>';
         ov.innerHTML = h;
         var kidsBtn = $('zxPfKidsSwitch');
-        if (kidsBtn) kidsBtn.addEventListener('click', function () { var nameEl = $('zxPfName'); if (nameEl) nome = nameEl.value; var limitEl = $('zxPfLimit'); if (limitEl) limit = parseInt(limitEl.value, 10) || 0; kids = !kids; if (kids && av >= PROF_KIDS.length) av = 0; paint(); var newName = $('zxPfName'); if (newName) { newName.value = nome; try { newName.focus(); } catch (e) {} } });
+        if (kidsBtn) kidsBtn.addEventListener('click', function () { var flip = function () { var nameEl = $('zxPfName'); if (nameEl) nome = nameEl.value; var limitEl = $('zxPfLimit'); if (limitEl) limit = parseInt(limitEl.value, 10) || 0; kids = !kids; if (kids && av >= PROF_KIDS.length) av = 0; paint(); var newName = $('zxPfName'); if (newName) { newName.value = nome; try { newName.focus(); } catch (e) {} } }; if (kids) parentPinGate(flip); else flip(); });
         var inp = $('zxPfName');
         if (inp) inp.value = nome;
         // escolher avatar: troca classes + preview EM-PLACE (o rebuild matava o
@@ -5484,11 +5565,10 @@ function showProfEditor(idx, onDone) {
             close();
         });
         var dl = $('zxPfDel');
-        if (dl) dl.addEventListener('click', function () {
+if (dl) dl.addEventListener('click', function () {
             if (!armDel) { armDel = true; dl.innerHTML = te('Aperte de novo para apagar'); return; }
-            profDelete(idx);
-            profApplyData();
-            close();
+            var erase = function () { profDelete(idx); profApplyData(); close(); };
+            parentPinGate(erase);
         });
         (function (b) { if (!b) return; try { b.focus(); } catch (e) {} setTimeout(function () { try { if (ov.parentNode && !ov.contains(document.activeElement)) b.focus(); } catch (e) {} }, 60); })(inp);
         profBindFit(ov);
