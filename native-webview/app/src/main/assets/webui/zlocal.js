@@ -47,7 +47,10 @@ var S = {
     radioCache: {}, radioPromises: {},
     catPromises: {},
     listNotificationTimer: null,
-    listNotificationBusy: false
+    listNotificationBusy: false,
+    ultraSessionBusy: false,
+    ultraSessionPending: '',
+    ultraSessionVoiceMode: false
 };
 
 /* ---------- helpers ---------- */
@@ -123,7 +126,9 @@ var I18N_EN = {
     'Assistido Recentemente': 'Recently Watched', 'restantes': 'left',
     'Você ainda não assistiu nada — o que você reproduzir aparece aqui.': 'You haven’t watched anything yet — what you play shows up here.',
     'Servidor': 'Server', 'Usuário': 'Username', 'Usuário:': 'Username:',
-    'ID do aparelho:': 'Device ID:', 'Vencimento da lista:': 'List expiry:', 'Sem expiração': 'No expiry',
+        'ID do aparelho:': 'Device ID:', 'Vencimento da lista:': 'List expiry:', 'Sem expiração': 'No expiry',
+    'UltraSession': 'UltraSession', 'Falar intenção': 'Speak your intention', 'Montar sessão': 'Build session', 'Começar selecionado': 'Start selected', 'Trocar sugestão': 'Try another suggestion',
+
     'Fechar': 'Close', 'Entendi': 'Got it',
     'Adicione uma lista em': 'Add a list in', 'pra começar': 'to start',
     // ---- Login / listas ----
@@ -1716,6 +1721,7 @@ function render(path) {
     if (p === '/lists') return renderLists(query);
     if (p === '/home' || p === '/' || p === '') return renderHome();
     if (p === '/search') return renderUniversalSearch();
+    if (p === '/session') return renderUltraSession();
     if (p === '/reload') return doReload();
     if (p === '/logout') return doLogout();
         if (p === '/settings') return renderSettings();
@@ -2210,6 +2216,7 @@ function assistantSubmit(text) {
     var raw = String(text || '').replace(/^\s+|\s+$/g, ''); if (!raw) return;
     assistantAddMessage(raw, 'user');
     var normalized = normVoiceText(raw);
+    if (ultraSessionIntent(raw)) { closeAssistantPanel(); ultraSessionOpen(raw); return; }
     if (/^(o que posso assistir|me indique|recomendacoes|recomendacoes para mim|sugestoes)$/.test(normalized) || /\b(o que posso assistir|me indique algo|quero recomendacoes)\b/.test(normalized)) { assistantAddMessage(assistantQuickReply(raw), 'bot'); return; }
     if (voiceEpgIntent(raw)) { assistantAddMessage('Vou procurar a próxima programação e criar o aviso se ela estiver disponível.', 'bot'); return; }
     if (voiceEpgBrowseIntent(raw)) { assistantAddMessage('Mostrando a programação encontrada.', 'bot'); return; }
@@ -2496,6 +2503,7 @@ function runVoiceCommand(text) {
     var raw = String(text || '').trim();
     if (runVoiceIntent(raw)) return;
     var normalized = normVoiceText(raw), q = voiceCleanQuery(raw), explicitKind = /\b(filme|filmes|movie|movies|cinema|vod|serie|series|novela|novelas|temporada|episodio|episodios|anime)\b/.test(normalized), preferred = voiceKind(raw);
+    if (ultraSessionIntent(raw)) { ultraSessionOpen(raw); return; }
     if (!q) { renderVoiceResults(preferred, raw, []); return; }
     showLoading(true);
     var order = explicitKind ? [preferred] : ['live', 'movies', 'series'];
@@ -2520,10 +2528,133 @@ function runVoiceCommand(text) {
     }
     next(0);
 }
+/* ---- UltraSession: intenção local + seleção explicável ---- */
+function ultraSessionIntent(text) {
+    var q = normVoiceText(text);
+    return /\b(sessao|sessao personalizada|monte uma sessao|montar uma sessao|escolha para mim|escolher para mim|decida por mim|tenho \d+ minutos|quero algo para assistir|programacao para mim|o que posso assistir|me indique|recomendacoes?|parecid[oa]s? com|similar a)\b/.test(q) || /\b(me avise|avise|alerta)\b.*\b(escolha|escolher|monte|montar|crie|criar)\b/.test(q) || /\b(monte|montar|crie|criar)\b.*\b(sessao|programacao|programação)\b/.test(q);
+}
+function ultraSessionParse(raw) {
+    var q = normVoiceText(raw), req = { raw: String(raw || ''), duration_minutes: 0, mode: 'mixed', mood: '', reference: '', avoid_repeats: false, family: false, alert_query: '' };
+    var alertRe = /(?:me avise|avise|alerta|me lembra|me lembre)(?:\s+quando\s+(?:comecar|começar|iniciar))?\s+(?:o|a|um|uma)?\s*([^,;]+?)(?=\s+e\s+(?:escolha|monte|crie|quero)|$)/;
+    var am = q.match(alertRe); if (am) { req.alert_query = am[1].replace(/^\s+|\s+$/g, ''); q = q.replace(alertRe, ' '); }
+    var dm = q.match(/\b(\d{1,3})\s*(?:minuto|minutos|min|m)\b/); if (dm) req.duration_minutes = Math.max(5, Math.min(480, parseInt(dm[1], 10) || 0));
+    if (!req.duration_minutes && /meia hora|trinta minutos/.test(q)) req.duration_minutes = 30;
+    if (/\b(series?|novelas?|animes?|episodios?)\b/.test(q)) req.mode = 'series'; else if (/\b(filmes?|cinema|vod)\b/.test(q)) req.mode = 'movies'; else if (/\b(canais?|tv ao vivo|ao vivo|televisao|televisão)\b/.test(q)) req.mode = 'live'; else if (/\b(radios?|rádios?|radio online)\b/.test(q)) req.mode = 'radio';
+    if (/\b(criancas?|crianças|filhos|infantil|familia|família|com meus filhos|com as criancas|com as crianças)\b/.test(q)) req.family = true;
+    req.avoid_repeats = /\b(sem repetir|nao repetir|não repetir|novo|novidade|que eu ainda nao vi|que eu ainda não vi|diferente do que assisti)\b/.test(q);
+    var ref = q.match(/(?:parecid[oa]s?\s+com|similar\s+a|igual\s+a|como)\s+(.+)$/); if (ref) req.reference = ref[1].replace(/\s+(?:sem repetir|nao repetir|não repetir|novo|novidade)\b.*$/,'').trim();
+    if (!req.reference) {
+        var clean = q.replace(/\b\d{1,3}\s*(?:minuto|minutos|min|m)\b/g, ' ').replace(/\b(meia hora|trinta minutos)\b/g, ' ').replace(/\b(sem repetir|nao repetir|não repetir|que eu ainda nao vi|que eu ainda não vi|diferente do que assisti)\b/g, ' ').replace(/\b(leve|leveza|engracado|engraçado|comedia|comédia|rir|relaxar|calmo|dormir|acao|ação|aventura|adrenalina|suspense|terror|misterio|mistério|tenso|romance|romantico|romântico|documentario|documentário|educativo|bem avaliado|mais bem avaliado|maior nota|mais assistido)\b/g, ' ');
+        req.reference = clean.replace(/\b(monte|montar|crie|criar|uma?|sessao|sessão|personalizada|escolha|escolher|decida|decidir|por mim|para mim|pra mim|para|pra|tenho|com|e|de|meus|minhas|filhos|criancas|crianças|familia|família|algo|assistir|assistindo|ver|quero|gostaria|filme|filmes|serie|series|série|séries|canal|canais|ao vivo|o que posso|me indique|recomendacoes?|recomendações?|parecida?|parecidos?|parecidas?|agora|hoje)\b/g, ' ').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
+    }
+    if (/\b(leve|leveza|engracado|engraçado|comedia|comédia|rir|relaxar|calmo|dormir)\b/.test(q)) req.mood = 'leve';
+    else if (/\b(acao|ação|aventura|adrenalina)\b/.test(q)) req.mood = 'acao';
+    else if (/\b(suspense|terror|misterio|mistério|tenso)\b/.test(q)) req.mood = 'suspense';
+    else if (/\b(romance|romantico|romântico)\b/.test(q)) req.mood = 'romance';
+    else if (/\b(documentario|documentário|aprender|educativo)\b/.test(q)) req.mood = 'educativo';
+    return req;
+}
+function ultraSessionId(kind, item) { item = item || {}; return String(kind === 'live' ? (item.stream_id || item.id || '') : kind === 'series' ? (item.series_id || item.stream_id || item.id || '') : (item.stream_id || item.id || '')); }
+function ultraSessionWasWatched(kind, id) {
+    id = String(id || ''); if (!id) return false;
+    try {
+        if (kind === 'live') { var r = recentLiveList(); for (var i = 0; i < r.length; i++) if (String(r[i].id) === id) return true; }
+        if (kind === 'movies') { var p = getProgress('movie', id); if (p && (p.pos > 5 || (p.dur > 0 && p.pos === 0))) return true; }
+        if (kind === 'series') { if (lsGet('zx_slast_' + id)) return true; }
+        var keys = kind === 'series' ? ['zx_cont_series'] : kind === 'movies' ? ['zx_cont_vod'] : [];
+        for (var k = 0; k < keys.length; k++) { var d = lsGet(keys[k]) || {}, its = d.items || []; for (var j = 0; j < its.length; j++) if (String(its[j].id) === id) return true; }
+    } catch (e) {}
+    return false;
+}
+function ultraSessionDuration(item) { item = item || {}; var v = item.duration || item.duration_secs || item.runtime || item.length || 0; if (typeof v === 'string') { var m = v.match(/(\d+)\s*(?:h|hora)/i), n = v.match(/(\d+)\s*(?:m|min)/i); if (m) return parseInt(m[1], 10) * 60 + (n ? parseInt(n[1], 10) : 0); } v = parseInt(v, 10) || 0; return v > 1000 ? Math.round(v / 60) : v; }
+function ultraSessionReason(req, kind, item, rating, duration) {
+    var text = normVoiceText([item.name, item.title, item.category_name, item.group, item.group_title].join(' ')), reasons = [];
+    if (req.mode === kind) reasons.push(kind === 'movies' ? 'filme pedido' : kind === 'series' ? 'série pedida' : 'canal pedido');
+    if (req.reference && voiceMatchScore(item, normVoiceText(req.reference), kind) > 0) reasons.push('parecido com ' + req.reference);
+    if (rating && rating.vote_average > 0) reasons.push('TMDB ' + rating.vote_average.toFixed(1));
+    if (req.mood && ((req.mood === 'leve' && /comedia|comédia|animacao|animação|familia|família|sitcom|romance/.test(text)) || (req.mood === 'acao' && /acao|ação|aventura|espionagem|super heroi|super-heroi/.test(text)) || (req.mood === 'suspense' && /terror|suspense|misterio|mistério|crime|thriller/.test(text)) || (req.mood === 'romance' && /romance|romantico|romântico|amor/.test(text)) || (req.mood === 'educativo' && /documentario|documentário|historia|história|ciencia|ciência/.test(text)))) reasons.push('combina com o clima ' + req.mood);
+    if (req.duration_minutes && duration && duration <= req.duration_minutes + 10) reasons.push('duração compatível');
+    if (inArr(S.fav[kind === 'live' ? 'live' : kind === 'series' ? 'series' : 'movie'], ultraSessionId(kind, item))) reasons.push('está nos seus favoritos');
+    return reasons.slice(0, 3).join(' · ') || 'disponível na sua lista';
+}
+function ultraSessionCandidate(req, kind, item) {
+    item = item || {}; var id = ultraSessionId(kind, item), name = item.name || item.title || (kind === 'live' ? 'Canal' : kind === 'series' ? 'Série' : 'Filme'); if (!id || !name || isAdultName(name)) return null;
+    if (req.family && (isAdultName([name, item.category_name, item.group, item.group_title].join(' ')) || (kind !== 'live' && isAdultContent(kind === 'series' ? 'series' : 'movies', id, name)))) return null;
+    if (req.avoid_repeats && ultraSessionWasWatched(kind, id)) return null;
+    var text = normVoiceText([name, item.category_name, item.group, item.group_title].join(' ')), score = 10, rating = kind === 'live' ? null : tmdbRatingFor(kind, item), duration = ultraSessionDuration(item), match = req.reference ? voiceMatchScore(item, normVoiceText(req.reference), kind) : 0;
+    if (req.mode === kind) score += 180; else if (req.mode === 'mixed') score += 20; else score -= 40;
+    if (match) score += Math.min(260, match / 3);
+    if (rating && rating.vote_average > 0) score += rating.vote_average * 18 + Math.min(30, (rating.vote_count || 0) / 1000);
+    if (req.duration_minutes && duration) score += duration <= req.duration_minutes + 10 ? 45 : duration <= req.duration_minutes + 30 ? 10 : -35;
+    if (req.mood && text.indexOf(req.mood) >= 0) score += 25;
+    if (inArr(S.fav[kind === 'live' ? 'live' : kind === 'series' ? 'series' : 'movie'], id)) score += 18;
+    if (queueHas(kind === 'movies' ? 'movies' : kind, id)) score += 12;
+    var added = parseInt(item.added || item.last_modified || item.created_at || 0, 10) || 0; if (added) score += Math.min(20, added > 10000000000 ? (Date.now() - added) < 1209600000 ? 20 : 0 : 0);
+    return { kind: kind, id: id, name: name, poster: item.stream_icon || item.cover || item.cover_big || item.icon || '', item: item, rating: rating, duration: duration, score: Math.round(score * 10) / 10, reason: ultraSessionReason(req, kind, item, rating, duration), href: kind === 'live' ? '' : kind === 'series' ? '/series/' + enc(id) : '/movies/' + enc(id) };
+}
+function ultraSessionSort(a, b) { return (b.score || 0) - (a.score || 0); }
+function ultraSessionBuild(raw) {
+    var req = ultraSessionParse(raw), kinds = req.mode === 'movies' ? ['movies'] : req.mode === 'series' ? ['series'] : req.mode === 'live' ? ['live'] : req.mode === 'radio' ? [] : ['movies', 'series', 'live'];
+    if (req.family && kinds.indexOf('live') < 0 && req.mode === 'mixed') kinds.push('live');
+    if (profKidsActive() && !profScheduleAllowed(profActive())) { renderUltraSession({ id: 'us_' + Date.now(), created_at: Date.now(), request: req, candidates: [], selected: [], status: 'draft', message: 'Este perfil infantil está fora do horário permitido.' }); return; }
+    if (profKidsActive() && profLimit(profActive()) && profileUsageSeconds() >= profLimit(profActive()) * 60) { renderUltraSession({ id: 'us_' + Date.now(), created_at: Date.now(), request: req, candidates: [], selected: [], status: 'draft', message: 'O limite diário deste perfil infantil já foi atingido.' }); return; }
+    showLoading(true); S.ultraSessionBusy = true;
+    if (!kinds.length) { S.ultraSessionBusy = false; showLoading(false); var empty = { id: 'us_' + Date.now(), created_at: Date.now(), request: req, candidates: [], selected: [], status: 'draft', message: 'Na primeira versão, o UltraSession monta sessões com canais, filmes e séries. As rádios continuam disponíveis pela tela Rádios.' }; lsSet('zx_ultrasession_last', empty); renderUltraSession(empty); return; }
+    Promise.all(kinds.map(function (kind) { return ensureCatalog(kind).then(function (cat) { var src = kidsFilterList((cat && cat.all) || []), out = []; for (var i = 0; i < src.length; i++) { var c = ultraSessionCandidate(req, kind, src[i]); if (c) out.push(c); } return { kind: kind, rows: out }; }).catch(function () { return { kind: kind, rows: [] }; }); })).then(function (groups) {
+        var jobs = []; for (var j = 0; j < groups.length; j++) if (groups[j].kind !== 'live') { groups[j].rows.sort(ultraSessionSort); jobs.push(tmdbEnrichCatalog(groups[j].kind, groups[j].rows.slice(0, 12).map(function (x) { return x.item; }), 12).catch(function () {})); }
+        return Promise.all(jobs).then(function () { var all = []; for (var g = 0; g < groups.length; g++) for (var r = 0; r < groups[g].rows.length; r++) { var n = ultraSessionCandidate(req, groups[g].kind, groups[g].rows[r].item); if (n) all.push(n); } all.sort(ultraSessionSort); return all.slice(0, 18); });
+    }).then(function (candidates) {
+        var session = { id: 'us_' + Date.now(), created_at: Date.now(), request: req, constraints: { kids_profile: profKidsActive(), schedule_allowed: profScheduleAllowed(profActive()), daily_limit_remaining: Math.max(0, profLimit(profActive()) - Math.floor(profileUsageSeconds() / 60)), adult_blocked: profKidsActive() }, candidates: candidates || [], selected: candidates && candidates.length ? [candidates[0]] : [], status: candidates && candidates.length ? 'ready' : 'draft', message: candidates && candidates.length ? '' : 'Não encontrei candidatos suficientes na lista atual. Tente falar um gênero, título ou duração diferente.' };
+        lsSet('zx_ultrasession_last', session); S.ultraSessionBusy = false; showLoading(false); renderUltraSession(session); if (req.alert_query) setTimeout(function () { voiceEpgIntent('me avise quando começar ' + req.alert_query); }, 120);
+    }).catch(function () { S.ultraSessionBusy = false; showLoading(false); renderUltraSession({ id: 'us_' + Date.now(), created_at: Date.now(), request: req, candidates: [], selected: [], status: 'draft', message: 'Não foi possível montar a sessão agora. O catálogo normal continua disponível.' }); });
+}
+
+function ultraSessionOpen(text) {
+    if (!S.server && !(S.directPlaylists || []).length) { assistantToast('Adicione uma lista antes de montar uma sessão'); go('/lists', false); return; }
+    if (text) S.ultraSessionPending = String(text); else S.ultraSessionPending = '';
+    closeAssistantPanel(); go('/session', false);
+}
+function ultraSessionStart(item) {
+    var s = lsGet('zx_ultrasession_last') || {}, p = profActive();
+    if (p && p.kids && !profScheduleAllowed(p)) { showKidsScheduleModal(); return; }
+    if (p && p.kids && profLimit(p) && profileUsageSeconds() >= profLimit(p) * 60) { showKidsLimitModal(); return; }
+    if (!item) { assistantToast('Escolha uma sugestão primeiro'); return; }
+    s.selected = [item]; s.status = 'playing'; lsSet('zx_ultrasession_last', s);
+    if (item.kind === 'live') { playViaNative({ kind: 'live', url: streamUrl('live', item.id), title: item.name, resume: 0, zxKind: 'live', zxId: item.id, name: item.name, poster: item.poster, zap: liveFullZapList(item.id) || liveZapList(item.id) }); return; }
+    if (item.kind === 'series') { go('/series/' + enc(item.id), false); return; }
+    go('/movies/' + enc(item.id), false);
+}
+function ultraSessionSwap() {
+    var s = lsGet('zx_ultrasession_last') || {}, list = s.candidates || []; if (list.length < 2) { assistantToast('Não encontrei outra sugestão agora'); return; }
+    var first = list.shift(); list.push(first); s.candidates = list; s.selected = [list[0]]; lsSet('zx_ultrasession_last', s); renderUltraSession(s);
+}
+function ultraSessionStyles() {
+    var a = S.accent || '#10b981';
+    return '<style id="zx-ultrasession-css">.zx-us-screen{position:fixed;inset:0;display:flex;flex-direction:column;overflow:hidden;background:radial-gradient(120% 100% at 50% 0%,#10251c,#06130f 48%,#030806);color:#f4fff9}.zx-us-top{display:flex;align-items:center;gap:12px;padding:14px 22px 10px;flex:none}.zx-us-top .gt-back{color:#fff;text-decoration:none;border:1px solid ' + a + '66;border-radius:11px;padding:8px 14px;background:' + a + '16}.zx-us-title{font-size:clamp(21px,2.4vw,32px);font-weight:900}.zx-us-mic{margin-left:auto;border:1px solid ' + a + '77;border-radius:11px;background:' + a + '22;color:#fff;padding:10px 15px;font-weight:800}.zx-us-mic:focus,.zx-us-form button:focus,.zx-us-action:focus,.zx-us-card:focus{outline:3px solid #fff;box-shadow:0 0 0 4px ' + a + '66}.zx-us-intro{padding:0 22px 12px;color:#b8cbc1;font-size:14px;flex:none}.zx-us-form{display:flex;gap:8px;padding:0 22px 12px;flex:none}.zx-us-form input{flex:1;min-width:0;border:1px solid ' + a + '77;border-radius:12px;background:#06130f;color:#fff;padding:12px 14px;font-size:16px}.zx-us-form button,.zx-us-action{border:1px solid ' + a + '77;border-radius:12px;background:' + a + '28;color:#fff;padding:12px 16px;font-weight:900}.zx-us-status{padding:0 22px 12px;color:#d9eee3;font-size:14px;flex:none}.zx-us-grid{flex:1;min-height:0;overflow:auto;padding:0 22px 28px;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px;align-content:start}.zx-us-card{position:relative;display:flex;flex-direction:column;min-width:0;padding:0 0 12px;border:1px solid rgba(255,255,255,.12);border-radius:15px;background:rgba(255,255,255,.055);color:#fff;text-align:left;overflow:hidden;cursor:pointer}.zx-us-card.is-selected{border-color:' + a + ';box-shadow:0 0 0 3px ' + a + '55}.zx-us-poster{width:100%;aspect-ratio:2/3;background:linear-gradient(145deg,' + a + '44,#101815) center/cover no-repeat}.zx-us-copy{padding:9px 11px 0}.zx-us-name{display:block;font-weight:900;font-size:15px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.zx-us-meta{display:block;margin-top:5px;color:#b8cbc1;font-size:12px}.zx-us-reason{display:block;margin-top:6px;color:#d9eee3;font-size:11px;line-height:1.25}.zx-us-actions{display:flex;gap:10px;flex:none;padding:10px 22px 18px}.zx-us-action{min-width:150px}.zx-us-empty{grid-column:1/-1;padding:42px 18px;text-align:center;color:#a9bdb2;font-size:17px}.zx-us-note{padding:0 22px 12px;color:#ffc86b;font-size:13px}@media(max-width:700px){.zx-us-top{padding:10px 12px 8px}.zx-us-intro,.zx-us-form,.zx-us-status,.zx-us-actions{padding-left:12px;padding-right:12px}.zx-us-grid{padding-left:12px;padding-right:12px;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:10px}.zx-us-name{font-size:13px}.zx-us-reason{font-size:10px}.zx-us-actions{gap:7px}.zx-us-action{min-width:0;flex:1;padding:10px 9px;font-size:13px}}body.zx-ff-tv .zx-us-grid{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}body.zx-ff-tv .zx-us-card{min-height:360px}body.zx-ff-tv .zx-us-name{font-size:18px}</style>';
+}
+function ultraSessionLoadPosters() { try { var els = document.querySelectorAll('.zx-us-poster[data-src]'); for (var i = 0; i < els.length; i++) (function (el) { if (el.getAttribute('data-loaded')) return; var src = el.getAttribute('data-src') || ''; if (!src) return; el.setAttribute('data-loaded', '1'); var im = new Image(); im.onload = function () { el.style.backgroundImage = "url('" + src.replace(/'/g, "\\'") + "')"; var f = el.querySelector('.pt-fallback'); if (f) f.style.display = 'none'; }; im.onerror = function () { el.removeAttribute('data-loaded'); }; im.src = src; })(els[i]); } catch (e) {} }
+function renderUltraSession(session) {
+    session = session || lsGet('zx_ultrasession_last') || null;
+    var req = session && session.request || {}, list = session && session.candidates || [], selected = session && session.selected && session.selected[0] || list[0] || null;
+    var q = req.raw || '', status = session && session.message ? session.message : (list.length ? 'Escolha uma sugestão ou diga “começar” para abrir a selecionada.' : 'Diga o que você quer viver agora.');
+    var cards = '';
+    for (var i = 0; i < list.length; i++) { var c = list[i], on = selected && c.id === selected.id && c.kind === selected.kind, rating = c.rating && c.rating.vote_average > 0 ? 'TMDB ' + c.rating.vote_average.toFixed(1) : '', meta = c.kind === 'live' ? 'Canal ao vivo' : c.kind === 'series' ? 'Série' : 'Filme'; cards += '<button type="button" class="zx-us-card' + (on ? ' is-selected' : '') + '" data-us-index="' + i + '" tabindex="0"><div class="zx-us-poster"' + (c.poster ? ' data-src="' + attr(c.poster) + '"' : '') + '><span class="pt-fallback">' + (c.kind === 'live' ? 'TV' : c.kind === 'series' ? 'SÉRIE' : 'FILME') + '</span></div><div class="zx-us-copy"><strong class="zx-us-name">' + esc(c.name) + '</strong><small class="zx-us-meta">' + meta + (rating ? ' · ' + rating : '') + (c.duration ? ' · ' + c.duration + ' min' : '') + '</small><small class="zx-us-reason">' + esc(c.reason || '') + '</small></div></button>'; }
+    var note = req.family ? '<div class="zx-us-note">Sessão familiar ativa: conteúdo adulto filtrado pelo perfil e pelo horário permitido.</div>' : '';
+    setHtml('<div class="zx-us-screen"><div class="zx-us-top"><a href="/home" class="gt-back" autofocus>← Voltar</a><strong class="zx-us-title">UltraSession</strong><button type="button" class="zx-us-mic" id="zx-us-mic">Falar intenção</button></div><div class="zx-us-intro">Não escolha apenas um título. Diga quanto tempo você tem, com quem está e que tipo de experiência deseja.</div><form class="zx-us-form" id="zx-us-form" onsubmit="return false"><input id="zx-us-input" type="text" value="' + attr(q) + '" placeholder="Ex.: tenho 40 minutos, algo leve com meus filhos" autocomplete="off"><button type="submit">Montar sessão</button></form><div class="zx-us-status" id="zx-us-status">' + esc(status) + '</div>' + note + '<div class="zx-us-grid" id="zx-us-grid">' + (cards || '<div class="zx-us-empty">Fale ou digite uma intenção para o UltraSession montar as opções disponíveis na sua lista.</div>') + '</div><div class="zx-us-actions"><button type="button" class="zx-us-action" id="zx-us-start">Começar selecionado</button><button type="button" class="zx-us-action" id="zx-us-swap">Trocar sugestão</button></div></div>' + ultraSessionStyles());
+    var form = $('zx-us-form'), input = $('zx-us-input'), mic = $('zx-us-mic'), start = $('zx-us-start'), swap = $('zx-us-swap'), grid = $('zx-us-grid');
+    if (form) form.addEventListener('submit', function (e) { e.preventDefault(); ultraSessionBuild(input ? input.value : ''); });
+    if (mic) mic.addEventListener('click', function () { S.ultraSessionVoiceMode = true; startVoiceCommand(); });
+    if (start) start.addEventListener('click', function () { ultraSessionStart((lsGet('zx_ultrasession_last') || {}).selected && (lsGet('zx_ultrasession_last') || {}).selected[0] || selected); });
+    if (swap) swap.addEventListener('click', ultraSessionSwap);
+    if (grid) grid.addEventListener('click', function (e) { var card = e.target; while (card && card !== grid && !card.getAttribute('data-us-index')) card = card.parentNode; if (!card || card === grid) return; var idx = parseInt(card.getAttribute('data-us-index'), 10), s = lsGet('zx_ultrasession_last') || {}; if (!s.candidates || !s.candidates[idx]) return; s.selected = [s.candidates[idx]]; lsSet('zx_ultrasession_last', s); renderUltraSession(s); });
+    afterRender(); ultraSessionLoadPosters(); setTimeout(ultraSessionLoadPosters, 250);
+    var pending = S.ultraSessionPending || ''; S.ultraSessionPending = '';
+    if (pending) setTimeout(function () { var inp = $('zx-us-input'); if (inp) inp.value = pending; ultraSessionBuild(pending); }, 80);
+}
 function startVoiceCommand() {
     var btn = $('zxAssistantMic') || $('zxVoiceBtn'); if (btn) { btn.className += ' is-listening'; btn.setAttribute('aria-label', 'Ouvindo'); }
     function done() { var b = $('zxVoiceBtn'); if (b) { b.className = b.className.replace(/\s*is-listening\b/g, ''); b.setAttribute('aria-label', 'Ultra Assistente — comando de voz'); } var m = $('zxAssistantMic'); if (m) { m.className = m.className.replace(/\s*is-listening\b/g, ''); m.setAttribute('aria-label', 'Falar'); } }
-    global.__voiceResult = function (text) { done(); if ($('zx-assistant-panel')) assistantSubmit(text); else runVoiceCommand(text); };
+    global.__voiceResult = function (text) { done(); if (S.ultraSessionVoiceMode) { S.ultraSessionVoiceMode = false; ultraSessionOpen(text); return; } if ($('zx-assistant-panel')) assistantSubmit(text); else runVoiceCommand(text); };
     global.__voiceError = function () { done(); if ($('zx-assistant-panel')) assistantAddMessage('Não consegui ouvir. Tente falar novamente.', 'bot'); };
     try {
         if (global.HdxNative && typeof global.HdxNative.startVoice === 'function') { global.HdxNative.startVoice(); return; }
@@ -2681,6 +2812,7 @@ function renderHome() {
         + '<a href="/lists" class="zh-tbtn">' + svg(svSrv) + '<span>Servidor</span></a>'
         + '<button type="button" class="zh-tbtn ic zh-voice" id="zxVoiceBtn" title="Ultra Assistente" aria-label="Ultra Assistente — comando de voz"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line><line x1="8" y1="22" x2="16" y2="22"></line></svg></button>'
         + '<button type="button" class="zh-tbtn ic zh-radio" id="zxRadioBtn" aria-label="Rádios online"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M4.9 4.9a10 10 0 0 0 0 14.2M19.1 4.9a10 10 0 0 1 0 14.2M2 2l20 20"></path></svg></button>'
+        + '<button type="button" class="zh-tbtn ic zh-session" id="zxSessionBtn" aria-label="UltraSession"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4"></path><path d="M12 17v4"></path><path d="m4.22 4.22 2.83 2.83"></path><path d="m16.95 16.95 2.83 2.83"></path><path d="M3 12h4"></path><path d="M17 12h4"></path><path d="m4.22 19.78 2.83-2.83"></path><path d="m16.95 7.05 2.83-2.83"></path><circle cx="12" cy="12" r="3"></circle></svg></button>'
         + '<a href="/reload" class="zh-tbtn ic">' + svg(svRel) + '</a>'
         + '<a href="/settings" class="zh-tbtn ic">' + svg(svGer) + '</a>'
         + '<a href="#" class="zh-tbtn ic zh-profbtn" id="zxProfBtn" aria-label="' + te('Perfis') + '">' + profAvatarHtml(profActive().a, 34) + '</a>'
@@ -2783,6 +2915,7 @@ function renderHome() {
         if (pb) pb.addEventListener('click', function (e) { if (e && e.preventDefault) e.preventDefault(); showProfGate('menu'); });
         var vb = document.getElementById('zxVoiceBtn'); if (vb) vb.addEventListener('click', function (e) { if (e && e.preventDefault) e.preventDefault(); closeAssistantPanel(); startVoiceCommand(); });
         var rb = document.getElementById('zxRadioBtn'); if (rb) rb.addEventListener('click', function (e) { if (e && e.preventDefault) e.preventDefault(); go('/radio'); });
+        var sb = document.getElementById('zxSessionBtn'); if (sb) sb.addEventListener('click', function (e) { if (e && e.preventDefault) e.preventDefault(); ultraSessionOpen(''); });
     } catch (e) {}
     firstRunFlow();   // 1ª abertura no Android → idioma + aviso anti-pirataria + escolha Celular x TV
     maybeProfBootGate();   // 2+ perfis → pergunta quem está assistindo (1x por abertura)
