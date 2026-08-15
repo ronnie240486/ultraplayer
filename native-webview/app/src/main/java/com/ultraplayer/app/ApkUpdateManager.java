@@ -57,6 +57,10 @@ public final class ApkUpdateManager {
                 if (!"https".equalsIgnoreCase(connection.getURL().getProtocol())) {
                     throw new IOException("O redirecionamento final não usa HTTPS.");
                 }
+                String contentType = connection.getContentType() == null ? "" : connection.getContentType().toLowerCase(java.util.Locale.US);
+                if (contentType.startsWith("text/html") || contentType.contains("text/html")) {
+                    throw new IOException("O link configurado aponta para uma página HTML, não para um APK direto. Use a URL do arquivo .apk.");
+                }
 
                 File dir = activity.getExternalFilesDir(null);
                 if (dir == null) throw new IOException("Diretório privado indisponível.");
@@ -123,6 +127,7 @@ public final class ApkUpdateManager {
         if (apk == null || !apk.isFile() || apk.length() < 4) throw new IOException("Arquivo APK vazio ou incompleto.");
         try (FileInputStream in = new FileInputStream(apk)) {
             int p = in.read(), k = in.read(), a = in.read(), b = in.read();
+            if (p == '<' || k == '!' || a == 'D' || b == 'O') throw new IOException("O link retornou uma página HTML, não um APK direto. Use a URL do arquivo .apk.");
             if (p != 'P' || k != 'K' || a != 3 || b != 4) throw new IOException("O arquivo baixado não é um APK ZIP válido.");
         }
         try (ZipFile zip = new ZipFile(apk)) {
