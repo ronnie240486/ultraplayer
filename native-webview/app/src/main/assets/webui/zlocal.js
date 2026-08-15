@@ -1709,7 +1709,7 @@ function directListModels(j) {
         var lp = list[li] || {}, lu = String(lp.playlist_url || lp.url || ''); if (!lu) continue;
         var lc = playlistToXtream(lp, 'Lista ' + (li + 1));
         var lsrv = lc ? lc.server : ''; try { if (!lsrv) { var lpu = new URL(lu); lsrv = lpu.protocol + '//' + lpu.host; } } catch (e) {}
-        available.push({ id: String(li), name: String(lp.playlist_name || lp.name || lp.title || ('Lista ' + (li + 1))), url: lu, type: String(lp.type || (lu.indexOf('get.php') >= 0 ? 'm3u_plus' : 'xtream')).toLowerCase(), server: lsrv, expire_date: listExpiryValue(lp) || expiryFromListUrl(lu) || '' });
+        available.push({ id: String(li), name: String(lp.playlist_name || lp.name || lp.title || ('Lista ' + (li + 1))), url: lu, type: String(lp.type || (lu.indexOf('get.php') >= 0 ? 'm3u_plus' : 'xtream')).toLowerCase(), server: lsrv, expire_date: listExpiryValue(lp) || expiryFromListUrl(lu) || listExpiryValue(j) || '' });
     }
     return available;
 }
@@ -1798,7 +1798,7 @@ function directResponseToState(j, mode, fallback) {
     var server = creds ? creds.server : '';
     try { if (!server) { var pu = new URL(chosenUrl); server = pu.protocol + '//' + pu.host; } } catch (e) {}
     if (!server) return null;
-    var exp = listExpiryValue(chosenInfo) || expiryFromListUrl(chosenUrl) || null, expTs = expiryTimestamp(exp);
+    var exp = listExpiryValue(chosenInfo) || expiryFromListUrl(chosenUrl) || listExpiryValue(j) || null, expTs = expiryTimestamp(exp);
     S.directAuth = true;
     S.code = mode === 'mac' ? '__mac__' : '__credentials__';
     S.user = mode === 'mac' ? String(j.mac || fallback || '') : String(fallback || j.username || '');
@@ -2452,6 +2452,7 @@ function renderHome() {
     var activeList = null;
     try { var activeLists = S.directPlaylists && S.directPlaylists.length ? S.directPlaylists : loadDirectPlaylists(), activePick = parseInt(S.listIndex || activeListIndex(), 10) || 0; activeList = activeLists[activePick] || activeLists[0] || null; } catch (e) {}
     var listRawExpiry = listExpiryValue(activeList) || expiryFromListUrl(S.playlistUrl);
+    if (!listRawExpiry && lic.exp_date) listRawExpiry = lic.exp_date;
     if (S.playlistUrl) syncActivePlaylistExpiryFromSource();
     var expTs = expiryTimestamp(listRawExpiry || lic.exp_date || info.exp_date || info.expire_date || listExpiryValue(info));
     if (!exp && expTs) { var dt = new Date(expTs * 1000); if (!isNaN(dt.getTime())) exp = p2(dt.getDate()) + '/' + p2(dt.getMonth() + 1) + '/' + dt.getFullYear(); }
