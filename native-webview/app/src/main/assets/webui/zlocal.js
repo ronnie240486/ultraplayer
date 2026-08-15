@@ -2761,7 +2761,7 @@ function homeRecommendationItems() {
             if (!id || excluded[key(d.kind, id)] || !kidsAllows(item)) continue;
             var newest = parseInt(item.added || item.last_modified || item.last_modified_at || 0, 10) || 0;
             var score = (boost[String(item.category_id)] || 0) + Math.min(8, newest > 0 ? 2 : 0);
-            out.push({ kind: d.kind, id: id, item: item, score: score, newest: newest });
+            out.push({ kind: d.kind, id: id, item: item, score: score, newest: newest, reason: (boost[String(item.category_id)] || 0) > 0 ? 'Porque você favoritou algo parecido' : newest > 0 ? 'Novidade na sua lista' : 'Sugestão para você' });
         }
     }
     out.sort(function (a, b) { return (b.score - a.score) || (b.newest - a.newest); });
@@ -2773,7 +2773,7 @@ function homeRecommendationCards(items) {
         var r = items[i], it = r.item || {}, name = it.name || it.title || (r.kind === 'movies' ? 'Filme' : 'Série');
         var poster = it.stream_icon || it.cover_big || it.cover || it.movie_image || it.poster || '', img = tmdbResize(poster), initials = name.replace(/\s+/g, ' ').trim().split(' ').slice(0, 2).map(function (x) { return x.charAt(0); }).join('').toUpperCase() || 'UP';
         var favKind = r.kind === 'series' ? 'series' : 'movie', favOn = inArr(S.fav[favKind], r.id);
-        h += '<a class="zh-poster" href="/' + r.kind + '/' + enc(r.id) + '"><div class="pt-img zh-art"' + (img ? ' data-src="' + attr(img) + '"' : '') + '><span class="zh-art-fallback">' + esc(initials) + '</span><button type="button" class="zh-fav-quick' + (favOn ? ' is-on' : '') + '" data-home-fav-kind="' + favKind + '" data-home-fav-id="' + attr(r.id) + '" data-home-fav-name="' + attr(name) + '" data-home-fav-poster="' + attr(img) + '" aria-label="' + (favOn ? 'Remover dos Favoritos' : 'Adicionar aos Favoritos') + '" title="' + (favOn ? 'Remover dos Favoritos' : 'Adicionar aos Favoritos') + '">' + (favOn ? '♥' : '♡') + '</button></div><div class="zh-cbody"><div class="zh-cyear">' + (r.kind === 'movies' ? 'Filme' : 'Série') + '</div><div class="zh-cname">' + esc(name.replace(/\s+/g, ' ').trim()) + '</div><div class="zh-cleft">Para você</div></div></a>';
+        h += '<a class="zh-poster" href="/' + r.kind + '/' + enc(r.id) + '"><div class="pt-img zh-art"' + (img ? ' data-src="' + attr(img) + '"' : '') + '><span class="zh-art-fallback">' + esc(initials) + '</span><button type="button" class="zh-fav-quick' + (favOn ? ' is-on' : '') + '" data-home-fav-kind="' + favKind + '" data-home-fav-id="' + attr(r.id) + '" data-home-fav-name="' + attr(name) + '" data-home-fav-poster="' + attr(img) + '" aria-label="' + (favOn ? 'Remover dos Favoritos' : 'Adicionar aos Favoritos') + '" title="' + (favOn ? 'Remover dos Favoritos' : 'Adicionar aos Favoritos') + '">' + (favOn ? '♥' : '♡') + '</button></div><div class="zh-cbody"><div class="zh-cyear">' + (r.kind === 'movies' ? 'Filme' : 'Série') + '</div><div class="zh-cname">' + esc(name.replace(/\s+/g, ' ').trim()) + '</div><div class="zh-cleft">' + esc(r.reason || 'Sugestão para você') + '</div></div></a>';
     }
     return h;
 }
