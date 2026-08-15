@@ -2451,14 +2451,13 @@ function renderHome() {
     // A validade vem em license.exp_date. A leitura anterior consultava
     // info.exp_date (nível errado), por isso o rodapé mostrava "Sem expiração"
     // mesmo quando check_mac.php devolvia expire_date.
-    var exp = '';
+    var exp = lic.exp_display || '';
     var activeList = null;
     try { var activeLists = S.directPlaylists && S.directPlaylists.length ? S.directPlaylists : loadDirectPlaylists(), activePick = parseInt(S.listIndex || activeListIndex(), 10) || 0; activeList = activeLists[activePick] || activeLists[0] || null; } catch (e) {}
     var listRawExpiry = listExpiryValue(activeList) || expiryFromListUrl(S.playlistUrl);
-    if (S.playlistUrl) syncActivePlaylistExpiryFromSource();
-    var expTs = expiryTimestamp(listRawExpiry || S.listExpiryTs || 0);
+    var expTs = expiryTimestamp(lic.exp_date || info.exp_date || info.expire_date || listExpiryValue(info) || listRawExpiry || S.listExpiryTs || 0);
     if (!exp && expTs) { var dt = new Date(expTs * 1000); if (!isNaN(dt.getTime())) exp = p2(dt.getDate()) + '/' + p2(dt.getMonth() + 1) + '/' + dt.getFullYear(); }
-    if (!exp) exp = 'Data da M3U não informada';
+    if (!exp) exp = 'Sem expiração';
     var mac = lic.mac || '';
     var ann = (S.branding && S.branding.announce) || null;
     var bannerHtml = '';
@@ -2567,8 +2566,8 @@ function renderHome() {
 
     var status = '<footer class="zh-status">'
         + '<span>' + te('Perfil:') + ' <b>' + esc(profName(profActive())) + '</b></span><span class="zh-bar"></span>'
-        + (S.server
-            ? '<span>Usuário: <b>' + esc(S.user) + '</b></span><span class="zh-bar"></span>' + (mac ? '<span>ID do aparelho: <b>' + esc(mac) + '</b></span><span class="zh-bar"></span>' : '') + '<span>Vencimento da lista: <b>' + esc(exp) + '</b></span>'
+ + (S.server
+            ? '<span>Usuário: <b>' + esc(S.user) + '</b></span><span class="zh-bar"></span><span>Vencimento da lista: <b>' + esc(exp) + '</b></span>'
             : '<span>Adicione uma lista em <b>Playlist</b> pra começar</span>')
         + '<span class="zh-badge">UltraPlayer</span>'
         + '</footer>';
@@ -4200,7 +4199,7 @@ function settingsStyles() {
 }
 function renderSettings() {
     var info = S.info || {}; var lic = info.license || {};
-    var exp = ''; var settingsList = null; try { var settingsLists = S.directPlaylists && S.directPlaylists.length ? S.directPlaylists : loadDirectPlaylists(), settingsPick = parseInt(S.listIndex || activeListIndex(), 10) || 0; settingsList = settingsLists[settingsPick] || settingsLists[0] || null; } catch (e) {} var settingsRawExpiry = listExpiryValue(settingsList) || expiryFromListUrl(S.playlistUrl); var expTs = expiryTimestamp(settingsRawExpiry || S.listExpiryTs || 0); if (!exp && expTs) { var dt = new Date(expTs * 1000); if (!isNaN(dt.getTime())) exp = p2(dt.getDate()) + '/' + p2(dt.getMonth() + 1) + '/' + dt.getFullYear(); } if (!exp) exp = 'Data da M3U não informada';
+    var exp = (lic.exp_display || ''); var settingsList = null; try { var settingsLists = S.directPlaylists && S.directPlaylists.length ? S.directPlaylists : loadDirectPlaylists(), settingsPick = parseInt(S.listIndex || activeListIndex(), 10) || 0; settingsList = settingsLists[settingsPick] || settingsLists[0] || null; } catch (e) {} var settingsRawExpiry = listExpiryValue(settingsList) || expiryFromListUrl(S.playlistUrl); var expTs = expiryTimestamp(lic.exp_date || info.exp_date || info.expire_date || listExpiryValue(info) || settingsRawExpiry || S.listExpiryTs || 0); if (!exp && expTs) { var dt = new Date(expTs * 1000); if (!isNaN(dt.getTime())) exp = p2(dt.getDate()) + '/' + p2(dt.getMonth() + 1) + '/' + dt.getFullYear(); } if (!exp) exp = 'Sem expiração';
     var status = info.status || '';
     // "Tela do app" (Celular x TV) — só no Android (UI empacotada com HdxNative)
     var ffMenu = nativeAvail() ? '<a href="#screen" class="sm-item" data-pane="pane-screen"><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"></rect><line x1="12" y1="18" x2="12" y2="18"></line></svg></span><span class="sm-label">Tela do app</span></a>' : '';
