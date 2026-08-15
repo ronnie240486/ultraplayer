@@ -1389,6 +1389,28 @@ function addVoiceEpgAlarm(program, channel, sid) {
     var a = epgAlarms(), key = epgAlarmKey(when, title, ch); for (var i = 0; i < a.length; i++) if (a[i].key === key) return true;
     a.push({ key: key, when: when, title: title, channel: ch, sid: parseInt(sid, 10) || 0 }); saveEpgAlarms(a); showEpgToast('Te avisaremos quando sua programação começar.', true); return true;
 }
+function renderVoiceEpgSchedule(rows, heading) {
+    rows = rows || [];
+    var h = '<div class="search-screen smart-epg-screen"><div class="search-topbar"><a href="/home" class="gt-back" autofocus>← Voltar</a><div class="search-title">Programação inteligente</div></div><div class="voice-result-query">' + esc(heading || 'Próximos programas') + '</div><div class="smart-epg-list">';
+    for (var i = 0; i < rows.length; i++) { var r = rows[i] || {}, p = r.p || {}, when = epgTimestamp(p.rawStart || p.start), armed = epgAlarmHas(when, p.title || '', r.channel || ''); h += '<div class="smart-epg-row"><div class="smart-epg-copy"><strong>' + esc(p.title || 'Programa') + '</strong><span>' + esc(r.channel || 'Canal') + ' · ' + esc(p.start || '') + '</span></div><button type="button" class="smart-epg-alarm' + (armed ? ' is-on' : '') + '" data-when="' + attr(when) + '" data-title="' + attr(p.title || '') + '" data-channel="' + attr(r.channel || '') + '" data-sid="' + attr(r.sid || '') + '" aria-label="Ativar aviso">' + (armed ? '🔔' : '🔕') + '</button></div>'; }
+    h += '</div>' + (rows.length ? '' : '<div class="zx-empty">Nenhuma programação futura encontrada.</div>') + '</div><style>.smart-epg-screen{background:var(--zx-bg,#06130f);color:var(--zx-text,#f4fff9)}.smart-epg-list{display:flex;flex-direction:column;gap:10px;overflow:auto;padding:14px 20px 30px}.smart-epg-row{display:flex;align-items:center;gap:14px;padding:14px 16px;border:1px solid rgba(16,185,129,.45);border-radius:14px;background:rgba(16,185,129,.1)}.smart-epg-copy{display:flex;flex-direction:column;gap:5px;min-width:0;flex:1}.smart-epg-copy strong{font-size:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.smart-epg-copy span{font-size:13px;color:#a8c1b4}.smart-epg-alarm{width:42px;height:42px;flex:0 0 42px;border:1px solid rgba(255,255,255,.3);border-radius:10px;background:rgba(0,0,0,.22);color:#fff;font-size:20px}.smart-epg-alarm:focus{outline:3px solid #fff;box-shadow:0 0 0 5px #10b981}.smart-epg-alarm.is-on{background:#10b98155}@media(max-width:700px){.smart-epg-list{padding:10px 12px 24px}.smart-epg-copy strong{font-size:15px}.smart-epg-copy span{font-size:11px}}</style>';
+    setHtml(h); afterRender();
+    var bs = document.querySelectorAll('.smart-epg-alarm'); for (var j = 0; j < bs.length; j++) (function (b) { b.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); toggleEpgAlarm(b); }); })(bs[j]);
+}
+function voiceEpgBrowseIntent(text) {
+    var cmd = normVoiceText(text), m = cmd.match(/(\d+)\s*(?:minutos?|mins?)/), wants = /(?:o que|qual|quais|mostre|mostrar|ver).*(?:comeca|vai comecar|programacao|passar|passando)|(?:programacao|programação).*(?:agora|hoje|proxim)|(?:proxim|proximos|proximas|comeca agora|vai comecar)/.test(cmd);
+    if (!wants || /(?:me avise|avise me|crie um aviso|programe um alarme)/.test(cmd)) return false;
+    var minutes = m ? Math.max(10, Math.min(180, parseInt(m[1], 10) || 30)) : 30, now = Date.now(), until = now + minutes * 60000;
+    assistantToast('consultando a programação');
+    ensureCatalog('live').then(function (cat) {
+        var all = kidsFilterList((cat && cat.all) || []), cache = S.epgCache || {}, found = [], jobs = [];
+        function collect(sid, channel, epg) { for (var i = 0; i < (epg || []).length; i++) { var p = epg[i] || {}, ts = epgTimestamp(p.rawStart || p.start); if (ts >= now - 60000 && ts <= until && p.title) found.push({ p: p, sid: sid, channel: channel }); } }
+        for (var sid in cache) if (cache.hasOwnProperty(sid)) { var ci = null; for (var c = 0; c < all.length; c++) if (String(all[c].stream_id) === String(sid)) { ci = all[c]; break; } collect(sid, ci && ci.name || '', cache[sid]); }
+        var channels = all.slice(0, 10); for (var k = 0; k < channels.length; k++) (function (ch) { var sid = String(ch.stream_id || ''); if (!sid) return; var work = cache[sid] ? Promise.resolve(cache[sid]) : xt('get_short_epg', '&stream_id=' + enc(sid) + '&limit=20').then(function (d) { var parsed = epgItemsFromResponse(d); cache[sid] = parsed; return parsed; }); jobs.push(work.then(function (epg) { collect(sid, ch.name || '', epg); }).catch(function () {})); })(channels[k]);
+        Promise.all(jobs).then(function () { found.sort(function (a, b) { return epgTimestamp(a.p.rawStart || a.p.start) - epgTimestamp(b.p.rawStart || b.p.start); }); var unique = [], seen = {}; for (var i = 0; i < found.length; i++) { var key = String(found[i].sid) + '|' + String(found[i].p.title) + '|' + String(found[i].p.start); if (!seen[key]) { seen[key] = 1; unique.push(found[i]); } } renderVoiceEpgSchedule(unique.slice(0, 40), 'Programas que começam nos próximos ' + minutes + ' minutos'); });
+    }).catch(function () { renderVoiceEpgSchedule([], 'Não foi possível consultar a programação agora'); });
+    return true;
+}
 function voiceEpgIntent(text) {
     var cmd = normVoiceText(text), m = cmd.match(/^(?:me avise|avise me|crie um aviso|programe um alarme)(?: quando comecar| quando iniciar| para quando comecar| para quando iniciar)?\s+(.+)$/);
     if (!m) return false;
@@ -2040,6 +2062,7 @@ function assistantSubmit(text) {
     var normalized = normVoiceText(raw);
     if (/^(o que posso assistir|me indique|recomendacoes|recomendacoes para mim|sugestoes)$/.test(normalized) || /\b(o que posso assistir|me indique algo|quero recomendacoes)\b/.test(normalized)) { assistantAddMessage(assistantQuickReply(raw), 'bot'); return; }
     if (voiceEpgIntent(raw)) { assistantAddMessage('Vou procurar a próxima programação e criar o aviso se ela estiver disponível.', 'bot'); return; }
+    if (voiceEpgBrowseIntent(raw)) { assistantAddMessage('Mostrando a programação encontrada.', 'bot'); return; }
     if (runVoiceIntent(raw)) { assistantAddMessage(assistantQuickReply(raw), 'bot'); return; }
     assistantAddMessage('Vou pesquisar isso em Canais, Filmes e Séries.', 'bot'); closeAssistantPanel(); setTimeout(function () { runVoiceCommand(raw); }, 120);
 }
@@ -2058,6 +2081,7 @@ function renderAssistantPanel() {
     try { if (inp) inp.focus(); } catch (e) {}
 }
 function runVoiceIntent(text) {
+    if (voiceEpgBrowseIntent(text)) return true;
     if (voiceEpgIntent(text)) return true;
     var cmd = normVoiceText(text).replace(/^(por favor|ultra player|ultra assistente)\s+/, '').replace(/^(abrir|abra|abre|ir para|va para|mostrar|mostre|acessar|acesse)\s+/, '').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
     var path = '', label = '';
