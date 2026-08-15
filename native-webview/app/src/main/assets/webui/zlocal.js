@@ -2001,6 +2001,16 @@ function runVoiceIntent(text) {
     else if (/^(configuracoes?|ajustes?)$/.test(cmd)) { path = '/settings'; label = 'abrindo Configurações'; }
     else if (/^(buscar|pesquisar|busca universal|buscar em tudo|pesquisar tudo)$/.test(cmd)) { path = '/search'; label = 'abrindo Busca em tudo'; }
     else if (/^(recarregar|atualizar|reload)$/.test(cmd)) { path = '/reload'; label = 'atualizando o aplicativo'; }
+    else if (/^(favoritar|favorito|adicionar aos favoritos|salvar este|guardar este|remover dos favoritos|tirar dos favoritos)$/.test(cmd)) {
+        var removeFav = /remover|tirar/.test(cmd), current = S.nativePlaying, fk = '', fid = '', fname = '', fposter = '';
+        if (current && current.zxId) { fk = current.zxKind === 'series' ? 'series' : (current.zxKind === 'live' ? 'live' : 'movie'); fid = current.zxId; fname = current.name || current.title || ''; fposter = current.poster || ''; }
+        var detailFav = $('btn-favorite');
+        if (!fid && detailFav) { fk = detailFav.getAttribute('data-kind') || 'movie'; fid = detailFav.getAttribute('data-id') || ''; fname = detailFav.getAttribute('data-name') || ''; fposter = detailFav.getAttribute('data-poster') || ''; }
+        if (!fid) { assistantToast('Abra um conteúdo para favoritar'); return true; }
+        var favList = S.fav[fk] || [], already = inArr(favList, fid), shouldToggle = removeFav ? already : !already;
+        if (shouldToggle) favToggle(fk, fid, fname, fposter);
+        updateFavCounts(); assistantToast(removeFav ? (already ? 'removido dos favoritos' : 'já não estava nos favoritos') : (already ? 'já está nos favoritos' : 'adicionado aos favoritos')); return true;
+    }
     else if (/^(pausar|pause|pare o video|pare o filme|pare a serie)$/.test(cmd)) { try { if (global.HdxNative && global.HdxNative.miniPause) global.HdxNative.miniPause(); } catch (e) {} assistantToast('vídeo pausado'); return true; }
     else if (/^(continuar|retomar|retome|dar play|play)$/.test(cmd)) { try { if (global.HdxNative && global.HdxNative.miniResume) global.HdxNative.miniResume(); } catch (e) {} assistantToast('continuando a reprodução'); return true; }
     else if (/^(tela cheia|abrir tela cheia|aumentar a tela|expandir video)$/.test(cmd)) { try { if (global.HdxNative && global.HdxNative.miniFullscreen) global.HdxNative.miniFullscreen(); } catch (e) {} assistantToast('abrindo tela cheia'); return true; }
