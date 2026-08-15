@@ -6,6 +6,7 @@ import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
+import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.speech.RecognizerIntent;
@@ -26,6 +27,7 @@ import android.widget.TextView;
 import android.widget.ImageButton;
 import android.graphics.drawable.GradientDrawable;
 
+import androidx.core.content.FileProvider;
 import androidx.media3.common.MediaItem;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.datasource.DefaultHttpDataSource;
@@ -66,6 +68,8 @@ public final class MainActivity extends Activity {
     private FrameLayout.LayoutParams miniLayoutBeforeExpand;
     private static final int VOICE_REQUEST = 7412;
     private static final int VOICE_PERMISSION_REQUEST = 7413;
+    private static final int UPDATE_INSTALL_REQUEST = 7414;
+    private java.io.File pendingInstallApk;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -385,6 +389,12 @@ public final class MainActivity extends Activity {
                     startActivity(intent);
                 } catch (Throwable ignored) { }
             });
+        }
+
+        @JavascriptInterface
+        public void updateApp(String url) {
+            final String target = url == null ? "" : url.trim();
+            runOnUiThread(() -> beginApkUpdate(target));
         }
 
         @JavascriptInterface
@@ -921,6 +931,57 @@ public final class MainActivity extends Activity {
             miniPayload = "";
             miniSourceUrl = "";
             miniTsRetryUsed = false;
+        }
+    }
+
+    private void beginApkUpdate(String url) {
+        if (url.isEmpty() || !url.toLowerCase(java.util.Locale.US).startsWith("https://")) {
+            notifyWebUpdate("error", "O painel não forneceu um link HTTPS direto para o APK.", -1);
+            return;
+        }
+        notifyWebUpdate("starting", "Baixando atualização segura…", 0);
+        ApkUpdateManager.download(this, url, new ApkUpdateManager.Callback() {
+            @Override public void onProgress(int percent) { notifyWebUpdate("progress", percent >= 0 ? "Baixando atualização…" : "Baixando atualização…", percent); }
+            @Override public void onDownloaded(java.io.File apk) { notifyWebUpdate("ready", "APK validado. Abrindo o instalador do Android…", 100); startApkInstall(apk); }
+            @Override public void onAlreadyLatest(String message) { notifyWebUpdate("latest", message, 100); }
+            @Override public void onPermissionRequired(java.io.File apk) { startApkInstall(apk); }
+            @Override public void onError(String message) { notifyWebUpdate("error", message, -1); }
+        });
+    }
+
+    private void notifyWebUpdate(String state, String message, int percent) {
+        if (webView == null) return;
+        String js = "try{if(window.__zxNativeUpdateState)window.__zxNativeUpdateState(" + JSONObject.quote(state == null ? "" : state) + "," + JSONObject.quote(message == null ? "" : message) + "," + percent + ");}catch(e){}";
+        webView.post(() -> webView.evaluateJavascript(js, null));
+    }
+
+    private void startApkInstall(java.io.File apk) {
+        if (apk == null || !apk.isFile()) { notifyWebUpdate("error", "O APK baixado não está disponível.", -1); return; }
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= 26 && !getPackageManager().canRequestPackageInstalls()) {
+                pendingInstallApk = apk;
+                notifyWebUpdate("permission", "Autorize a instalação desta fonte e volte ao UltraPlayer para continuar.", -1);
+                Intent permission = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getPackageName()));
+                startActivity(permission);
+                return;
+            }
+            Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".provider", apk);
+            Intent install = new Intent(Intent.ACTION_VIEW);
+            install.setDataAndType(uri, "application/vnd.android.package-archive");
+            install.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivityForResult(install, UPDATE_INSTALL_REQUEST);
+        } catch (Throwable error) {
+            notifyWebUpdate("error", error.getMessage() == null ? "Não foi possível abrir o instalador do Android." : error.getMessage(), -1);
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (pendingInstallApk != null && (android.os.Build.VERSION.SDK_INT < 26 || getPackageManager().canRequestPackageInstalls())) {
+            java.io.File apk = pendingInstallApk;
+            pendingInstallApk = null;
+            startApkInstall(apk);
         }
     }
 

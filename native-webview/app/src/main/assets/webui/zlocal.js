@@ -1157,8 +1157,9 @@ function applyUltraConfig(j, rerender) {
     b.message_text = '';
     b.impact_phrase = '';
     b.server_api_url = old.server_api_url || '';
-    b.apk_download_url = old.apk_download_url || '';
-    b.apk_version = old.apk_version || '';
+    b.apk_download_url = j.ultra_apk_download_url || j.ultra_apk_link || old.apk_download_url || '';
+    b.apk_version = j.ultra_apk_version || j.ultra_app_version || old.apk_version || '';
+    b.apk_version_code = j.ultra_version_code || j.ultra_apk_version_code || old.apk_version_code || 0;
     b.icons = {
         live_tv: j.ultra_icon_live_tv_url || '',
         movies: j.ultra_icon_movies_url || '',
@@ -1170,6 +1171,22 @@ function applyUltraConfig(j, rerender) {
     applyBranding(b);
     if (rerender && document.querySelector('.zx-home2')) { renderHome(); }
 }
+function appUpdateUrl() { var b = S.branding || {}, j = S.remoteConfig || {}; return String(b.apk_download_url || j.ultra_apk_download_url || j.ultra_apk_link || '').trim(); }
+function requestNativeUpdate() {
+    var url = appUpdateUrl();
+    if (!url) { var no = $('zx-app-update-status'); if (no) no.textContent = 'O painel ainda não publicou um APK para atualização.'; return; }
+    if (!global.HdxNative || !global.HdxNative.updateApp) { var na = $('zx-app-update-status'); if (na) na.textContent = 'Atualização interna disponível somente no APK Android.'; return; }
+    var btn = $('zx-app-update-btn'); if (btn) { btn.disabled = true; btn.className += ' is-loading'; }
+    var st = $('zx-app-update-status'); if (st) st.textContent = 'Iniciando verificação…';
+    try { global.HdxNative.updateApp(url); } catch (e) { if (st) st.textContent = 'Não foi possível iniciar a atualização.'; if (btn) btn.disabled = false; }
+}
+global.__zxNativeUpdateState = function (state, message, percent) {
+    var st = $('zx-app-update-status'), btn = $('zx-app-update-btn');
+    if (st) st.textContent = String(message || '');
+    if (state === 'progress' && percent >= 0 && st) st.textContent = String(message || 'Baixando atualização…') + ' ' + percent + '%';
+    if (state === 'latest' || state === 'error' || state === 'permission') { if (btn) { btn.disabled = false; btn.className = btn.className.replace(/\s*is-loading/g, ''); } }
+    if (state === 'ready' && btn) btn.className = btn.className.replace(/\s*is-loading/g, '');
+};
 function fetchUltraConfig() {
     var mac = getAppMac();
     if (!mac) return Promise.resolve(null);
@@ -1934,11 +1951,12 @@ function switchDirectListBackground(index) {
     var p = lists[pick], creds = playlistToXtream({ playlist_url: p.url, playlist_name: p.name, type: p.type }, p.name);
     if (!creds && !p.server) return false;
     var same = (parseInt(S.listIndex || activeListIndex(), 10) || 0) === pick && String(S.playlistUrl || '') === String(p.url || '');
-    S.listIndex = pick; S.server = p.server || (creds && creds.server) || S.server; S.playlistUrl = p.url; S.playlistType = p.type || 'xtream'; S.xtreamDerived = creds; S.xtreamUnavailable = false;
+    S.listIndex = pick; S.server = p.server || (creds && creds.server) || S.server; S.playlistUrl = p.url; S.playlistType = p.type || 'xtream'; S.xtreamDerived = creds; S.xtreamUnavailable = false; S._expirySourceChecked = '';
     applyActiveDirectListExpiry(lists);
     S.cat = { movies: null, series: null, live: null }; S.catPromises = {}; S.m3uCatalogPromise = null;
     try { localStorage.setItem('zx_list_index', String(pick)); } catch (e) {}
     saveCreds();
+    setTimeout(function () { syncActivePlaylistExpiryFromSource(); }, 80);
     return !same;
 }
 function showListSyncToast(message) {
@@ -1986,14 +2004,14 @@ function directResponseToState(j, mode, fallback) {
     S.pass = '__direct__'; S.did = getDid(); S.server = server;
     S.xtreamDerived = creds || playlistToXtream({ playlist_url: chosenUrl }, 'Playlist');
     S.xtreamUnavailable = false;
-    S.playlistUrl = chosenUrl; S.playlistType = String(chosen.type || (chosenUrl.indexOf('get.php') >= 0 ? 'm3u_plus' : 'xtream')).toLowerCase();
+    S.playlistUrl = chosenUrl; S.playlistType = String(chosen.type || (chosenUrl.indexOf('get.php') >= 0 ? 'm3u_plus' : 'xtream')).toLowerCase(); S._expirySourceChecked = '';
     fetchUltraConfig();
     try { localStorage.setItem('zx_direct_mode', mode); if (mode === 'mac') localStorage.setItem('zx_mac', S.user); } catch (e) {}
     // check_mac.php é usado somente para autenticação e listas. O branding
     // visual do UltraPlayer vem exclusivamente de ultra-config.
     var d = { ok: true, dns: { base: server, name: j.dns_titulo || '' }, license: { mac: j.mac || fallback || '', exp_date: expTs } };
     S.cat = { movies: null, series: null, live: null }; S.m3uCatalogPromise = null; S.xtreamUnavailable = false; S.favDirty = { live: [], movie: [], series: [] };
-    applyResolve(d, false); saveSnap(d); saveCreds(); go('/home', true); return true;
+    applyResolve(d, false); saveSnap(d); saveCreds(); go('/home', true); setTimeout(function () { syncActivePlaylistExpiryFromSource(); }, 120); return true;
 }
 function renderLogin() {
     var c = loadCreds(), savedMac = ''; try { savedMac = localStorage.getItem('zx_mac') || ''; } catch (e) {}
@@ -4730,8 +4748,10 @@ function renderSettings() {
         var parentalMenu = '<a href="#parental" class="sm-item" data-pane="pane-parental"><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></span><span class="sm-label">Controle parental</span></a>';
     var accessibilityMenu = '<a href="#accessibility" class="sm-item" data-pane="pane-accessibility"><span class="sm-ico">Aa</span><span class="sm-label">Acessibilidade</span></a>';
     var backupMenu = '<a href="#backup" class="sm-item" data-pane="pane-backup"><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 21h14"></path></svg></span><span class="sm-label">Dados locais</span></a>';
+    var updateMenu = nativeAvail() ? '<a href="#update" class="sm-item" data-pane="pane-update"><span class="sm-ico">↓</span><span class="sm-label">Atualizar aplicativo</span></a>' : '';
     var accessibilityPane = '<div class="settings-pane" id="pane-accessibility" style="display:none;"><div class="pane-title">Acessibilidade e diagnóstico</div><div class="pane-sub">Ajustes opcionais para facilitar a leitura e verificar o estado do aplicativo.</div><div class="pane-section"><div class="opt-row"><button type="button" class="opt-btn" data-a11y-set="large">Texto maior</button><button type="button" class="opt-btn" data-a11y-set="high">Alto contraste</button><button type="button" class="opt-btn" data-a11y-set="ambient">Modo ambiente</button></div><div class="pane-sub" style="margin-top:10px;">Modo ambiente: após 45 segundos sem tocar ou apertar um botão na Home, mostra relógio, data, logo e fundo. Pressione qualquer botão para voltar.</div></div><div class="pane-section"><button type="button" class="action-btn" id="zx-run-diagnostics"><div class="ab-title">Verificar conexão e catálogo</div><div class="ab-sub" id="zx-diagnostics-result">Toque ou pressione OK para executar.</div></button></div></div>';
     var backupPane = '<div class="settings-pane" id="pane-backup" style="display:none;"><div class="pane-title">Dados locais entre aparelhos</div><div class="pane-sub">O UltraPlayer mantém favoritos, progresso, Minha Fila, perfis e preferências neste aparelho. Como o backend atual não oferece sincronização desses dados, use um arquivo JSON para transportar os dados com segurança.</div><div class="pane-section"><button type="button" class="action-btn" id="zx-open-local-backup"><div class="ab-title">Exportar ou importar dados</div><div class="ab-sub">Não inclui MAC, usuário, senha, licença, playlist ou a chave TMDB.</div></button></div></div>';
+    var updatePane = nativeAvail() ? '<div class="settings-pane" id="pane-update" style="display:none;"><div class="pane-title">Atualizar aplicativo</div><div class="pane-sub">Baixa o APK diretamente do painel, valida pacote, assinatura e versionCode e abre a confirmação nativa do Android. O app não instala nada silenciosamente.</div><div class="pane-section"><button type="button" class="action-btn" id="zx-app-update-btn"><div class="ab-title">Verificar atualização</div><div class="ab-sub" id="zx-app-update-status">Aguardando comando.</div></button></div></div>' : '';
     var parentalPane = '<div class="settings-pane" id="pane-parental" style="display:none;"><div class="pane-title">Controle parental</div>'
         + '<div class="pane-sub">A senha bloqueia as categorias <strong>adultas (XXX)</strong>. Fica guardada <strong>só neste aparelho</strong> (nada no servidor). Padrão: <strong>1234</strong>.</div>'
         + '<div class="pane-section" style="max-width:340px">'
@@ -4746,7 +4766,7 @@ function renderSettings() {
         + '<div class="settings-layout"><div class="settings-menu" id="settings-menu">'
         + '<a href="#info" class="sm-item is-active" data-pane="pane-info" autofocus><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></span><span class="sm-label">Informação Geral</span></a>'
         + '<a href="#player" class="sm-item" data-pane="pane-player"><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg></span><span class="sm-label">Player de Vídeo</span></a>'
-                + ffMenu + langMenu + themeMenu + parentalMenu + accessibilityMenu + backupMenu
+                + ffMenu + langMenu + themeMenu + parentalMenu + accessibilityMenu + backupMenu + updateMenu
         + '<a href="#clear" class="sm-item" data-pane="pane-clear"><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1.5 14a2 2 0 0 1-2 1.8H8.5a2 2 0 0 1-2-1.8L5 6"></path></svg></span><span class="sm-label">Limpar Cache</span></a>'
         + '<button type="button" class="sm-item sm-logout" id="btn-logout"><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></span><span class="sm-label">Sair da conta</span></button>'
         + '</div><div class="settings-content">'
@@ -4759,7 +4779,7 @@ function renderSettings() {
         + '<div class="settings-pane" id="pane-player" style="display:none;"><div class="pane-title">Configurações do Player</div><div class="pane-sub">Vale só <strong>neste aparelho</strong>. <strong>Nativo</strong> é o padrão; <strong>HTML5</strong> oferece mais recursos.</div>'
         + '<div class="pane-section"><div class="pane-section-title">Canais ao vivo</div><div class="opt-row"><button type="button" class="opt-btn" data-player-key="zx:player:live" data-player-value="native">Nativo</button><button type="button" class="opt-btn" data-player-key="zx:player:live" data-player-value="html5">HTML5</button></div></div>'
         + '<div class="pane-section"><div class="pane-section-title">Filmes e séries (VOD)</div><div class="opt-row"><button type="button" class="opt-btn" data-player-key="zx:player:vod" data-player-value="native">Nativo</button><button type="button" class="opt-btn" data-player-key="zx:player:vod" data-player-value="html5">HTML5</button></div></div></div>'
-                + ffPane + langPane + themePane + parentalPane + accessibilityPane + backupPane
+                + ffPane + langPane + themePane + parentalPane + accessibilityPane + backupPane + updatePane
         + '<div class="settings-pane" id="pane-clear" style="display:none;"><div class="pane-title">Limpar Cache</div><div class="pane-sub">Use caso esteja tendo problemas com o app.</div><div class="pane-section"><button type="button" class="action-btn" id="btn-clear-cache"><div class="ab-title">Limpar cache local</div><div class="ab-sub">Remove dados temporários armazenados.</div></button></div></div>'
         + '</div></div></div>');
     applyHomePanelWall();
@@ -4802,6 +4822,7 @@ function wireSettings() {
     for (var ai = 0; ai < a11y.length; ai++) (function (el) { var key = el.getAttribute('data-a11y-set'); if (accessibilityEnabled(key)) el.className += ' is-on'; el.addEventListener('click', function (e) { e.preventDefault(); var on = !accessibilityEnabled(key); try { localStorage.setItem('zx_a11y_' + key, on ? '1' : '0'); } catch (err) {} el.className = el.className.replace(/\bis-on\b/g, '').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '') + (on ? ' is-on' : ''); applyAccessibility(); }); })(a11y[ai]);
     var diag = $('zx-run-diagnostics'); if (diag) diag.addEventListener('click', function (e) { e.preventDefault(); var sub = $('zx-diagnostics-result'); if (sub) sub.textContent = ultraDiagnosticsText(); });
     var backupOpen = $('zx-open-local-backup'); if (backupOpen) backupOpen.addEventListener('click', function (e) { e.preventDefault(); showLocalBackupPanel(); });
+    var updateBtn = $('zx-app-update-btn'); if (updateBtn) updateBtn.addEventListener('click', function (e) { e.preventDefault(); requestNativeUpdate(); });
     // Temas globais — a troca é imediata e fica salva no aparelho.
     (function () {
         var tb = document.querySelectorAll('[data-theme-set]'); if (!tb.length) return;
@@ -6295,7 +6316,9 @@ function boot() {
         // Não competir com a primeira pintura: a validade/listas são sincronizadas
         // depois que a Home já está navegável na TV Box.
         var syncDelay = getFormFactor() === 'tv' ? 2500 : 250;
-        setTimeout(function () { syncDirectListCache(function () { if (document.querySelector('.zx-home2')) renderHome(); }); }, syncDelay);
+        setTimeout(function () { syncDirectListCache(function () { if (document.querySelector('.zx-home2')) renderHome(); syncActivePlaylistExpiryFromSource(); }); }, syncDelay);
+    } else if (S.playlistUrl) {
+        setTimeout(function () { syncActivePlaylistExpiryFromSource(); }, 600);
     }
 }
 
