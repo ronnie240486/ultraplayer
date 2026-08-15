@@ -755,6 +755,7 @@ public final class MainActivity extends Activity {
             String title = json.optString("title", "Canal selecionado");
             if (url.isEmpty()) return;
             miniPayload = json.toString();
+            notifyWebPlaybackStarted(miniPayload);
             if (miniPlayer == null) {
                 DefaultHttpDataSource.Factory http = new DefaultHttpDataSource.Factory()
                         .setUserAgent("Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 UltraPlayer/4.31")
@@ -764,7 +765,7 @@ public final class MainActivity extends Activity {
                         .build();
                 miniPlayer.addListener(new androidx.media3.common.Player.Listener() {
                     @Override public void onPlayerError(PlaybackException error) {
-                        retryLiveAsTs();
+                        if (!retryLiveAsTs()) notifyWebPlaybackFailure(miniPayload);
                     }
                 });
                 miniPlayerView.setPlayer(miniPlayer);
@@ -785,10 +786,31 @@ public final class MainActivity extends Activity {
         } catch (Throwable ignored) { }
     }
 
-    private void retryLiveAsTs() {
-        if (miniPlayer == null || miniTsRetryUsed || miniSourceUrl == null || miniSourceUrl.isEmpty()) return;
+    private void notifyWebPlaybackStarted(String payload) {
+        if (webView == null) return;
+        try {
+            JSONObject json = new JSONObject(payload == null ? "{}" : payload);
+            String title = json.optString("title", "");
+            String js = "try{if(window.__zxNativePlaybackStarted)window.__zxNativePlaybackStarted(" + JSONObject.quote(title) + ");}catch(e){}";
+            webView.post(() -> webView.evaluateJavascript(js, null));
+        } catch (Throwable ignored) { }
+    }
+
+    private void notifyWebPlaybackFailure(String payload) {
+        if (webView == null) return;
+        try {
+            JSONObject json = new JSONObject(payload == null ? "{}" : payload);
+            String kind = json.optString("kind", "");
+            String title = json.optString("title", "");
+            String js = "try{if(window.__zxNativePlaybackFailure)window.__zxNativePlaybackFailure(" + JSONObject.quote(kind) + "," + JSONObject.quote(title) + ");}catch(e){}";
+            webView.post(() -> webView.evaluateJavascript(js, null));
+        } catch (Throwable ignored) { }
+    }
+
+    private boolean retryLiveAsTs() {
+        if (miniPlayer == null || miniTsRetryUsed || miniSourceUrl == null || miniSourceUrl.isEmpty()) return false;
         boolean livePayload = miniPayload != null && miniPayload.contains("\"kind\":\"live\"");
-        if (!livePayload) return;
+        if (!livePayload) return false;
         String lower = miniSourceUrl.toLowerCase(java.util.Locale.US);
         String fallback;
         if (lower.matches(".*\\.(m3u8|m3u)(\\?.*)?$")) {
@@ -798,13 +820,14 @@ public final class MainActivity extends Activity {
         } else {
             fallback = miniSourceUrl + (miniSourceUrl.indexOf('?') >= 0 ? "&" : "?") + "format=ts";
         }
-        if (fallback.equals(miniSourceUrl)) return;
+        if (fallback.equals(miniSourceUrl)) return false;
         miniTsRetryUsed = true;
         try {
             miniPlayer.setMediaItem(MediaItem.fromUri(fallback));
             miniPlayer.prepare();
             miniPlayer.play();
-        } catch (Throwable ignored) { }
+            return true;
+        } catch (Throwable ignored) { return false; }
     }
 
     private void openFullMiniPlayer() {

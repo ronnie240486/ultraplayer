@@ -511,7 +511,72 @@ function tmdbEnrichCatalog(kind, items, limit) {
 }
 function tmdbRatingLabel(r) { return r && r.vote_average > 0 ? 'TMDB ' + r.vote_average.toFixed(1) : ''; }
 
+/* ---- conteúdo assistido em tempo real + falha real do player ---- */
+var ZXWATCH = { title: '', mac: '', timer: null, failBusy: false };
+function stopContentHeartbeat() {
+    try { if (ZXWATCH.timer) clearInterval(ZXWATCH.timer); } catch (e) {}
+    ZXWATCH.timer = null; ZXWATCH.title = ''; ZXWATCH.mac = '';
+}
+function heartbeatContent(title, force) {
+    title = String(title || '').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
+    if (!title || title.toLowerCase() === 'undefined' || title.toLowerCase() === 'null') return;
+    var mac = getAppMac(); if (!mac) return;
+    var same = ZXWATCH.title === title && ZXWATCH.mac === mac;
+    ZXWATCH.title = title; ZXWATCH.mac = mac;
+    if (!force && same) return;
+    var url = DIRECT_PANEL_BASE + '/heartbeat?mac=' + enc(mac) + '&current_content=' + enc(title);
+    fetchT(url, 8000, { cache: 'no-store', credentials: 'omit', headers: { 'Accept': 'application/json', 'Cache-Control': 'no-cache' } }).catch(function () {});
+    if (!ZXWATCH.timer) ZXWATCH.timer = setInterval(function () { if (ZXWATCH.title) heartbeatContent(ZXWATCH.title, true); }, 60000);
+}
+function playbackActiveListNumber() {
+    try { return (parseInt(S.listIndex || activeListIndex(), 10) || 0) + 1; } catch (e) { return 1; }
+}
+function refreshAfterPanelListSwitch(message) {
+    if (message) showListSyncToast(message);
+    // O player nativo fica por cima do WebView. Recalcula a URL usando a lista
+    // escolhida pelo painel e reentrega o mesmo contexto ao ExoPlayer.
+    if (S.nativePlaying) {
+        try {
+            var np = S.nativePlaying, route = np.zxKind === 'series' ? 'series' : (np.zxKind === 'live' ? 'live' : 'movie'), ext = np.ext || S.playExt || 'mp4';
+            np.url = streamUrl(route, np.zxId, route === 'live' ? '' : ext);
+            playViaNative(np);
+        } catch (e) {}
+        return;
+    }
+    try {
+        var p = (history.state && history.state.p) || '';
+        if (p === '/live' || p === '/home' || p.indexOf('/movies') === 0 || p.indexOf('/series') === 0) go(p, true);
+    } catch (e) {}
+}
+function applyPlaybackFailover(d, mac) {
+    if (!d || d.switch_applied !== true) return Promise.resolve(false);
+    var transition = String(d.failover_transition_id || d.transition_id || '');
+    if (transition && transition === failoverLastTransition(mac)) return Promise.resolve(false);
+    return fetchDirectListsForFailover().then(function (lists) {
+        var pick = chooseFailoverList(lists, d);
+        if (pick < 0) return false;
+        var changed = switchDirectListBackground(pick);
+        if (transition) failoverSaveTransition(mac, transition);
+        refreshAfterPanelListSwitch(String(d.playlist_sync_message || d.message || ''));
+        return changed;
+    });
+}
+function reportPlaybackFailure(kind, title) {
+    if (ZXWATCH.failBusy) return;
+    var mac = getAppMac(); if (!mac) return;
+    ZXWATCH.failBusy = true;
+    var body = JSON.stringify({ mac: mac, active_list_number: playbackActiveListNumber() });
+    fetchT(DIRECT_PANEL_BASE + '/playback-failure', 9000, { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: body })
+        .then(function (r) { if (!r.ok) throw new Error('playback_failure_' + r.status); return r.json(); })
+        .then(function (d) { return applyPlaybackFailover(d, mac); })
+        .catch(function () {})
+        .then(function () { ZXWATCH.failBusy = false; });
+}
+global.__zxNativePlaybackFailure = function (kind, title) { reportPlaybackFailure(kind, title); };
+global.__zxNativePlaybackStarted = function (title) { heartbeatContent(title, true); };
+
 function setOnline(on) {
+
     if (S.online === on) return;
     S.online = on;
     try { applyOfflineHint(); } catch (e) {}   // mostra/esconde (só vale na home)
@@ -603,9 +668,8 @@ function showListNotification(n, mac) {
     document.body.appendChild(ov);
     try { document.body.classList.add('tv-modal-open'); } catch (e) {}
     var ok = $('zx-list-notification-ok');
-    if (ok) ok.addEventListener('click', function () { closeListNotification(ov); });
+    if (ok) ok.addEventListener('click', function () { closeListNotification(ov); listNotificationAck(mac, n.id); });
     try { if (ok) ok.focus(); } catch (e2) {}
-    listNotificationAck(mac, n.id);
 }
 function checkListNotifications() {
     if (S.listNotificationBusy) return;
@@ -1890,7 +1954,7 @@ function processFailoverState(d, mac) {
         var changed = switchDirectListBackground(pick);
         failoverSaveTransition(mac, transition);
         var msg = String(d.playlist_sync_message || '');
-        if (msg) showListSyncToast(msg);
+        if (changed) refreshAfterPanelListSwitch(msg); else if (msg) showListSyncToast(msg);
         return changed;
     });
 }
@@ -3895,6 +3959,7 @@ var h = '';
             lastEl = row; lastT = nowNative;
             renderEpg(row);
             if (nsid) {
+                heartbeatContent(nnm, false);
                 try {
                     if (global.HdxNative && global.HdxNative.miniPlay) global.HdxNative.miniPlay(JSON.stringify({ kind: 'live', url: streamUrl('live', nsid), title: nnm, zap: (function(){ try { var z = liveFullZapList(nsid) || liveZapList(nsid); return z ? z.list : null; } catch(e) { return null; } })(), zap_index: (function(){ try { var z = liveFullZapList(nsid) || liveZapList(nsid); return z ? z.index : 0; } catch(e) { return 0; } })() }));
                     setTimeout(syncMiniVideoBounds, 60); setTimeout(syncMiniVideoBounds, 260);
@@ -4672,16 +4737,20 @@ function tvShowOsd() {
 }
 try { document.addEventListener('keydown', function () { if (isTvUi()) tvShowOsd(); }, true); } catch (e) {}
 
-function startVideo(url, kind, onProgress, resumeAt) {
+function startVideo(url, kind, onProgress, resumeAt, title) {
     var video = $('hls-player'), loading = $('player-loading'), errorBox = $('player-error');
+    heartbeatContent(title || '', false);
     function hideLoading() { if (loading) loading.style.display = 'none'; }
     function showError() { hideLoading(); if (errorBox) errorBox.style.display = 'block'; }
+    function showRealError() { reportPlaybackFailure(kind, title || ''); showError(); }
+
     var isHls = /\.m3u8(\?|$)/i.test(url);
     var canNativeHls = !!video.canPlayType('application/vnd.apple.mpegurl');
     function tryPlay() { var p = video.play(); if (p && p.catch) p.catch(function () { try { video.muted = true; } catch (e) {} video.play().then(function () { setTimeout(function () { try { video.muted = false; } catch (e) {} }, 120); }).catch(showError); }); }
-    function playNative(onErr) { video.src = url; video.addEventListener('loadedmetadata', tryPlay); video.addEventListener('error', onErr || showError); }
-    function playHls() { if (!(global.Hls && Hls.isSupported())) return false; try { video.removeAttribute('src'); video.load(); } catch (e) {} var hls = new Hls({ enableWorker: false, lowLatencyMode: false }); hls.loadSource(url); hls.attachMedia(video); hls.on(Hls.Events.MANIFEST_PARSED, tryPlay); hls.on(Hls.Events.ERROR, function (_, d) { if (d.fatal) showError(); }); return true; }
-    function htmlPlay() { if (isHls && !canNativeHls) { if (!playHls()) playNative(); } else { playNative(function () { if (isHls && playHls()) return; showError(); }); } }
+        function playNative(onErr) { video.src = url; video.addEventListener('loadedmetadata', tryPlay); video.addEventListener('error', onErr || showRealError); }
+    function playHls() { if (!(global.Hls && Hls.isSupported())) return false; try { video.removeAttribute('src'); video.load(); } catch (e) {} var hls = new Hls({ enableWorker: false, lowLatencyMode: false }); hls.loadSource(url); hls.attachMedia(video); hls.on(Hls.Events.MANIFEST_PARSED, tryPlay); hls.on(Hls.Events.ERROR, function (_, d) { if (d.fatal) showRealError(); }); return true; }
+    function htmlPlay() { if (isHls && !canNativeHls) { if (!playHls()) playNative(); } else { playNative(function () { if (isHls && playHls()) return; showRealError(); }); } }
+
     // Motor por APARELHO (Configuracoes): 'native' (padrao) ou 'html5'. Em 'html5'
     // o usuario forcou o <video>/hls.js -> NAO usa AVPlay nem ExoPlayer.
     var eng = 'native'; try { var sv = (localStorage.getItem('zx:player:' + (kind === 'live' ? 'live' : 'vod')) || '').toLowerCase(); if (sv === 'html5' || sv === 'native') eng = sv; } catch (e) {}
@@ -4785,6 +4854,7 @@ global.__zxZapTrack = function (id) {
 };
 function playViaNative(opts) {
     if (S.ultraDenied) return;
+    heartbeatContent(opts.title || opts.name || '', false);
     S.nativePlaying = opts;                       // contexto p/ salvar local
     try {
         global.HdxNative.play(JSON.stringify({
@@ -4870,21 +4940,28 @@ global.__zxNativeDone = function (pos, dur, ended) {
             nativeRefreshDetail(p);             // marca o episódio assistido + botão do topo na hora (sem rede)
         }
     } catch (e) {}
+        stopContentHeartbeat();
     S.nativePlaying = null;
 };
 
 function renderPlayerLive(sid, query) {
+
     var qs = parseQuery(query); var name = qs.name || t('Canal');
-    if (nativeAvail()) {
+        if (nativeAvail()) {
+        heartbeatContent(name, false);
         trackRecent(sid, name, qs.logo || '', 0);
+
         playViaNative({ kind: 'live', url: streamUrl('live', sid), title: name, resume: 0, zxKind: 'live', zxId: sid, name: name, zap: liveFullZapList(sid) || liveZapList(sid) });
         history.back(); return;                   // volta pro grid; ExoPlayer abre por cima
     }
     setHtml(playerShell('live', name));
     showLoading(false);
-    startVideo(streamUrl('live', sid), 'live', null);
-    trackRecent(sid, name, qs.logo || '', 0);
+        startVideo(streamUrl('live', sid), 'live', null, 0, name);
+
+        trackRecent(sid, name, qs.logo || '', 0);
+    S.leavePlayer = function () { stopContentHeartbeat(); };
     bootPlayerScripts('live'); afterRender();
+
 }
 function renderPlayerMovie(id, query) {
     var qs = parseQuery(query);
@@ -4904,8 +4981,10 @@ function renderPlayerMovie(id, query) {
         saveProgress('movie', id, fin ? 0 : pos, dur, name, poster);
         bumpContinue('vod', id, name, poster, fin);               // "Continue Assistindo" na hora
     }
-    startVideo(streamUrl('movie', id, ext), 'vod', save, resumeAt);
-    S.leavePlayer = function () { save(false); };                 // salva ao SAIR do player (render() chama)
+        startVideo(streamUrl('movie', id, ext), 'vod', save, resumeAt, name);
+
+        S.leavePlayer = function () { save(false); stopContentHeartbeat(); };                 // salva ao SAIR do player (render() chama)
+
     bootPlayerScripts('vod'); afterRender();
 }
 function renderPlayerEpisode(seriesId, epId, query) {
@@ -4936,8 +5015,10 @@ function renderPlayerEpisode(seriesId, epId, query) {
         try { lsSet('zx_slast_' + (ps.id || seriesId), { epId: parseInt(epId, 10), ext: ext, s: curEp ? curEp.s : null, e: curEp ? curEp.e : null }); } catch (e) {}
         bumpContinue('series', ps.id || seriesId, ps.name || name, ps.poster || '', false);
     }
-    startVideo(streamUrl('series', epId, ext), 'vod', save, resumeAt);
-    S.leavePlayer = function () { save(false); };
+        startVideo(streamUrl('series', epId, ext), 'vod', save, resumeAt, name);
+
+        S.leavePlayer = function () { save(false); stopContentHeartbeat(); };
+
     // "Concluir" o episódio = marcar assistido SEM depender do currentTime (na
     // Samsung/AVPlay o currentTime no fim/transição oscila). Usado ao ir pro próximo.
     function markWatched() { save(true); }
