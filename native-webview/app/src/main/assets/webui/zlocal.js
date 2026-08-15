@@ -3015,8 +3015,9 @@ function renderHome() {
     loadHomePosters();   // capas do "Assistido Recentemente" (o lazy-loader global é escopado a grid)
     fillHomeNewest();    // catálogo já em cache → "Recém adicionados" entra ANTES do 1º paint
     try { setTimeout(fillHomeCounts, getFormFactor() === 'tv' ? 5000 : 400); } catch (e) { fillHomeCounts(); }   // contagens em FILA, começando só depois da home assentar (TV fraca)
-    fitHomeAll();               // SÍNCRONO (antes do 1º paint): sem o "abre grande e encolhe" ao voltar pra home
-    setTimeout(fitHomeAll, 160);   // segurança: re-mede depois da UI assentar (fontes etc.)
+        fitHomeAll();               // SÍNCRONO (antes do 1º paint): sem o "abre grande e encolhe" ao voltar pra home
+    scheduleHomeFit(160);        // uma segunda medição coalescida depois de fontes/imagens assentarem
+
     if (!S._homeFitBound) {   // girar/redimensionar → re-mede (zera o inline e ajusta de novo)
         S._homeFitBound = true;
         try {
@@ -3024,8 +3025,9 @@ function renderHome() {
                 applyPhoneHomeLayout();
                 if (!document.querySelector('.zh-posters')) return;
                 var ps = document.querySelectorAll('.zh-poster');
-                for (var i = 0; i < ps.length; i++) { ps[i].style.width = ''; ps[i].style.display = ''; }
-                setTimeout(fitHomeAll, 60);
+                                for (var i = 0; i < ps.length; i++) { ps[i].style.width = ''; ps[i].style.display = ''; }
+                scheduleHomeFit(60);
+
             });
         } catch (e) {}
     }
@@ -3155,13 +3157,14 @@ function homeRecommendationItems() {
     for (var cj = 0; cj < cs.length; cj++) excluded[key('series', cs[cj].id)]=1;
     var defs = [{ kind: 'movies', fav: S.fav.movie }, { kind: 'series', fav: S.fav.series }];
     for (var di = 0; di < defs.length; di++) {
-        var def = defs[di], cat = S.cat[def.kind], all = cat && cat.all || [];
+        var def = defs[di], cat = S.cat[def.kind], all = cat && cat.all || [], byId = {};
+        for (var ai = 0; ai < all.length; ai++) {
+            var indexed = all[ai], indexedId = parseInt((def.kind === 'series' ? (indexed.series_id || indexed.stream_id) : indexed.stream_id) || 0, 10);
+            if (indexedId) byId[String(indexedId)] = indexed;
+        }
         for (var fi = 0; fi < (def.fav || []).length; fi++) {
-            var fid = parseInt(def.fav[fi], 10);
-            for (var fj = 0; fj < all.length; fj++) {
-                var fitem = all[fj], fId = parseInt((def.kind === 'series' ? (fitem.series_id || fitem.stream_id) : fitem.stream_id) || 0, 10);
-                if (fId === fid && fitem.category_id != null) boost[String(fitem.category_id)] = (boost[String(fitem.category_id)] || 0) + 12;
-            }
+            var fid = parseInt(def.fav[fi], 10), fitem = byId[String(fid)];
+            if (fitem && fitem.category_id != null) boost[String(fitem.category_id)] = (boost[String(fitem.category_id)] || 0) + 12;
         }
     }
     for (var ki = 0; ki < defs.length; ki++) {
@@ -3198,26 +3201,36 @@ function fillHomeRecommendations() {
         var sec = $('zhReco'), row = $('zhRecoRow'); if (!sec || !row) return;
         var items = homeRecommendationItems(); if (!items.length) { sec.style.display = 'none'; return; }
         row.innerHTML = homeRecommendationCards(items); sec.style.display = '';
-        loadHomePosters(); try { fitHomeAll(); } catch (e) {}
+        loadHomePosters(); scheduleHomeFit(0);
     }).catch(function () {});
 }
 /* Carrega as capas da home na mão (o lazy-loader global só varre grids). */
 function loadHomePosters() {
-        try { var imgs = document.querySelectorAll('.zh-art[data-src]');
-        var firstBatch = getFormFactor() === 'tv' ? Math.min(8, imgs.length) : imgs.length;
-        for (var i = 0; i < firstBatch; i++) {
-            (function (el) {
-                if (el.getAttribute('data-loaded')) return;
-                var src = el.getAttribute('data-src'); if (!src) return;
-                el.setAttribute('data-loaded', '1');
+    try {
+        var imgs = document.querySelectorAll('.zh-art[data-src]'), pending = 0, started = 0;
+        var batch = getFormFactor() === 'tv' ? 6 : 8;
+        for (var i = 0; i < imgs.length; i++) {
+            var el = imgs[i];
+            if (el.getAttribute('data-loaded')) continue;
+            var src = el.getAttribute('data-src'); if (!src) continue;
+            pending++;
+            if (started >= batch) continue;
+            started++;
+            el.setAttribute('data-loaded', '1');
+            (function (target, imageSrc) {
                 var im = new Image();
-                im.onload = function () { el.style.backgroundImage = "url('" + src + "')"; el.className += ' is-loaded'; };
-                im.src = src;
-            })(imgs[i]);
+                im.onload = function () { target.style.backgroundImage = "url('" + imageSrc + "')"; target.className += ' is-loaded'; };
+                im.onerror = function () { target.removeAttribute('data-loaded'); };
+                im.src = imageSrc;
+            })(el, src);
         }
-        if (firstBatch < imgs.length) setTimeout(loadHomePosters, 900);
+        if (pending > started) {
+            try { if (S._homePosterTimer) clearTimeout(S._homePosterTimer); } catch (e2) {}
+            S._homePosterTimer = setTimeout(function () { S._homePosterTimer = null; loadHomePosters(); }, getFormFactor() === 'tv' ? 700 : 420);
+        } else S._homePosterTimer = null;
     } catch (e) {}
 }
+
 /* Número com separador de milhar pt-BR (5685 -> "5.685"). */
 function fmtNum(n) {
     try { return Number(n).toLocaleString(currentLang() === 'en' ? 'en-US' : 'pt-BR'); }
@@ -3319,8 +3332,9 @@ function fillHomeNewest() {
         if (!h) return;
         row.innerHTML = h;
         var sec = document.getElementById('zhNewest'); if (sec) sec.style.display = '';
-        loadHomePosters();
-        fitHomeAll();
+                loadHomePosters();
+        scheduleHomeFit(0);
+
     } catch (e) {}
 }
 /* GARANTIA de que nada sai da tela: se o conteúdo da home estourar a altura
@@ -3380,6 +3394,13 @@ function fitHomeAll() {
     fitHomePosters();
     trimHomePosters();
 }
+function scheduleHomeFit(delay) {
+    try {
+        if (S._homeFitTimer) clearTimeout(S._homeFitTimer);
+        S._homeFitTimer = setTimeout(function () { S._homeFitTimer = null; fitHomeAll(); }, Math.max(0, delay || 0));
+    } catch (e) { try { fitHomeAll(); } catch (e2) {} }
+}
+
 /* Relógio da home que se atualiza sozinho (para quando sai da home). */
 function startHomeClock() {
     try { if (S._homeClock) clearInterval(S._homeClock); } catch (e) {}
