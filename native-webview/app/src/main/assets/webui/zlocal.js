@@ -4771,24 +4771,32 @@ function goNextEpisode(seriesId, nextEp, markWatched) {
 function wireNextEpisode(seriesId, nextEp, markWatched) {
     if (!nextEp) return;
     var v = $('hls-player'); if (!v) return;
-    var shown = false;
+    var shown = false, autoTimer = null, cancelled = false;
+    function updateCount(n) { var c = document.getElementById('next-ep-count'); if (c) c.textContent = String(n); }
     function showPrompt() {
         if (shown || document.getElementById('next-ep-prompt')) { shown = true; return; }
         shown = true;
         var box = document.createElement('div'); box.id = 'next-ep-prompt';
-        box.innerHTML = '<button type="button" class="next-ep-btn" id="next-ep-btn"><span class="next-ep-cap">' + te('Próximo episódio') + '</span><span class="next-ep-lbl">S' + esc(nextEp.s) + ' E' + esc(nextEp.e) + ' ▸</span></button>';
+        box.style.cssText = 'position:absolute;right:22px;bottom:22px;z-index:80;display:flex;align-items:stretch;gap:8px;padding:10px;border-radius:14px;background:rgba(3,12,9,.94);border:1px solid rgba(16,185,129,.75);box-shadow:0 10px 35px rgba(0,0,0,.55);max-width:min(92vw,360px);';
+        box.innerHTML = '<button type="button" class="next-ep-btn" id="next-ep-btn" style="display:flex;flex-direction:column;align-items:flex-start;gap:3px;border:0;border-radius:10px;padding:10px 14px;background:#10b981;color:#04231a;font-weight:800;cursor:pointer"><span class="next-ep-cap">' + te('Próximo episódio') + '</span><span class="next-ep-lbl">S' + esc(nextEp.s) + ' E' + esc(nextEp.e) + ' · <span id="next-ep-count">em breve</span> ▸</span></button><button type="button" id="next-ep-cancel" style="border:1px solid rgba(255,255,255,.35);border-radius:10px;padding:8px 10px;background:rgba(255,255,255,.08);color:#fff;font-weight:700;cursor:pointer">' + te('Cancelar') + '</button>';
         (document.querySelector('.player-screen') || document.body).appendChild(box);
-        var b = document.getElementById('next-ep-btn');
-        if (b) { b.addEventListener('click', function (ev) { ev.preventDefault(); goNextEpisode(seriesId, nextEp, markWatched); }); setTimeout(function () { try { b.focus(); } catch (e) {} }, 40); }
+        var b = document.getElementById('next-ep-btn'), cancel = document.getElementById('next-ep-cancel');
+        if (b) { b.addEventListener('click', function (ev) { ev.preventDefault(); if (autoTimer) { clearInterval(autoTimer); autoTimer = null; } goNextEpisode(seriesId, nextEp, markWatched); }); setTimeout(function () { try { b.focus(); } catch (e) {} }, 40); }
+        if (cancel) cancel.addEventListener('click', function (ev) { ev.preventDefault(); cancelled = true; if (autoTimer) { clearInterval(autoTimer); autoTimer = null; } hidePrompt(); try { v.focus(); } catch (e) {} });
     }
     function hidePrompt() { shown = false; var p = document.getElementById('next-ep-prompt'); if (p && p.parentNode) p.parentNode.removeChild(p); }
+    function startCountdown() {
+        if (cancelled || autoTimer) return;
+        showPrompt(); var n = 10; updateCount(n);
+        autoTimer = setInterval(function () { n--; updateCount(n); if (n <= 0) { clearInterval(autoTimer); autoTimer = null; goNextEpisode(seriesId, nextEp, markWatched); } }, 1000);
+    }
     v.addEventListener('timeupdate', function () {
         var dur = v.duration, ct = v.currentTime; if (!isFinite(dur) || dur <= 0) return;
         var rem = dur - ct;
         if (rem <= 60 && rem > 2) showPrompt();
-        else if (rem > 65 && shown) hidePrompt();   // voltou (seek) → esconde
+        else if (rem > 65 && shown) hidePrompt();
     });
-    v.addEventListener('ended', function () { goNextEpisode(seriesId, nextEp, markWatched); });   // auto-avança
+    v.addEventListener('ended', function () { startCountdown(); });
 }
 function parseQuery(q) { var o = {}; if (!q) return o; var ps = q.split('&'); for (var i = 0; i < ps.length; i++) { var kv = ps[i].split('='); o[decodeURIComponent(kv[0] || '')] = decodeURIComponent((kv[1] || '').replace(/\+/g, ' ')); } return o; }
 
