@@ -987,7 +987,15 @@ var APP_THEMES = [
     { id: 'rosa', name: 'Rosa', accent: '#ec4899', bg: '#1b0b16', panel: '#35132b', text: '#fff6fc', muted: '#d4a9c2' },
     { id: 'cinza', name: 'Cinza grafite', accent: '#94a3b8', bg: '#0f1217', panel: '#202631', text: '#f8fafc', muted: '#a9b4c4' },
     { id: 'turquesa', name: 'Turquesa', accent: '#14b8a6', bg: '#061817', panel: '#0d2b29', text: '#effffc', muted: '#91c9c1' },
-    { id: 'dourado', name: 'Dourado', accent: '#fbbf24', bg: '#171105', panel: '#2b2008', text: '#fffbed', muted: '#d8bd79' }
+    { id: 'dourado', name: 'Dourado', accent: '#fbbf24', bg: '#171105', panel: '#2b2008', text: '#fffbed', muted: '#d8bd79' },
+    { id: 'laranja', name: 'Laranja', accent: '#f97316', bg: '#1b0d05', panel: '#34200d', text: '#fff7ed', muted: '#d8aa82' },
+    { id: 'roxo', name: 'Roxo real', accent: '#8b5cf6', bg: '#10091d', panel: '#24133f', text: '#faf5ff', muted: '#c4b5d9' },
+    { id: 'vinho', name: 'Vinho', accent: '#be123c', bg: '#1a070e', panel: '#35121d', text: '#fff1f2', muted: '#d8a1ad' },
+    { id: 'marinho', name: 'Azul-marinho', accent: '#3b82f6', bg: '#060d1c', panel: '#101e3a', text: '#eff6ff', muted: '#9cb6dc' },
+    { id: 'menta', name: 'Menta', accent: '#34d399', bg: '#061611', panel: '#103028', text: '#ecfdf5', muted: '#9ed0b9' },
+    { id: 'coral', name: 'Coral', accent: '#fb7185', bg: '#1d0b0d', panel: '#3b171b', text: '#fff1f2', muted: '#ddb0b5' },
+    { id: 'prata', name: 'Prata', accent: '#cbd5e1', bg: '#11151b', panel: '#29313c', text: '#f8fafc', muted: '#b2bdca' },
+    { id: 'creme', name: 'Creme', accent: '#92400e', bg: '#fffaf0', panel: '#fff1d6', text: '#29180b', muted: '#775f48' }
 ];
 function appThemeId() { try { var v = localStorage.getItem('zx_app_theme'); if (v) return v; } catch (e) {} return 'verde'; }
 function appTheme() { var id = appThemeId(), i; for (i = 0; i < APP_THEMES.length; i++) if (APP_THEMES[i].id === id) return APP_THEMES[i]; return APP_THEMES[0]; }
