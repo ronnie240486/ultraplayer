@@ -2011,6 +2011,9 @@ function runVoiceIntent(text) {
         if (shouldToggle) favToggle(fk, fid, fname, fposter);
         updateFavCounts(); assistantToast(removeFav ? (already ? 'removido dos favoritos' : 'já não estava nos favoritos') : (already ? 'já está nos favoritos' : 'adicionado aos favoritos')); return true;
     }
+    else if (/^(silenciar|silencio|mutar|mudo|sem som)$/.test(cmd)) { try { if (global.HdxNative && global.HdxNative.miniMute) global.HdxNative.miniMute(); } catch (e) {} assistantToast('som silenciado'); return true; }
+    else if (/^(aumentar volume|aumente o volume|mais volume|volume mais alto)$/.test(cmd)) { try { if (global.HdxNative && global.HdxNative.miniVolumeUp) global.HdxNative.miniVolumeUp(); } catch (e) {} assistantToast('volume aumentado'); return true; }
+    else if (/^(diminuir volume|diminua o volume|menos volume|volume mais baixo)$/.test(cmd)) { try { if (global.HdxNative && global.HdxNative.miniVolumeDown) global.HdxNative.miniVolumeDown(); } catch (e) {} assistantToast('volume diminuído'); return true; }
     else if (/^(pausar|pause|pare o video|pare o filme|pare a serie)$/.test(cmd)) { try { if (global.HdxNative && global.HdxNative.miniPause) global.HdxNative.miniPause(); } catch (e) {} assistantToast('vídeo pausado'); return true; }
     else if (/^(continuar|retomar|retome|dar play|play)$/.test(cmd)) { try { if (global.HdxNative && global.HdxNative.miniResume) global.HdxNative.miniResume(); } catch (e) {} assistantToast('continuando a reprodução'); return true; }
     else if (/^(tela cheia|abrir tela cheia|aumentar a tela|expandir video)$/.test(cmd)) { try { if (global.HdxNative && global.HdxNative.miniFullscreen) global.HdxNative.miniFullscreen(); } catch (e) {} assistantToast('abrindo tela cheia'); return true; }

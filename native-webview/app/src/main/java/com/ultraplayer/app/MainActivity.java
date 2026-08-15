@@ -61,6 +61,8 @@ public final class MainActivity extends Activity {
     private long lastRootBackAt = 0L;
     private String miniSourceUrl = "";
     private boolean miniTsRetryUsed = false;
+    private float miniVolume = 1.0f;
+    private boolean miniMuted = false;
     private FrameLayout.LayoutParams miniLayoutBeforeExpand;
     private static final int VOICE_REQUEST = 7412;
     private static final int VOICE_PERMISSION_REQUEST = 7413;
@@ -256,6 +258,42 @@ public final class MainActivity extends Activity {
         @JavascriptInterface
         public void miniResume() {
             runOnUiThread(() -> { if (miniPlayer != null) miniPlayer.play(); });
+        }
+
+        @JavascriptInterface
+        public void miniMute() {
+            runOnUiThread(() -> {
+                if (miniPlayer == null) return;
+                if (!miniMuted) {
+                    float current = miniPlayer.getVolume();
+                    if (current > 0.01f) miniVolume = current;
+                    miniMuted = true;
+                    miniPlayer.setVolume(0.0f);
+                } else {
+                    miniMuted = false;
+                    miniPlayer.setVolume(Math.max(0.05f, Math.min(1.0f, miniVolume)));
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void miniVolumeUp() {
+            runOnUiThread(() -> {
+                if (miniPlayer == null) return;
+                miniMuted = false;
+                miniVolume = Math.min(1.0f, Math.max(0.05f, miniPlayer.getVolume() + 0.10f));
+                miniPlayer.setVolume(miniVolume);
+            });
+        }
+
+        @JavascriptInterface
+        public void miniVolumeDown() {
+            runOnUiThread(() -> {
+                if (miniPlayer == null) return;
+                miniMuted = false;
+                miniVolume = Math.max(0.0f, miniPlayer.getVolume() - 0.10f);
+                miniPlayer.setVolume(miniVolume);
+            });
         }
 
         @JavascriptInterface
@@ -733,6 +771,7 @@ public final class MainActivity extends Activity {
                 miniTsRetryUsed = false;
                 miniPlayer.setMediaItem(MediaItem.fromUri(url));
                 miniPlayer.prepare();
+                miniPlayer.setVolume(miniMuted ? 0.0f : miniVolume);
                 miniPlayer.play();
                 miniContainer.setTag(url);
             } else if (!miniPlayer.isPlaying()) {
