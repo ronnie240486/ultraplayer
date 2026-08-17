@@ -174,7 +174,7 @@ public final class MainActivity extends Activity {
         box.setOrientation(android.widget.LinearLayout.VERTICAL);
         box.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
         android.widget.ImageView logo = new android.widget.ImageView(this);
-        logo.setImageResource(R.drawable.fusion_launcher);
+        logo.setImageResource(R.drawable.fusion_logo);
         logo.setScaleType(android.widget.ImageView.ScaleType.CENTER_INSIDE);
         android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(dp(150), dp(150));
         lp.bottomMargin = 18;
