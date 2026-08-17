@@ -2040,9 +2040,9 @@ function doLogin() {
     } else {
         var user = ($('login-user') ? $('login-user').value : '').trim(), pass = $('login-pass') ? $('login-pass').value : '';
         if (!user || !pass) { if (btn) btn.className = 'zx-login-btn'; loginErrShow(err, t('Preencha tudo.')); return; }
-        fallback = user; url = DIRECT_PANEL_BASE + '/login.php'; opts = { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify({ username: user, password: pass }) };
+        fallback = user; url = DIRECT_PANEL_BASE + '/login.php'; opts = { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'Cache-Control': 'no-cache' }, body: JSON.stringify({ username: user, email: user, password: pass }) };
     }
-    fetchT(url, 12000, opts).then(function (r) { return r.json(); }).then(function (j) {
+    fetchT(url, 12000, opts).then(function (r) { return r.text().then(function (text) { var j = null, ct = ''; try { ct = String((r.headers && r.headers.get('content-type')) || '').toLowerCase(); } catch (e0) {} try { j = JSON.parse(text); } catch (e) {} if (ct.indexOf('text/html') >= 0) j = { success: false, authorized: false, error: 'O painel ainda não publicou a rota JSON de usuário e senha. O endereço de login está devolvendo a tela HTML do painel.' }; else if (!j || typeof j !== 'object') j = { success: false, authorized: false, error: 'O painel respondeu HTTP ' + String(r.status || 0) + ' sem JSON.' }; j.__httpStatus = r.status; return j; }); }).then(function (j) {
         if (btn) { btn.innerHTML = te('Entrar'); btn.className = 'zx-login-btn'; }
         if (!directResponseToState(j, mode, fallback)) loginErrShow(err, j && j.error ? j.error : 'Não foi possível entrar. Confira os dados.');
     }).catch(function () { if (btn) { btn.innerHTML = te('Entrar'); btn.className = 'zx-login-btn'; } loginErrShow(err, 'Sem conexão. Tente de novo.'); });
@@ -2052,7 +2052,7 @@ function loginFieldsHtml(macVal, userVal) {
     var mv = macVal && String(macVal).indexOf('__') !== 0 ? attr(normalizeMacInput(macVal)) : '', uv = userVal && String(userVal).indexOf('__') !== 0 ? attr(userVal) : '';
     return '<div class="zx-field"><label for="login-mode">Modo de acesso</label><select id="login-mode" class="zx-in"><option value="mac">MAC (12 dígitos)</option><option value="credentials">Usuário e senha</option></select></div>'
         + '<div class="zx-field" id="login-mac-wrap"><label for="login-mac">MAC do dispositivo</label><input type="text" id="login-mac" class="zx-in" value="' + mv + '" placeholder="AA:BB:CC:DD:EE:FF" maxlength="17" autocomplete="off" autocapitalize="characters" spellcheck="false"></div>'
-        + '<div id="login-credentials-wrap" style="display:none"><div class="zx-field"><label for="login-user">Usuário</label><input type="text" id="login-user" class="zx-in" value="' + uv + '" placeholder="seu usuário" autocomplete="off" autocapitalize="none" spellcheck="false"></div>'
+        + '<div id="login-credentials-wrap" style="display:none"><div class="zx-field"><label for="login-user">Usuário ou e-mail</label><input type="text" id="login-user" class="zx-in" value="' + uv + '" placeholder="seu usuário ou e-mail" autocomplete="off" autocapitalize="none" spellcheck="false"></div>'
         + '<div class="zx-field"><label for="login-pass">Senha</label><input type="password" id="login-pass" class="zx-in" placeholder="sua senha" autocomplete="off"></div></div>'
         + '<button type="submit" class="zx-login-btn" id="login-submit">Entrar</button><div id="login-err" class="zx-login-err"></div>';
 }
@@ -6094,7 +6094,7 @@ function showProfGate(reason) {
         for (i = 0; i < cards.length; i++) (function (b) {
             b.addEventListener('click', function () {
                 var di = b.getAttribute('data-i');
-                if (di === 'novo') { parentPinGate(function () { showProfEditor(-1, function () { paint(); }); }); return; }
+                if (di === 'novo') { showProfEditor(-1, function () { paint(); }); return; }
                 var idx = parseInt(di, 10);
                 if (edit) { showProfEditor(idx, function () { paint(); }); return; }
                 profSetActive(idx);

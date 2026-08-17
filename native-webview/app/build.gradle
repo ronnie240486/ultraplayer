@@ -24,8 +24,8 @@ android {
         applicationId 'com.ultraplayer.app'
         minSdk 21
         targetSdk 28
-        versionCode 119
-        versionName '4.74.2'
+        versionCode 120
+        versionName '4.75.0'
         buildConfigField 'String', 'TMDB_API_KEY', '"' + tmdbApiKeyEscaped + '"'
     }
 
