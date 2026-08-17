@@ -1,5 +1,5 @@
 /* ============================================================
- * UltraPlayer — controlador LOCAL (app desktop/Windows).
+ * Fusion — controlador LOCAL (app desktop/Windows).
  * A interface roda no aparelho (igual Roku). O catálogo vem DIRETO do
  * IPTV (Xtream player_api.php). O painel tv.renciaapp.manus.space é usado só
  * via /api/r/* (login/licença/favoritos/progresso/recent/continue/
@@ -205,16 +205,16 @@ var I18N_EN = {
     'Já paguei': 'I already paid', 'Sair': 'Exit', 'Verificando…': 'Checking…', 'Ainda não consta': 'Not showing yet',
     'Aparelho:': 'Device:', 'Renove em': 'Renew at',
     // ---- 1º uso: idioma / celular-TV / pirataria ----
-    'Como você vai usar o UltraPlayer?': 'How will you use UltraPlayer?',
+    'Como você vai usar o Fusion?': 'How will you use Fusion?',
     'Ajusta o tamanho dos posters e ícones pra sua tela.': 'Adjusts poster and icon size for your screen.',
     'Posters menores, mais por linha': 'Smaller posters, more per row',
     'TV / Caixa': 'TV / Box', 'Posters maiores (tela grande)': 'Bigger posters (large screen)',
     'Dá pra trocar depois em Configurações.': 'You can change it later in Settings.',
     'Escolha o idioma do app.': 'Choose the app language.',
-    'Bem-vindo ao UltraPlayer': 'Welcome to UltraPlayer',
-    '<strong>O UltraPlayer é apenas um reprodutor de mídia.</strong> Ele não fornece, hospeda, vende nem inclui canais, filmes, séries ou mídia de qualquer tipo.': '<strong>UltraPlayer is only a media player.</strong> It does not provide, host, sell or include any channels, movies, series or media of any kind.',
+    'Bem-vindo ao Fusion': 'Welcome to Fusion',
+    '<strong>O Fusion é apenas um reprodutor de mídia.</strong> Ele não fornece, hospeda, vende nem inclui canais, filmes, séries ou mídia de qualquer tipo.': '<strong>Fusion is only a media player.</strong> It does not provide, host, sell or include any channels, movies, series or media of any kind.',
     'Para assistir, você adiciona <strong>a sua própria lista</strong> de um provedor que você já tem. Você é o único responsável pelas listas e fontes que adicionar.': 'To watch anything, you add <strong>your own playlist</strong> from a provider you already have. You alone are responsible for the lists and sources you add.',
-    '<strong>Pirataria é crime.</strong> Não use o UltraPlayer para acessar conteúdo que você não está autorizado a ver.': '<strong>Piracy is a crime.</strong> Do not use UltraPlayer to access content you are not authorized to view.',
+    '<strong>Pirataria é crime.</strong> Não use o Fusion para acessar conteúdo que você não está autorizado a ver.': '<strong>Piracy is a crime.</strong> Do not use Fusion to access content you are not authorized to view.',
     'Entendi e concordo': 'I understand & agree'
 };
 function arr1(x) { if (x == null) return []; return (typeof x.length === 'number' && typeof x !== 'string') ? x : [x]; }
@@ -417,7 +417,7 @@ function classifyM3UItem(item) {
     return 'live';
 }
 function m3uFallbackArt(item, kind) {
-    var raw = String((item && item.name) || 'UltraPlayer').replace(/[<>&\"]/g, ' ').replace(/\s+/g, ' ').trim();
+    var raw = String((item && item.name) || 'Fusion').replace(/[<>&\"]/g, ' ').replace(/\s+/g, ' ').trim();
     var bits = raw.split(' '), initials = '';
     for (var i = 0; i < bits.length && initials.length < 2; i++) if (bits[i]) initials += bits[i].charAt(0).toUpperCase();
     if (!initials) initials = 'UP';
@@ -603,7 +603,7 @@ function applyOfflineHint() {
         el.style.display = 'block';
 }
 
-/* ---- notificações de listas por MAC (somente UltraPlayer) ---- */
+/* ---- notificações de listas por MAC (somente Fusion) ---- */
 function listNotificationSeenKey(id) { return 'zx_list_notification_seen_' + String(id || ''); }
 function listNotificationWasSeen(id) { try { return localStorage.getItem(listNotificationSeenKey(id)) === '1'; } catch (e) { return false; } }
 function listNotificationMarkSeen(id) { try { localStorage.setItem(listNotificationSeenKey(id), '1'); } catch (e) {} }
@@ -712,7 +712,7 @@ function loadSnap() {
 }
 function snapAgeDays(s) { try { return (Date.now() - (s.ts || 0)) / 86400000; } catch (e) { return 1e9; } }
 // Quanto tempo o snapshot pode abrir o app SEM re-verificar na VPS:
-// • Aparelho GRÁTIS (DNS cadastrado/server_code) NUNCA expira no lado UltraPlayer →
+// • Aparelho GRÁTIS (DNS cadastrado/server_code) NUNCA expira no lado Fusion →
 //   numa queda longa do painel ele continua abrindo por ~anos (não derruba os
 //   10 mil de uma operadora). A licença real é a do IPTV, que é checada no play.
 // • Aparelho PAGO (URL avulsa) re-verifica em 30 dias, pra valer a cobrança.
@@ -952,13 +952,9 @@ function streamUrl(kind, id, ext) {
 
 /* ---------- branding (logo/nome/cor/fundo) ---------- */
 function brandLogoHtml() {
-    var b = S.branding || {};
-    var name = b.brand_name || b.app_title || 'UltraPlayer';
-    var remote = b.logo_url || b.logo || '';
-    var fallback = 'assets/branding/ultraplayer_launcher.png';
-    var mark = '<img src="' + attr(remote || fallback) + '" alt="UltraPlayer" class="brand-mark" draggable="false" onerror="this.onerror=null;this.src=\'' + fallback + '\'">';
-    var word = name.length >= 2 ? esc(name.slice(0, -1)) + '<span class="accent">' + esc(name.slice(-1)) + '</span>' : '<span class="accent">' + esc(name) + '</span>';
-    return '<div class="brand-lockup">' + mark + '<span class="brand-logo">' + word + '</span></div>';
+    var fallback = 'assets/branding/fusion_launcher.png';
+    var mark = '<img src="' + fallback + '" alt="Fusion" class="brand-mark" draggable="false">';
+    return '<div class="brand-lockup">' + mark + '</div>';
 }
 function homeRemoteIconHtml(key, fallbackHtml) {
     try {
@@ -1135,7 +1131,7 @@ function warmHomeCatalogs() {
 function applyBranding(b) {
     if (!b) return;
     S.branding = b;
-    var title = b.app_title || ((b.brand_name || 'UltraPlayer') + ' Player');
+    var title = b.app_title || ((b.brand_name || 'Fusion') + ' Player');
     try { document.title = title; } catch (e) {}
     var saved = appThemeId();
     if (saved && saved !== 'verde') applyAppTheme(saved, false); else applyAccent(b.accent || '#10b981');
@@ -1149,12 +1145,12 @@ function applyUltraConfig(j, rerender) {
     if (!j) return;
     if (j.registered === false || j.allowed === false) { S.ultraDenied = true; S.remoteConfig = j; return; }
     S.ultraDenied = false;
-    // Branding isolado do UltraPlayer: nenhuma chave genérica do OuroPro,
+    // Branding isolado do Fusion: nenhuma chave genérica do OuroPro,
     // check_mac ou do objeto raiz é lida aqui.
     var old = S.branding || {};
     var b = {};
-    b.app_title = 'UltraPlayer';
-    b.brand_name = 'UltraPlayer';
+    b.app_title = 'Fusion';
+    b.brand_name = 'Fusion';
     b.logo_url = j.ultra_logo_url || '';
     b.banner_url = j.ultra_banner_url || '';
     b.background_url = j.ultra_background_url || '';
@@ -1198,7 +1194,7 @@ global.__zxNativeUpdateState = function (state, message, percent) {
 function fetchUltraConfig() {
     var mac = getAppMac();
     if (!mac) return Promise.resolve(null);
-    // Única fonte de branding do UltraPlayer: /api/v5/ultra-config.
+    // Única fonte de branding do Fusion: /api/v5/ultra-config.
     // Remove a configuração antiga e não usa fallback visual cacheado: se o
     // painel mudou a imagem, a próxima abertura deve refletir imediatamente.
     try { localStorage.removeItem('zx_ultra_config'); } catch (e) {}
@@ -1879,7 +1875,7 @@ function renderMacActivation() {
     var copied = 'MAC copiado';
     setHtml('<div class="zx-login-screen"><div class="zx-login-card zx-mac-activation">'
         + '<div class="zx-login-logo">' + brandLogoHtml() + '</div>'
-        + '<h1 class="zx-login-h1">Ative seu UltraPlayer</h1>'
+        + '<h1 class="zx-login-h1">Ative seu Fusion</h1>'
         + '<div class="zx-login-sub">Copie este MAC e cadastre a lista no painel.</div>'
         + '<div class="zx-mac-value" id="zx-mac-value">' + esc(mac) + '</div>'
         + '<button type="button" class="zx-login-btn" id="zx-copy-mac">Copiar MAC</button>'
@@ -2016,7 +2012,7 @@ function directResponseToState(j, mode, fallback) {
     fetchUltraConfig();
     try { localStorage.setItem('zx_direct_mode', mode); if (mode === 'mac') localStorage.setItem('zx_mac', S.user); } catch (e) {}
     // check_mac.php é usado somente para autenticação e listas. O branding
-    // visual do UltraPlayer vem exclusivamente de ultra-config.
+    // visual do Fusion vem exclusivamente de ultra-config.
     var d = { ok: true, dns: { base: server, name: j.dns_titulo || '' }, license: { mac: j.mac || fallback || '', exp_date: expTs } };
     S.cat = { movies: null, series: null, live: null }; S.m3uCatalogPromise = null; S.xtreamUnavailable = false; S.favDirty = { live: [], movie: [], series: [] };
     applyResolve(d, false); saveSnap(d); saveCreds(); go('/home', true); setTimeout(function () { syncActivePlaylistExpiryFromSource(); }, 120); return true;
@@ -2025,7 +2021,7 @@ function renderLogin() {
     var c = loadCreds(), savedMac = ''; try { savedMac = localStorage.getItem('zx_mac') || ''; } catch (e) {}
     setHtml('<div class="zx-login-screen"><form class="zx-login-card" id="login-form" onsubmit="return false">'
         + '<div class="zx-login-logo">' + brandLogoHtml() + '</div>'
-        + '<h1 class="zx-login-h1">UltraPlayer</h1>'
+        + '<h1 class="zx-login-h1">Fusion</h1>'
         + '<div class="zx-login-sub">Escolha MAC ou usuário e senha.</div>'
         + loginFieldsHtml(savedMac || (c && c.user), c && c.user)
         + '</form></div>' + loginFormStyles());
@@ -2194,7 +2190,7 @@ function applyResolve(d, fromCache) {
     S.dnsName = (d.dns && typeof d.dns.name === 'string') ? d.dns.name.replace(/^\s+|\s+$/g, '') : '';
     S.info = d;
     try { global.__DNS = String((d.dns && (d.dns.host + ':' + d.dns.port)) || '0'); } catch (e) {}
-    // O resolve de playlist não fornece branding do UltraPlayer. O branding é
+    // O resolve de playlist não fornece branding do Fusion. O branding é
     // aplicado exclusivamente pela resposta ultra-config.
     fetchUltraConfig();
     // Favoritos/continue/recentes são LOCAIS agora (modelo HDX) — o painel NÃO
@@ -3001,13 +2997,13 @@ function renderHome() {
  + (S.server
             ? '<span>Usuário: <b>' + esc(S.user) + '</b></span><span class="zh-bar"></span><span>Vencimento da lista: <b>' + esc(exp) + '</b></span>'
             : '<span>Adicione uma lista em <b>Playlist</b> pra começar</span>')
-        + '<span class="zh-badge">UltraPlayer</span>'
+        + '<span class="zh-badge">Fusion</span>'
         + '</footer>';
 
     // announceStyles: SEM ele a faixa/pop-up de aviso do painel renderiza CRUA no
     // canto (o redesign da home tinha deixado a função órfã — bug 19/07).
     var mobileHomeClass = getFormFactor() === 'mobile' ? ' zx-mobile' : '';
-    setHtml('<div class="zx-home2' + mobileHomeClass + '"><div class="zx-panel-wall" aria-hidden="true"></div>' + homeRemoteBannerHtml() + bannerHtml + '<div class="zh-amb"></div><div class="zh-wm" aria-hidden="true">ULTRA</div><div class="zh-ui">'
+    setHtml('<div class="zx-home2' + mobileHomeClass + '"><div class="zx-panel-wall" aria-hidden="true"></div>' + homeRemoteBannerHtml() + bannerHtml + '<div class="zh-amb"></div><div class="zh-wm" aria-hidden="true">FUSION</div><div class="zh-ui">'
         + top + nav + recent + recommendations + status + '</div>' + popHtml + '</div>' + homeStyles(ac) + announceStyles(ac));
     applyHomePanelWall();
     applyPhoneHomeLayout();
@@ -3664,7 +3660,7 @@ function wireAnnounce(ann) {
    Bug corrigido: o tile "Favoritos" da home ia pra /favorites = renderSection
    ('movies',...) e mostrava SÓ favoritos de filme. Agora junta os 3 tipos numa
    grade só; cada tile roteia certo (filme→detalhe, série→detalhe, canal→toca). */
-/* Padrão visual (degradê + marca d'água ULTRA + pill Voltar verde) pras telas
+/* Padrão visual (degradê + marca d'água FUSION + pill Voltar verde) pras telas
    simples: FAVORITOS e LISTAS/Playlist. Injetado no setHtml de cada uma. */
 function flatStyles() {
     var a = S.accent || '#10b981';
@@ -3920,7 +3916,7 @@ function findCat(cat, id) { for (var i = 0; i < cat.cats.length; i++) if (String
 
 /* ---- SEÇÃO LIVE (lista + EPG + busca inline) ---- */
 /* Visual novo das seções TV AO VIVO + FILMES + SÉRIES (Android teste): mesmo
-   padrão da home — fundo em degradê + marca d'água ULTRA, pills "vidro" verde e
+   padrão da home — fundo em degradê + marca d'água FUSION, pills "vidro" verde e
    foco em ANEL verde (acabou o fundo branco estourado). Os seletores de canal/
    EPG só casam na tela de canais; nas de VOD ficam inertes. O <style> vai no
    setHtml de cada tela, então NÃO vaza pras outras plataformas. */
@@ -4655,7 +4651,7 @@ function lazyGrid(grid) {
 
 /* ---- SETTINGS ---- */
 /* Redesign das Configurações (só Android teste): mesmo visual da home nova —
-   fundo em degradê + marca d'água ULTRA, itens "vidro" verde, foco SEMPRE anel
+   fundo em degradê + marca d'água FUSION, itens "vidro" verde, foco SEMPRE anel
    verde (nada de fundo branco) e "Sair da conta" NEUTRO com tom vermelho de
    perigo (antes tinha borda verde permanente = parecia selecionado). */
 function settingsStyles() {
@@ -4723,16 +4719,16 @@ function localBackupPayload() {
             data[k] = localStorage.getItem(k);
         }
     } catch (e) {}
-    return { app: 'UltraPlayer', format: 1, created_at: new Date().toISOString(), profile: profName(profActive()), keys: data, skipped: skipped };
+    return { app: 'Fusion', format: 1, created_at: new Date().toISOString(), profile: profName(profActive()), keys: data, skipped: skipped };
 }
 function localBackupDownload() {
     var payload = localBackupPayload(), text = JSON.stringify(payload, null, 2), blob = new Blob([text], { type: 'application/json;charset=utf-8' }), url = URL.createObjectURL(blob), a = document.createElement('a');
-    a.href = url; a.download = 'ultraplayer-backup-' + new Date().toISOString().slice(0, 10) + '.json'; document.body.appendChild(a); a.click(); setTimeout(function () { try { document.body.removeChild(a); URL.revokeObjectURL(url); } catch (e) {} }, 300);
+    a.href = url; a.download = 'fusion-backup-' + new Date().toISOString().slice(0, 10) + '.json'; document.body.appendChild(a); a.click(); setTimeout(function () { try { document.body.removeChild(a); URL.revokeObjectURL(url); } catch (e) {} }, 300);
 }
 function localBackupApply(text) {
     var d;
     try { d = JSON.parse(text); } catch (e) { return { ok: false, msg: 'Arquivo JSON inválido.' }; }
-    if (!d || d.app !== 'UltraPlayer' || d.format !== 1 || !d.keys || typeof d.keys !== 'object') return { ok: false, msg: 'Este arquivo não é um backup do UltraPlayer.' };
+    if (!d || (d.app !== 'Fusion' && d.app !== 'UltraPlayer') || d.format !== 1 || !d.keys || typeof d.keys !== 'object') return { ok: false, msg: 'Este arquivo não é um backup do Fusion.' };
     var n = 0;
     try { for (var k in d.keys) if (d.keys.hasOwnProperty(k) && localBackupKeyAllowed(k)) { localStorage.setItem(k, String(d.keys[k] == null ? '' : d.keys[k])); n++; } } catch (e) { return { ok: false, msg: 'Não foi possível restaurar o backup.' }; }
     try { S.profNs = profActive().ns; loadFav(); } catch (e) {}
@@ -4779,7 +4775,7 @@ function renderSettings() {
     var backupMenu = '<a href="#backup" class="sm-item" data-pane="pane-backup"><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 21h14"></path></svg></span><span class="sm-label">Dados locais</span></a>';
     var updateMenu = nativeAvail() ? '<a href="#update" class="sm-item" data-pane="pane-update"><span class="sm-ico">↓</span><span class="sm-label">Atualizar aplicativo</span></a>' : '';
     var accessibilityPane = '<div class="settings-pane" id="pane-accessibility" style="display:none;"><div class="pane-title">Acessibilidade e diagnóstico</div><div class="pane-sub">Ajustes opcionais para facilitar a leitura e verificar o estado do aplicativo.</div><div class="pane-section"><div class="opt-row"><button type="button" class="opt-btn" data-a11y-set="large">Texto maior</button><button type="button" class="opt-btn" data-a11y-set="high">Alto contraste</button><button type="button" class="opt-btn" data-a11y-set="ambient">Modo ambiente</button></div><div class="pane-sub" style="margin-top:10px;">Modo ambiente: após 45 segundos sem tocar ou apertar um botão na Home, mostra relógio, data, logo e fundo. Pressione qualquer botão para voltar.</div></div><div class="pane-section"><button type="button" class="action-btn" id="zx-run-diagnostics"><div class="ab-title">Verificar conexão e catálogo</div><div class="ab-sub" id="zx-diagnostics-result">Toque ou pressione OK para executar.</div></button></div></div>';
-    var backupPane = '<div class="settings-pane" id="pane-backup" style="display:none;"><div class="pane-title">Dados locais entre aparelhos</div><div class="pane-sub">O UltraPlayer mantém favoritos, progresso, Minha Fila, perfis e preferências neste aparelho. Como o backend atual não oferece sincronização desses dados, use um arquivo JSON para transportar os dados com segurança.</div><div class="pane-section"><button type="button" class="action-btn" id="zx-open-local-backup"><div class="ab-title">Exportar ou importar dados</div><div class="ab-sub">Não inclui MAC, usuário, senha, licença, playlist ou a chave TMDB.</div></button></div></div>';
+    var backupPane = '<div class="settings-pane" id="pane-backup" style="display:none;"><div class="pane-title">Dados locais entre aparelhos</div><div class="pane-sub">O Fusion mantém favoritos, progresso, Minha Fila, perfis e preferências neste aparelho. Como o backend atual não oferece sincronização desses dados, use um arquivo JSON para transportar os dados com segurança.</div><div class="pane-section"><button type="button" class="action-btn" id="zx-open-local-backup"><div class="ab-title">Exportar ou importar dados</div><div class="ab-sub">Não inclui MAC, usuário, senha, licença, playlist ou a chave TMDB.</div></button></div></div>';
     var updatePane = nativeAvail() ? '<div class="settings-pane" id="pane-update" style="display:none;"><div class="pane-title">Atualizar aplicativo</div><div class="pane-sub">Baixa o APK diretamente do painel, valida pacote, assinatura e versionCode e abre a confirmação nativa do Android. O app não instala nada silenciosamente.</div><div class="pane-section"><button type="button" class="action-btn" id="zx-app-update-btn"><div class="ab-title">Verificar atualização</div><div class="ab-sub" id="zx-app-update-status">Aguardando comando.</div></button></div></div>' : '';
     var parentalPane = '<div class="settings-pane" id="pane-parental" style="display:none;"><div class="pane-title">Controle parental</div>'
         + '<div class="pane-sub">A senha bloqueia as categorias <strong>adultas (XXX)</strong>. Fica guardada <strong>só neste aparelho</strong> (nada no servidor). Padrão: <strong>1234</strong>.</div>'
@@ -4791,7 +4787,7 @@ function renderSettings() {
         + '<button type="button" class="action-btn" id="zx-pin-save"><div class="ab-title">Salvar nova senha</div></button>'
         + '</div></div>';
     setHtml(settingsStyles() + '<div class="settings-screen"><div class="zx-settings-wall" aria-hidden="true"></div><a href="/home" class="settings-back">← Voltar</a>'
-        + '<div class="settings-header"><h1>Configurações</h1><div class="settings-sub">' + te('Personalize o seu ') + esc((S.branding && (S.branding.app_title)) || 'UltraPlayer') + '</div></div>'
+        + '<div class="settings-header"><h1>Configurações</h1><div class="settings-sub">' + te('Personalize o seu ') + esc((S.branding && (S.branding.app_title)) || 'Fusion') + '</div></div>'
         + '<div class="settings-layout"><div class="settings-menu" id="settings-menu">'
         + '<a href="#info" class="sm-item is-active" data-pane="pane-info" autofocus><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></span><span class="sm-label">Informação Geral</span></a>'
         + '<a href="#player" class="sm-item" data-pane="pane-player"><span class="sm-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg></span><span class="sm-label">Player de Vídeo</span></a>'
@@ -4983,9 +4979,9 @@ function startAvplay(video, url, kind, hideLoading, showError, fallback, resumeA
         });
 
         av.open(url);
-        // UA da marca no stream Samsung: o IPTV identifica como UltraPlayer.
+        // UA da marca no stream Samsung: o IPTV identifica como Fusion.
         // Tem que vir DEPOIS do open() e ANTES do prepareAsync().
-        try { av.setStreamingProperty('USER_AGENT', 'UltraPlayer/2.7'); } catch (e) {}
+        try { av.setStreamingProperty('USER_AGENT', 'Fusion/2.7'); } catch (e) {}
         try { av.setDisplayRect(0, 0, 1920, 1080); } catch (e) {}
         try { av.setDisplayMethod('PLAYER_DISPLAY_MODE_FULL_SCREEN'); } catch (e) {}
         av.prepareAsync(function () {
@@ -5741,11 +5737,11 @@ function showPiracyNotice() {
     var ov = document.createElement('div'); ov.id = 'zx-pir-ask'; ov.className = 'zx-ff-ask tv-modal';
     try { document.body.classList.add('tv-modal-open'); } catch (e) {}   // PRENDE o foco no modal (setas não escapam pro fundo)
     ov.innerHTML = '<div class="zx-ffa-card zx-pir-card"><div class="zx-ffa-logo">' + brandLogoHtml() + '</div>'
-        + '<div class="zx-ffa-title">' + te('Bem-vindo ao UltraPlayer') + '</div>'
+        + '<div class="zx-ffa-title">' + te('Bem-vindo ao Fusion') + '</div>'
         + '<div class="zx-pir-body">'
-        + '<p>' + t('<strong>O UltraPlayer é apenas um reprodutor de mídia.</strong> Ele não fornece, hospeda, vende nem inclui canais, filmes, séries ou mídia de qualquer tipo.') + '</p>'
+        + '<p>' + t('<strong>O Fusion é apenas um reprodutor de mídia.</strong> Ele não fornece, hospeda, vende nem inclui canais, filmes, séries ou mídia de qualquer tipo.') + '</p>'
         + '<p>' + t('Para assistir, você adiciona <strong>a sua própria lista</strong> de um provedor que você já tem. Você é o único responsável pelas listas e fontes que adicionar.') + '</p>'
-        + '<p>' + t('<strong>Pirataria é crime.</strong> Não use o UltraPlayer para acessar conteúdo que você não está autorizado a ver.') + '</p>'
+        + '<p>' + t('<strong>Pirataria é crime.</strong> Não use o Fusion para acessar conteúdo que você não está autorizado a ver.') + '</p>'
         + '</div>'
         + '<button type="button" class="zx-pir-ok" id="zxPirOk" data-modal-ok>' + te('Entendi e concordo') + '</button></div>';
     document.body.appendChild(ov);
@@ -5818,7 +5814,7 @@ function maybeAskFormFactor() {
     var ov = document.createElement('div'); ov.id = 'zx-ff-ask'; ov.className = 'zx-ff-ask tv-modal';
     try { document.body.classList.add('tv-modal-open'); } catch (e) {}   // PRENDE o foco no modal
     ov.innerHTML = '<div class="zx-ffa-card"><div class="zx-ffa-logo">' + brandLogoHtml() + '</div>'
-        + '<div class="zx-ffa-title">' + te('Como você vai usar o UltraPlayer?') + '</div>'
+        + '<div class="zx-ffa-title">' + te('Como você vai usar o Fusion?') + '</div>'
         + '<div class="zx-ffa-sub">' + te('Ajusta o tamanho dos posters e ícones pra sua tela.') + '</div>'
         + '<div class="zx-ffa-opts">'
         + '<button type="button" class="zx-ffa-opt" data-ff="mobile"><div class="zx-ffa-emoji">📱</div><div class="zx-ffa-opt-t">' + te('Celular') + '</div><div class="zx-ffa-opt-d">' + te('Posters menores, mais por linha') + '</div></button>'
@@ -5976,7 +5972,7 @@ function profBindFit(ov) {
 function profIntroSeen() { try { return localStorage.getItem('zx_prof_intro') === '1'; } catch (e) { return false; } }
 function profIntroMark() { try { localStorage.setItem('zx_prof_intro', '1'); } catch (e) {} }
 
-/* ---- 12 avatares ilustrados UltraPlayer, quadrados e arredondados ---- */
+/* ---- 12 avatares ilustrados Fusion, quadrados e arredondados ---- */
 var PROF_AVS = [
     'assets/profiles/avatar_01_cyber_hero.jpg',
     'assets/profiles/avatar_02_mage.jpg',

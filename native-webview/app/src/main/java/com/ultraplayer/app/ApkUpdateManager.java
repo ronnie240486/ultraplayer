@@ -51,7 +51,7 @@ public final class ApkUpdateManager {
                 connection.setRequestProperty("Accept", "application/vnd.android.package-archive");
                 connection.setRequestProperty("Cache-Control", "no-cache, no-store");
                 connection.setRequestProperty("Pragma", "no-cache");
-                connection.setRequestProperty("User-Agent", "UltraPlayer-Updater/1.0");
+                connection.setRequestProperty("User-Agent", "Fusion-Updater/1.0");
                 connection.connect();
                 if (connection.getResponseCode() < 200 || connection.getResponseCode() >= 300) {
                     throw new IOException("O servidor respondeu HTTP " + connection.getResponseCode() + ".");
@@ -67,8 +67,8 @@ public final class ApkUpdateManager {
                 File dir = activity.getExternalFilesDir(null);
                 if (dir == null) throw new IOException("Diretório privado indisponível.");
                 if (!dir.exists() && !dir.mkdirs()) throw new IOException("Não foi possível criar o diretório privado.");
-                File part = new File(dir, "ultraplayer-update.apk.part");
-                target = new File(dir, "ultraplayer-update.apk");
+                File part = new File(dir, "fusion-update.apk.part");
+                target = new File(dir, "fusion-update.apk");
                 if (part.exists() && !part.delete()) throw new IOException("Não foi possível limpar o download anterior.");
                 if (target.exists() && !target.delete()) throw new IOException("Não foi possível substituir o download anterior.");
 
@@ -118,7 +118,7 @@ public final class ApkUpdateManager {
             } finally {
                 if (connection != null) connection.disconnect();
             }
-        }, "UltraPlayer-ApkUpdate").start();
+        }, "Fusion-ApkUpdate").start();
     }
 
     private static String normalizeApkUrl(String rawUrl) {

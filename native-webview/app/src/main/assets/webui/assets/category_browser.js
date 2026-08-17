@@ -1,5 +1,5 @@
 /* ============================================================
- * UltraPlayer — navegador de categorias (filmes/séries/canais).
+ * Fusion — navegador de categorias (filmes/séries/canais).
  *
  * Filosofia (igual o HDX, que NÃO usa biblioteca de virtualização):
  * renderiza os tiles e deixa o NAVEGADOR rolar — o segredo da fluidez

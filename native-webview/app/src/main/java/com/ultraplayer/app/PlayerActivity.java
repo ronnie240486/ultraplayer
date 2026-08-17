@@ -33,7 +33,7 @@ public final class PlayerActivity extends Activity {
     private TextView title;
     private TextView error;
     private String url = "";
-    private String mediaTitle = "UltraPlayer";
+    private String mediaTitle = "Fusion";
     private long resumeMs = 0L;
 
     @Override
@@ -93,7 +93,7 @@ public final class PlayerActivity extends Activity {
 
     private void preparePlayer() {
         DefaultHttpDataSource.Factory http = new DefaultHttpDataSource.Factory()
-                .setUserAgent("UltraPlayer/1.4")
+                .setUserAgent("Fusion/1.4")
                 .setAllowCrossProtocolRedirects(true)
                 .setConnectTimeoutMs(12000)
                 .setReadTimeoutMs(25000);
@@ -145,7 +145,7 @@ public final class PlayerActivity extends Activity {
         try {
             JSONObject json = new JSONObject(payload == null ? "{}" : payload);
             url = json.optString("url", "").trim();
-            mediaTitle = json.optString("title", "UltraPlayer");
+            mediaTitle = json.optString("title", "Fusion");
             long resume = json.optLong("resume", 0L);
             resumeMs = resume > 0 && resume < 10_000_000 ? resume * 1000L : resume;
         } catch (Throwable ignored) { }

@@ -16,7 +16,7 @@ import android.widget.FrameLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
-/** Tela interna do UltraPlayer para trailers do YouTube. */
+/** Tela interna do Fusion para trailers do YouTube. */
 public final class TrailerActivity extends Activity {
     private WebView webView;
 
@@ -59,7 +59,7 @@ public final class TrailerActivity extends Activity {
         settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(true);
         settings.setSupportMultipleWindows(false);
-        settings.setUserAgentString("UltraPlayer-Trailer/1.0 " + settings.getUserAgentString());
+        settings.setUserAgentString("Fusion-Trailer/1.0 " + settings.getUserAgentString());
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
         webView.setFocusable(true);

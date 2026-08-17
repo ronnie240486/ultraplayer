@@ -7,8 +7,8 @@
 
     <application
         android:allowBackup="false"
-        android:icon="@drawable/ultraplayer_launcher"
-        android:label="UltraPlayer"
+        android:icon="@drawable/fusion_launcher"
+        android:label="Fusion"
         android:hardwareAccelerated="true"
         android:usesCleartextTraffic="true"
         android:theme="@style/AppTheme">

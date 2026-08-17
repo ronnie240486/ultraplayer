@@ -140,13 +140,13 @@ public final class MainActivity extends Activity {
         s.setDisplayZoomControls(false);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         s.setCacheMode(WebSettings.LOAD_DEFAULT);
-        s.setUserAgentString("UltraPlayer/1.3 (UltraPlayerWebView)");
+        s.setUserAgentString("Fusion/1.3 (FusionWebView)");
         view.setBackgroundColor(android.graphics.Color.rgb(11, 15, 26));
         view.setWebChromeClient(new WebChromeClient());
         view.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageFinished(WebView v, String url) {
-                v.evaluateJavascript("try{window.__ULTRAPLAYER_NATIVE=true}catch(e){}", null);
+                v.evaluateJavascript("try{window.__ULTRAPLAYER_NATIVE=true;window.__FUSION_NATIVE=true}catch(e){}", null);
                 if (splash != null) {
                     splash.animate().alpha(0f).setDuration(300).withEndAction(() -> {
                         if (root != null && splash != null) root.removeView(splash);
@@ -174,13 +174,13 @@ public final class MainActivity extends Activity {
         box.setOrientation(android.widget.LinearLayout.VERTICAL);
         box.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
         android.widget.ImageView logo = new android.widget.ImageView(this);
-        logo.setImageResource(R.drawable.ultraplayer_launcher);
+        logo.setImageResource(R.drawable.fusion_launcher);
         logo.setScaleType(android.widget.ImageView.ScaleType.CENTER_INSIDE);
         android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(dp(150), dp(150));
         lp.bottomMargin = 18;
         box.addView(logo, lp);
         TextView title = new TextView(this);
-        title.setText("UltraPlayer");
+        title.setText("Fusion");
         title.setTextColor(android.graphics.Color.rgb(245, 248, 247));
         title.setTextSize(28);
         title.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
@@ -350,7 +350,7 @@ public final class MainActivity extends Activity {
                     connection.setInstanceFollowRedirects(true);
                     connection.setConnectTimeout(12000);
                     connection.setReadTimeout(20000);
-                    connection.setRequestProperty("User-Agent", "UltraPlayer/1.3");
+                    connection.setRequestProperty("User-Agent", "Fusion/1.3");
                     connection.setRequestProperty("Accept", "application/vnd.apple.mpegurl,text/plain,*/*");
                     int status = connection.getResponseCode();
                     java.io.InputStream stream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
@@ -374,7 +374,7 @@ public final class MainActivity extends Activity {
                     String script = "try{window.__zxPlaylistResult(" + JSONObject.quote(id) + "," + result + "," + JSONObject.quote(resultBody) + ")}catch(e){}";
                     webView.evaluateJavascript(script, null);
                 });
-            }, "UltraPlayer-M3U").start();
+            }, "Fusion-M3U").start();
         }
 
         @JavascriptInterface
@@ -768,7 +768,7 @@ public final class MainActivity extends Activity {
             notifyWebPlaybackStarted(miniPayload);
             if (miniPlayer == null) {
                 DefaultHttpDataSource.Factory http = new DefaultHttpDataSource.Factory()
-                        .setUserAgent("Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 UltraPlayer/4.31")
+                        .setUserAgent("Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Fusion/4.31")
                         .setAllowCrossProtocolRedirects(true);
                 miniPlayer = new ExoPlayer.Builder(this)
                         .setMediaSourceFactory(new DefaultMediaSourceFactory(http))
@@ -960,7 +960,7 @@ public final class MainActivity extends Activity {
         try {
             if (android.os.Build.VERSION.SDK_INT >= 26 && !getPackageManager().canRequestPackageInstalls()) {
                 pendingInstallApk = apk;
-                notifyWebUpdate("permission", "Autorize a instalação desta fonte e volte ao UltraPlayer para continuar.", -1);
+                notifyWebUpdate("permission", "Autorize a instalação desta fonte e volte ao Fusion para continuar.", -1);
                 Intent permission = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getPackageName()));
                 startActivity(permission);
                 return;
@@ -1031,7 +1031,7 @@ public final class MainActivity extends Activity {
         if (isFinishing() || isDestroyed()) return;
         new AlertDialog.Builder(MainActivity.this)
                 .setTitle("Sair ou continuar?")
-                .setMessage("Você deseja sair do UltraPlayer ou continuar assistindo?")
+                .setMessage("Você deseja sair do Fusion ou continuar assistindo?")
                 .setNegativeButton("Continuar", null)
                 .setPositiveButton("Sair", (d, w) -> {
                     try { finishAndRemoveTask(); } catch (Throwable ignored) { finishAffinity(); }
