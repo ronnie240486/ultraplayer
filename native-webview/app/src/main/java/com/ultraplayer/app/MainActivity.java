@@ -58,6 +58,8 @@ public final class MainActivity extends Activity {
     private android.widget.LinearLayout fullCategoryBar;
     private android.widget.LinearLayout fullChannelList;
     private final java.util.ArrayList<JSONObject> fullChannelItems = new java.util.ArrayList<>();
+    private final android.os.Handler fullChannelMenuHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable fullChannelMenuHideTask = () -> hideFullChannelMenu();
     private TextView fullZoomLabel;
     private String fullSelectedCategory = "Todos";
     private float fullZoom = 1.0f;
@@ -664,7 +666,7 @@ public final class MainActivity extends Activity {
         fullChannelMenu = new FrameLayout(this);
         fullChannelMenu.setVisibility(View.GONE);
         fullChannelMenu.setPadding(dp(8), dp(8), dp(8), dp(8));
-        fullChannelMenu.setBackgroundColor(0x6607130F);
+        fullChannelMenu.setBackgroundColor(android.graphics.Color.TRANSPARENT);
         android.widget.LinearLayout menuShell = new android.widget.LinearLayout(this);
         menuShell.setOrientation(android.widget.LinearLayout.VERTICAL);
         menuShell.setPadding(dp(4), dp(4), dp(4), dp(4));
@@ -675,7 +677,7 @@ public final class MainActivity extends Activity {
         fullCategoryBar = new android.widget.LinearLayout(this);
         fullCategoryBar.setOrientation(android.widget.LinearLayout.HORIZONTAL);
         categoryScroll.addView(fullCategoryBar, new android.widget.HorizontalScrollView.LayoutParams(-2, -1));
-        menuShell.addView(categoryScroll, new android.widget.LinearLayout.LayoutParams(-1, dp(54)));
+        menuShell.addView(categoryScroll, new android.widget.LinearLayout.LayoutParams(-1, dp(42)));
 
         android.widget.ScrollView scroll = new android.widget.ScrollView(this);
         scroll.setVerticalScrollBarEnabled(true);
@@ -684,7 +686,14 @@ public final class MainActivity extends Activity {
         fullChannelList.setPadding(dp(8), dp(8), dp(8), dp(8));
         scroll.addView(fullChannelList, new android.widget.ScrollView.LayoutParams(-1, -2));
         menuShell.addView(scroll, new android.widget.LinearLayout.LayoutParams(-1, 0, 1f));
-        fullChannelMenu.addView(menuShell, new FrameLayout.LayoutParams(-1, -1));
+        int screenW = getResources().getDisplayMetrics().widthPixels;
+        int screenH = getResources().getDisplayMetrics().heightPixels;
+        int menuW = Math.max(dp(420), Math.round(screenW * 0.74f));
+        int menuH = Math.max(dp(300), Math.round(screenH * 0.76f));
+        FrameLayout.LayoutParams shellParams = new FrameLayout.LayoutParams(menuW, menuH, android.view.Gravity.TOP | android.view.Gravity.LEFT);
+        shellParams.leftMargin = dp(10);
+        shellParams.topMargin = dp(10);
+        fullChannelMenu.addView(menuShell, shellParams);
         miniContainer.addView(fullChannelMenu);
     }
 
@@ -700,20 +709,54 @@ public final class MainActivity extends Activity {
         if (fullZoomLabel != null) fullZoomLabel.setText(Math.round(fullZoom * 100f) + "%");
     }
 
+    private void armFullChannelMenuHide() {
+        if (fullChannelMenu == null || fullChannelMenu.getVisibility() != View.VISIBLE) return;
+        fullChannelMenuHandler.removeCallbacks(fullChannelMenuHideTask);
+        fullChannelMenuHandler.postDelayed(fullChannelMenuHideTask, 5500L);
+    }
+
+    private void hideFullChannelMenu() {
+        fullChannelMenuHandler.removeCallbacks(fullChannelMenuHideTask);
+        if (fullChannelMenu != null) fullChannelMenu.setVisibility(View.GONE);
+        if (miniExpanded && fullControls != null && fullControls.getVisibility() == View.VISIBLE) {
+            fullControls.bringToFront();
+            armFullControlsHide();
+        } else if (miniExpanded && fullControlsRevealButton != null) {
+            fullControlsRevealButton.bringToFront();
+        }
+    }
+
+    private void showFullChannelMenuTemporarily() {
+        if (fullChannelMenu == null) return;
+        populateFullChannelMenu();
+        fullChannelMenu.bringToFront();
+        fullChannelMenu.setVisibility(View.VISIBLE);
+        armFullChannelMenuHide();
+        if (fullCategoryBar != null && fullCategoryBar.getChildCount() > 0) {
+            View firstCategory = fullCategoryBar.getChildAt(0);
+            firstCategory.setFocusable(true);
+            firstCategory.requestFocus();
+        }
+    }
+
     private void toggleFullChannelMenu() {
         if (fullChannelMenu == null) return;
-        if (fullChannelMenu.getVisibility() == View.VISIBLE) {
-            fullChannelMenu.setVisibility(View.GONE);
-            return;
+        if (fullChannelMenu.getVisibility() == View.VISIBLE) hideFullChannelMenu();
+        else showFullChannelMenuTemporarily();
+    }
+
+    private void styleFullCategoryTabs() {
+        if (fullCategoryBar == null) return;
+        for (int i = 0; i < fullCategoryBar.getChildCount(); i++) {
+            View child = fullCategoryBar.getChildAt(i);
+            if (!(child instanceof android.widget.Button)) continue;
+            android.widget.Button tab = (android.widget.Button) child;
+            boolean active = tab.getContentDescription() != null
+                    && tab.getContentDescription().toString().equals("Categoria " + fullSelectedCategory);
+            if (tab.hasFocus()) tab.setBackground(makeRoundBackground(0xFF16A34A, 0xFFFFFFFF, 3, dp(7)));
+            else if (active) tab.setBackground(makeRoundBackground(0xFFB45309, 0xFFFFFFFF, 2, dp(7)));
+            else tab.setBackground(makeRoundBackground(0xCC183329, 0xAA6EE7B7, 1, dp(7)));
         }
-        populateFullChannelMenu();
-            fullChannelMenu.bringToFront();
-            fullChannelMenu.setVisibility(View.VISIBLE);
-            if (fullCategoryBar != null && fullCategoryBar.getChildCount() > 0) {
-                View firstCategory = fullCategoryBar.getChildAt(0);
-                firstCategory.setFocusable(true);
-                firstCategory.requestFocus();
-            }
     }
 
     private void populateFullChannelMenu() {
@@ -755,19 +798,30 @@ public final class MainActivity extends Activity {
             for (String cat : cats) if (!"Todos".equals(cat)) ordered.add(cat);
             for (String cat : ordered) {
                 android.widget.Button tab = fullButton(cat, "Categoria " + cat);
-                tab.setTextSize(13f);
+                tab.setTextSize(11f);
                 tab.setSingleLine(true);
-                tab.setPadding(dp(12), 0, dp(12), 0);
-                android.widget.LinearLayout.LayoutParams tp = new android.widget.LinearLayout.LayoutParams(-2, dp(42));
+                tab.setPadding(dp(8), 0, dp(8), 0);
+                android.widget.LinearLayout.LayoutParams tp = new android.widget.LinearLayout.LayoutParams(-2, dp(34));
                 tp.rightMargin = dp(6);
                 fullCategoryBar.addView(tab, tp);
                 final String selected = cat;
+                tab.setOnFocusChangeListener((v, hasFocus) -> {
+                    if (hasFocus) armFullChannelMenuHide();
+                    styleFullCategoryTabs();
+                });
+                tab.setOnKeyListener((v, keyCode, event) -> {
+                    if (event != null && event.getAction() == android.view.KeyEvent.ACTION_DOWN) armFullChannelMenuHide();
+                    return false;
+                });
                 tab.setOnClickListener(v -> {
                     fullSelectedCategory = selected;
                     renderFullChannelCategory(selected);
+                    styleFullCategoryTabs();
+                    armFullChannelMenuHide();
                 });
             }
             renderFullChannelCategory("Todos");
+            styleFullCategoryTabs();
         } catch (Throwable ignored) { }
         FrameLayout.LayoutParams mp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, android.view.Gravity.TOP | android.view.Gravity.LEFT);
         mp.leftMargin = dp(8); mp.rightMargin = dp(8); mp.topMargin = dp(70); mp.bottomMargin = dp(8);
@@ -795,6 +849,20 @@ public final class MainActivity extends Activity {
             row.setGravity(android.view.Gravity.LEFT | android.view.Gravity.CENTER_VERTICAL);
             row.setTextSize(14f);
             row.setBackground(makeRoundBackground(0x66162D24, 0x996EE7B7, 1, dp(8)));
+            row.setOnFocusChangeListener((v, hasFocus) -> {
+                if (hasFocus) {
+                    row.setBackground(makeRoundBackground(0xFF16A34A, 0xFFFFFFFF, 3, dp(8)));
+                    row.setTextColor(android.graphics.Color.WHITE);
+                    armFullChannelMenuHide();
+                } else {
+                    row.setBackground(makeRoundBackground(0x66162D24, 0x996EE7B7, 1, dp(8)));
+                    row.setTextColor(android.graphics.Color.WHITE);
+                }
+            });
+            row.setOnKeyListener((v, keyCode, event) -> {
+                if (event != null && event.getAction() == android.view.KeyEvent.ACTION_DOWN) armFullChannelMenuHide();
+                return false;
+            });
             android.widget.LinearLayout.LayoutParams rp = new android.widget.LinearLayout.LayoutParams(-1, dp(44));
             rp.bottomMargin = dp(5);
             fullChannelList.addView(row, rp);
@@ -807,7 +875,7 @@ public final class MainActivity extends Activity {
                     next.put("title", nextName);
                     next.put("zap", new org.json.JSONArray(fullChannelItems));
                     showMiniPlayer(next.toString(), true);
-                    fullChannelMenu.setVisibility(View.GONE);
+                    hideFullChannelMenu();
                 } catch (Throwable ignored) { }
             });
             shown++;
@@ -1026,7 +1094,7 @@ public final class MainActivity extends Activity {
         fullControlsHandler.removeCallbacks(fullControlsHideTask);
         if (fullControls != null) fullControls.setVisibility(View.GONE);
         if (fullControlsRevealButton != null) fullControlsRevealButton.setVisibility(View.GONE);
-        if (fullChannelMenu != null) fullChannelMenu.setVisibility(View.GONE);
+        hideFullChannelMenu();
         fullZoom = 1.0f;
         miniPlayerView.setScaleX(1.0f);
         miniPlayerView.setScaleY(1.0f);
@@ -1181,7 +1249,7 @@ public final class MainActivity extends Activity {
     public void onBackPressed() {
         if (miniExpanded) {
             if (fullChannelMenu != null && fullChannelMenu.getVisibility() == View.VISIBLE) {
-                fullChannelMenu.setVisibility(View.GONE);
+                hideFullChannelMenu();
                 return;
             }
             collapseFullMiniPlayer();
@@ -1214,6 +1282,11 @@ public final class MainActivity extends Activity {
             webView.evaluateJavascript("try{document.dispatchEvent(new KeyboardEvent('keydown',{key:'ContextMenu',bubbles:true,cancelable:true}))}catch(e){}", null);
             return true;
         }
+        if (miniExpanded && fullChannelMenu != null && fullChannelMenu.getVisibility() == View.VISIBLE
+                && keyCode != KeyEvent.KEYCODE_BACK && keyCode != KeyEvent.KEYCODE_ESCAPE) {
+            armFullChannelMenuHide();
+            return super.onKeyDown(keyCode, event);
+        }
         if (miniExpanded && fullControls != null && fullControls.getVisibility() != View.VISIBLE
                 && keyCode != KeyEvent.KEYCODE_BACK && keyCode != KeyEvent.KEYCODE_ESCAPE) {
             showFullControlsTemporarily();
@@ -1230,6 +1303,8 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        fullChannelMenuHandler.removeCallbacks(fullChannelMenuHideTask);
+        fullControlsHandler.removeCallbacks(fullControlsHideTask);
         if (miniPlayer != null) { miniPlayer.release(); miniPlayer = null; }
         if (webView != null) {
             webView.stopLoading();
