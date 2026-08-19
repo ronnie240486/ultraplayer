@@ -1061,7 +1061,7 @@ function homeRemoteBannerHtml() {
 }
 var APP_THEMES = [
     { id: 'verde', name: 'Verde esmeralda', accent: '#10b981', bg: '#06130f', panel: '#0d241a', text: '#f4fff9', muted: '#9db0a7' },
-    { id: 'branco', name: 'Branco', accent: '#2563eb', bg: '#f4f7fb', panel: '#ffffff', text: '#0f172a', muted: '#475569' },
+    { id: 'branco', name: 'Branco', accent: '#ffffff', bg: '#f4f7fb', panel: '#ffffff', text: '#0f172a', muted: '#475569' },
     { id: 'preto', name: 'Preto', accent: '#e5e7eb', bg: '#050505', panel: '#151515', text: '#ffffff', muted: '#a3a3a3' },
     { id: 'amarelo', name: 'Amarelo', accent: '#f59e0b', bg: '#171005', panel: '#2a1b07', text: '#fff8e7', muted: '#d4b77a' },
     { id: 'musgo', name: 'Verde-musgo', accent: '#8fa94b', bg: '#10170b', panel: '#1c2911', text: '#f4f8e9', muted: '#aebc8a' },
@@ -1083,7 +1083,13 @@ var APP_THEMES = [
 ];
 function appThemeId() { try { var v = localStorage.getItem('zx_app_theme'); if (v) return v; } catch (e) {} return 'verde'; }
 function appTheme() { var id = appThemeId(), i; for (i = 0; i < APP_THEMES.length; i++) if (APP_THEMES[i].id === id) return APP_THEMES[i]; return APP_THEMES[0]; }
+function themeRgba(hex, alpha) {
+    var h = String(hex || '').replace('#', '');
+    if (!/^[0-9a-fA-F]{6}$/.test(h)) return 'rgba(16,185,129,' + alpha + ')';
+    return 'rgba(' + parseInt(h.substr(0, 2), 16) + ',' + parseInt(h.substr(2, 2), 16) + ',' + parseInt(h.substr(4, 2), 16) + ',' + alpha + ')';
+}
 function appThemeCss(th) {
+    var ta = themeRgba(th.accent, 0.22), tb = themeRgba(th.accent, 0.30), tc = themeRgba(th.accent, 0.58), td = themeRgba(th.accent, 0.72);
     return ':root{--zx-accent:' + th.accent + ';--zx-bg:' + th.bg + ';--zx-panel:' + th.panel + ';--zx-text:' + th.text + ';--zx-muted:' + th.muted + ';}'
         + "html,body,#app-root{background-color:" + th.bg + ";color:" + th.text + ";background-image:url('assets/branding/fusion_background.png');background-position:center center;background-repeat:no-repeat;background-size:cover;background-attachment:fixed;}"
         + 'body{--zx-accent:' + th.accent + ';--zx-bg:' + th.bg + ';--zx-panel:' + th.panel + ';--zx-text:' + th.text + ';--zx-muted:' + th.muted + ';}'
@@ -1096,7 +1102,20 @@ function appThemeCss(th) {
         + '.zx-pf-gbtn.zx-pf-sel .zx-pf-av,.zx-pf-card:focus .zx-pf-av,.zx-pf-card:hover .zx-pf-av{border-color:' + th.accent + ';box-shadow:0 0 0 3px ' + th.accent + '44;}'
         + '.zx-pf-kids-title,.zx-pf-name,.zx-pf-input{color:' + th.text + ';}.zx-pf-switch.on{background:' + th.accent + ';}'
         + 'a,button{accent-color:' + th.accent + ';}'
-        + '[style*="color:#10b981"],[style*="color: #10b981"]{color:' + th.accent + ' !important;}';
+        + '[style*="color:#10b981"],[style*="color: #10b981"]{color:' + th.accent + ' !important;}'
+        // A cor escolhida no painel é a mesma nas duas barras: categoria,
+        // canal selecionado e EPG. Todos os fundos usam alfa para não virar
+        // um bloco sólido, inclusive amarelo, verde e branco.
+        + '.cat-sidebar .cat-pill:focus,.cat-sidebar .cat-pill.is-active{background:' + ta + ' !important;color:#fff !important;border-color:' + td + ' !important;box-shadow:inset 0 0 0 1px ' + tc + ',0 0 0 2px ' + tb + ' !important;}'
+        + '.cat-sidebar .cat-pill:focus .cat-count,.cat-sidebar .cat-pill.is-active .cat-count{color:#fff !important;}'
+        + '.channel-tile-tv:focus{background:' + ta + ' !important;color:#fff !important;border-color:' + td + ' !important;box-shadow:inset 0 0 0 1px ' + tc + ',0 0 0 2px ' + tb + ' !important;}'
+        + '.channel-tile-tv:focus .ct-num,.channel-tile-tv:focus .ct-name{color:#fff !important;}'
+        + '.ct-fav.is-fav{background:' + ta + ' !important;}.ct-fav.is-fav svg{fill:' + th.accent + ' !important;stroke:' + th.accent + ' !important;}'
+        + '.sidebar-content .sc-title{border-left-color:' + th.accent + ' !important;}'
+        + '.live-epg .epg-item.is-now .epg-title{color:' + th.accent + ' !important;}'
+        + '.live-epg .epg-play{background:' + ta + ' !important;color:#fff !important;border:1px solid ' + td + ' !important;}'
+        + '.live-epg .epg-play:focus{background:' + tb + ' !important;box-shadow:0 0 0 3px ' + tc + ' !important;}'
+        + '.live-epg .epg-alarm.is-on{background:' + ta + ' !important;border-color:' + td + ' !important;color:' + th.accent + ' !important;}';
 }
 function applyAppTheme(id, rerender) {
     var th = null, i;
