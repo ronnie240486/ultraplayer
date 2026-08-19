@@ -669,7 +669,7 @@ public final class MainActivity extends Activity {
         fullChannelMenu.setBackgroundColor(android.graphics.Color.TRANSPARENT);
         android.widget.LinearLayout menuShell = new android.widget.LinearLayout(this);
         menuShell.setOrientation(android.widget.LinearLayout.VERTICAL);
-        menuShell.setPadding(dp(4), dp(4), dp(4), dp(4));
+        menuShell.setPadding(dp(2), dp(2), dp(2), dp(2));
         menuShell.setBackgroundColor(0x66050B08);
 
         android.widget.HorizontalScrollView categoryScroll = new android.widget.HorizontalScrollView(this);
@@ -677,7 +677,7 @@ public final class MainActivity extends Activity {
         fullCategoryBar = new android.widget.LinearLayout(this);
         fullCategoryBar.setOrientation(android.widget.LinearLayout.HORIZONTAL);
         categoryScroll.addView(fullCategoryBar, new android.widget.HorizontalScrollView.LayoutParams(-2, -1));
-        menuShell.addView(categoryScroll, new android.widget.LinearLayout.LayoutParams(-1, dp(42)));
+        menuShell.addView(categoryScroll, new android.widget.LinearLayout.LayoutParams(-1, dp(29)));
 
         android.widget.ScrollView scroll = new android.widget.ScrollView(this);
         scroll.setVerticalScrollBarEnabled(true);
@@ -753,9 +753,9 @@ public final class MainActivity extends Activity {
             android.widget.Button tab = (android.widget.Button) child;
             boolean active = tab.getContentDescription() != null
                     && tab.getContentDescription().toString().equals("Categoria " + fullSelectedCategory);
-            if (tab.hasFocus()) tab.setBackground(makeRoundBackground(0xFF16A34A, 0xFFFFFFFF, 3, dp(7)));
-            else if (active) tab.setBackground(makeRoundBackground(0xFFB45309, 0xFFFFFFFF, 2, dp(7)));
-            else tab.setBackground(makeRoundBackground(0xCC183329, 0xAA6EE7B7, 1, dp(7)));
+            if (tab.hasFocus()) tab.setBackground(makeRoundBackground(0xFF16A34A, 0xFFFFFFFF, 2, dp(6)));
+            else if (active) tab.setBackground(makeRoundBackground(0xFFB45309, 0xFFFFFFFF, 1, dp(6)));
+            else tab.setBackground(makeRoundBackground(0xCC183329, 0xAA6EE7B7, 1, dp(6)));
         }
     }
 
@@ -798,11 +798,16 @@ public final class MainActivity extends Activity {
             for (String cat : cats) if (!"Todos".equals(cat)) ordered.add(cat);
             for (String cat : ordered) {
                 android.widget.Button tab = fullButton(cat, "Categoria " + cat);
-                tab.setTextSize(11f);
+                tab.setTextSize(9f);
                 tab.setSingleLine(true);
-                tab.setPadding(dp(8), 0, dp(8), 0);
-                android.widget.LinearLayout.LayoutParams tp = new android.widget.LinearLayout.LayoutParams(-2, dp(34));
-                tp.rightMargin = dp(6);
+                tab.setEllipsize(null);
+                tab.setPadding(dp(3), 0, dp(3), 0);
+                tab.setMinHeight(0);
+                tab.setMinimumHeight(0);
+                tab.setMinWidth(dp(36));
+                tab.setMinimumWidth(dp(36));
+                android.widget.LinearLayout.LayoutParams tp = new android.widget.LinearLayout.LayoutParams(-2, dp(25));
+                tp.rightMargin = dp(2);
                 fullCategoryBar.addView(tab, tp);
                 final String selected = cat;
                 tab.setOnFocusChangeListener((v, hasFocus) -> {
