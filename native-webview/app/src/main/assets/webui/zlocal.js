@@ -5801,6 +5801,14 @@ function ffMobileCss() {
         + 'body.zx-ff-tv .live-video-slot{height:clamp(260px,42vh,500px) !important}'
         + 'body.zx-ff-mobile .live-split .channel-tile-tv .ct-logo{width:36px !important;height:36px !important;line-height:36px !important;margin-right:5px !important}'
         + 'body.zx-ff-mobile .live-split .channel-tile-tv .ct-name{font-size:12px !important;line-height:1.12 !important}'
+        + 'body.zx-ff-tv .live-epg{padding:22px 24px !important;overflow-x:hidden !important;box-sizing:border-box !important}'
+        + 'body.zx-ff-tv .live-epg .epg-ch{font-size:30px !important;line-height:1.12 !important;margin-bottom:8px !important}'
+        + 'body.zx-ff-tv .live-epg .epg-sub{font-size:16px !important;line-height:1.2 !important;margin-bottom:12px !important}'
+        + 'body.zx-ff-tv .live-epg .epg-item{display:flex !important;align-items:center !important;gap:10px !important;padding:11px 0 !important;min-height:48px !important;box-sizing:border-box !important;overflow:visible !important}'
+        + 'body.zx-ff-tv .live-epg .epg-copy{display:block !important;min-width:0 !important;flex:1 1 auto !important;overflow:hidden !important}'
+        + 'body.zx-ff-tv .live-epg .epg-title{display:block !important;font-size:23px !important;line-height:1.16 !important;white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important}'
+        + 'body.zx-ff-tv .live-epg .epg-time{font-size:18px !important;line-height:1.08 !important}'
+        + 'body.zx-ff-tv .live-epg .epg-alarm{position:static !important;display:flex !important;visibility:visible !important;opacity:1 !important;flex:0 0 40px !important;width:40px !important;min-width:40px !important;height:40px !important;font-size:23px !important;border-radius:8px !important;margin:0 2px 0 0 !important;padding:0 !important;align-items:center !important;justify-content:center !important;z-index:999 !important;float:none !important}'
         + 'body.zx-ff-mobile .live-epg{padding:10px 10px !important;overflow-x:hidden !important;box-sizing:border-box !important}'
         + 'body.zx-ff-mobile .live-epg .epg-ch{font-size:13px !important;margin-bottom:3px !important}'
         + 'body.zx-ff-mobile .live-epg .epg-sub{font-size:8px !important;margin-bottom:5px !important}'
@@ -6479,6 +6487,23 @@ function injectAndroidCss() {
     }
 }
 
+function openHomeAfterFullCatalog() {
+    if (S._homeCatalogGate) return;
+    if (!S.server && !S.playlistUrl) { go('/home', true); return; }
+    S._homeCatalogGate = true;
+    var kinds = ['movies', 'series', 'live'];
+    Promise.all(kinds.map(function (kind) {
+        return ensureCatalog(kind, true).catch(function () { return null; });
+    })).then(function () {
+        S._homeCatalogReady = true;
+        go('/home', true);
+    }).catch(function () {
+        // Se uma fonte falhar, libera a Home com o que estiver disponível;
+        // as demais tentativas continuam pelo sincronizador normal.
+        S._homeCatalogReady = false;
+        go('/home', true);
+    });
+}
 function boot() {
     applyAppTheme(appThemeId(), false);
     applyAccessibility();
@@ -6509,8 +6534,9 @@ function boot() {
     if (snap && snapAgeDays(snap) <= snapMaxDays(snap)) {
         // ABRE NA HORA com o snapshot — funciona mesmo com a VPS fora.
         applyResolve(snap.d, true);
-        go('/home', true);
+                openHomeAfterFullCatalog();
         refresh(snap);                               // re-verifica em segundo plano
+
     } else {
         // Primeiro acesso sem snapshot: se já existe uma playlist salva, libera a Home
         // imediatamente usando o servidor da própria URL e confirma a licença em segundo
@@ -6525,13 +6551,13 @@ function boot() {
         if (eagerHome) {
             S.server = eagerServer; S.xtreamDerived = eagerCreds || S.xtreamDerived;
             applyResolve({ ok: true, dns: { base: eagerServer, name: '' }, license: { mac: S.user || '', exp_date: 0 } }, true);
-            go('/home', true);
+            openHomeAfterFullCatalog();
         } else showLoading(true);
         api('resolve', '', 12000).then(function (d) {
             if (!eagerHome) showLoading(false);
             if (d && d.error === 'license') { if (applyPush(d)) return; if (!eagerHome) renderPaywall(d); return; }
-            if (d && d.ok && d.dns && d.dns.base) { applyResolve(d, false); saveSnap(d); if (!eagerHome) go('/home', true); }
-            else if (!eagerHome && snap) { applyResolve(snap.d, true); go('/home', true); }
+            if (d && d.ok && d.dns && d.dns.base) { applyResolve(d, false); saveSnap(d); if (!eagerHome) openHomeAfterFullCatalog(); }
+            else if (!eagerHome && snap) { applyResolve(snap.d, true); openHomeAfterFullCatalog(); }
             else if (!eagerHome) renderOfflineFirst();
         });
     }
