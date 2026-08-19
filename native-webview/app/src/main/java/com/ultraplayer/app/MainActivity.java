@@ -510,6 +510,11 @@ public final class MainActivity extends Activity {
         fullControls.setPadding(dp(8), dp(5), dp(8), dp(5));
         fullControls.setBackgroundColor(0xCC06100B);
         fullControls.setVisibility(View.GONE);
+        fullControls.setAlpha(1.0f);
+        fullControls.setFocusable(true);
+        fullControls.setFocusableInTouchMode(true);
+        fullControls.setDescendantFocusability(android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS);
+        if (android.os.Build.VERSION.SDK_INT >= 21) fullControls.setElevation(dp(40));
         FrameLayout.LayoutParams cp = new FrameLayout.LayoutParams(-1, dp(58), android.view.Gravity.TOP | android.view.Gravity.LEFT);
         cp.leftMargin = dp(8); cp.rightMargin = dp(8); cp.topMargin = dp(6);
         miniContainer.addView(fullControls, cp);
@@ -861,7 +866,13 @@ public final class MainActivity extends Activity {
             if (root != null) root.requestLayout();
             if (miniTitle != null) miniTitle.setVisibility(View.GONE);
             if (miniExpandHit != null) miniExpandHit.setVisibility(View.GONE);
-            if (fullControls != null) fullControls.setVisibility(View.VISIBLE);
+            if (fullControls != null) {
+                fullControls.setVisibility(View.VISIBLE);
+                fullControls.setAlpha(1.0f);
+                fullControls.setTranslationY(0f);
+                fullControls.bringToFront();
+                fullControls.requestLayout();
+            }
             if (fullChannelMenu != null) fullChannelMenu.setVisibility(View.GONE);
             fullZoom = 1.0f;
             miniPlayerView.setResizeMode(androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT);

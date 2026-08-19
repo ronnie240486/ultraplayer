@@ -2882,20 +2882,13 @@ function refreshHomeCachedCatalogs(kinds, index) {
 }
 function hydrateHomeCatalogCache() {
     if (getFormFactor() !== 'tv' || !S.server) return false;
-    var ready = false, cachedKinds = [];
+    var ready = false;
     try {
         ['movies', 'series', 'live'].forEach(function (kind) {
             if (S.cat && S.cat[kind]) { ready = true; return; }
             var cached = readCatalogCache(kind);
-            if (cached) { S.cat[kind] = cached; ready = true; cachedKinds.push(kind); }
+            if (cached) { S.cat[kind] = cached; ready = true; }
         });
-        if (cachedKinds.length && !S._homeCacheRefreshStarted) {
-            S._homeCacheRefreshStarted = true;
-            setTimeout(function () {
-                refreshHomeCachedCatalogs(cachedKinds, 0);
-                S._homeCacheRefreshStarted = false;
-            }, 1200);
-        }
     } catch (e) {}
     return ready;
 }
@@ -3226,7 +3219,12 @@ function homeRecommendationsHtml() {
 }
 function fillHomeRecommendations() {
     if (!S.server || !document.querySelector('.zx-home2')) return;
-    Promise.all([ensureCatalog('movies'), ensureCatalog('series')]).then(function () {
+    var tv = getFormFactor() === 'tv';
+    // Na TV Box a Home nunca inicia parsing de M3U: sem snapshot, deixa a seção
+    // vazia e mantém o D-pad livre. A categoria completa carrega sob demanda.
+    if (tv && (!S.cat || !S.cat.movies || !S.cat.series)) return;
+    var ready = tv ? Promise.resolve() : Promise.all([ensureCatalog('movies'), ensureCatalog('series')]);
+    ready.then(function () {
         var sec = $('zhReco'), row = $('zhRecoRow'); if (!sec || !row) return;
         var items = homeRecommendationItems(); if (!items.length) { sec.style.display = 'none'; return; }
         row.innerHTML = homeRecommendationCards(items); sec.style.display = '';
@@ -3287,6 +3285,9 @@ function fillHomeCounts() {
     function nextCat() {
         if (qi >= defs.length) return;
         var d = defs[qi++], kind = d[0], id = d[1], noun = d[2];
+        // Sem cache na TV Box, não parsear a M3U na Home. O carregamento integral
+        // acontece ao abrir a categoria, mantendo a navegação liberada.
+        if (getFormFactor() === 'tv' && (!S.cat || !S.cat[kind])) { setTimeout(nextCat, 80); return; }
         var set = function () {
             try {
                 var el = document.getElementById(id); if (!el) return;
@@ -5735,21 +5736,21 @@ function ffMobileCss() {
         + 'body.zx-ff-tv .zx-home2{position:absolute !important;inset:0 !important;overflow-x:hidden !important;overflow-y:auto !important;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}'
         + 'body.zx-ff-tv .zx-home2 .zh-ui{position:relative !important;inset:auto !important;height:auto !important;min-height:100vh !important;overflow:visible !important;display:flex !important;flex-direction:column !important;padding:2.4vw 3vw 5vw !important;box-sizing:border-box !important;}'
         + 'body.zx-ff-tv .zx-home2 .zh-nav{display:flex !important;flex-direction:column !important;flex:none !important;width:100% !important;height:auto !important;min-height:0 !important;margin-top:2vw !important;gap:1.4vw !important;}'
-        + 'body.zx-ff-tv .zx-home2 .zh-nav>.zh-tile{display:flex !important;flex:none !important;width:100% !important;max-width:none !important;height:18vw !important;min-height:150px !important;max-height:210px !important;padding:2vw !important;border-radius:1.4vw !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-nav>.zh-tile{display:flex !important;flex:none !important;width:100% !important;max-width:none !important;height:13.5vw !important;min-height:118px !important;max-height:160px !important;padding:1.3vw !important;border-radius:1.2vw !important;}'
         + 'body.zx-ff-tv .zx-home2 .zh-navr{display:flex !important;flex-direction:column !important;flex:none !important;min-height:0 !important;width:100% !important;gap:1.4vw !important;}'
         + 'body.zx-ff-tv .zx-home2 .zh-navtop,body.zx-ff-tv .zx-home2 .zh-navbot{display:grid !important;grid-template-columns:repeat(2,minmax(0,1fr)) !important;flex:none !important;gap:1.4vw !important;min-height:0 !important;}'
-        + 'body.zx-ff-tv .zx-home2 .zh-navtop .zh-tile,body.zx-ff-tv .zx-home2 .zh-navbot .zh-stile{display:flex !important;flex:none !important;width:auto !important;max-width:none !important;height:15vw !important;min-height:132px !important;max-height:180px !important;padding:1.8vw !important;border-radius:1.3vw !important;}'
-        + 'body.zx-ff-tv .zx-home2 .zh-navtop .zh-ico,body.zx-ff-tv .zx-home2 .zh-navtop .zh-ico svg{width:5.2vw !important;height:5.2vw !important;}'
-        + 'body.zx-ff-tv .zx-home2 .zh-nav>.zh-tile .zh-ico,body.zx-ff-tv .zx-home2 .zh-nav>.zh-tile .zh-ico svg{width:6.5vw !important;height:6.5vw !important;}'
-        + 'body.zx-ff-tv .zx-home2 .zh-tl{font-size:2.1vw !important;line-height:1.12 !important;}'
-        + 'body.zx-ff-tv .zx-home2 .zh-tsub{font-size:1.35vw !important;margin-top:.5vw !important;}'
-        + 'body.zx-ff-tv .zx-home2 .zh-stile svg{width:3.8vw !important;height:3.8vw !important;}'
-        + 'body.zx-ff-tv .zx-home2 .zh-stile b{font-size:1.8vw !important;}'
-        + 'body.zx-ff-tv .zx-home2 .zh-ssub{font-size:1.2vw !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-navtop .zh-tile,body.zx-ff-tv .zx-home2 .zh-navbot .zh-stile{display:flex !important;flex:none !important;width:auto !important;max-width:none !important;height:10.5vw !important;min-height:98px !important;max-height:132px !important;padding:1.2vw !important;border-radius:1.1vw !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-navtop .zh-ico,body.zx-ff-tv .zx-home2 .zh-navtop .zh-ico svg{width:4vw !important;height:4vw !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-nav>.zh-tile .zh-ico,body.zx-ff-tv .zx-home2 .zh-nav>.zh-tile .zh-ico svg{width:5vw !important;height:5vw !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-tl{font-size:1.65vw !important;line-height:1.12 !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-tsub{font-size:1.05vw !important;margin-top:.35vw !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-stile svg{width:3vw !important;height:3vw !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-stile b{font-size:1.45vw !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-ssub{font-size:1vw !important;}'
         + 'body.zx-ff-tv .zx-home2 .zh-recent{display:flex !important;flex:none !important;width:100% !important;max-width:none !important;overflow:visible !important;margin-top:2vw !important;gap:1vw !important;}'
         + 'body.zx-ff-tv .zx-home2 .zh-recent .zh-posters{width:100% !important;max-width:none !important;overflow-x:auto !important;overflow-y:hidden !important;padding:1vw 0 1.3vw !important;gap:1.2vw !important;}'
-        + 'body.zx-ff-tv .zx-home2 .zh-recent .zh-poster{display:flex !important;flex:0 0 27vw !important;width:27vw !important;min-width:27vw !important;height:11vw !important;min-height:100px !important;max-height:150px !important;}'
-        + 'body.zx-ff-tv .zx-home2 .zh-h2{font-size:2vw !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-recent .zh-poster{display:flex !important;flex:0 0 23vw !important;width:23vw !important;min-width:23vw !important;height:9vw !important;min-height:82px !important;max-height:118px !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-h2{font-size:1.55vw !important;}'
         + 'body.zx-ff-tv .zx-home2 .zh-status{margin-top:2vw !important;flex:none !important;}' ;
 }
 function injectFfAskCss() {
