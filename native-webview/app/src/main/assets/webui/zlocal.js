@@ -4361,9 +4361,10 @@ var h = '';
         if (nativeAvail()) {
             var nsid = row.getAttribute('data-sid'), nnm = row.getAttribute('data-name') || '', nlogo = row.getAttribute('data-logo') || '', nowNative = (new Date()).getTime();
             if (nsid && row === lastEl) {
-                try { if (global.HdxNative && global.HdxNative.miniStop) global.HdxNative.miniStop(); } catch (e) {}
-                trackRecent(nsid, nnm, nlogo, 0);
-                playViaNative({ kind: 'live', url: streamUrl('live', nsid), title: nnm, resume: 0, zxKind: 'live', zxId: nsid, name: nnm, zap: liveFullZapList(nsid) || liveZapList(nsid) });
+                // Segundo OK/toque no mesmo canal: o mini player já está ativo.
+                // Promove a instância nativa existente para tela cheia; NÃO pare,
+                // não chame miniPlay novamente e não reabra a URL do canal.
+                try { if (global.HdxNative && global.HdxNative.miniFullscreen) global.HdxNative.miniFullscreen(); } catch (e) {}
                 return;
             }
             lastEl = row; lastT = nowNative;
