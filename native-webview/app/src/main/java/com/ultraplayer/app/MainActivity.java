@@ -379,6 +379,65 @@ public final class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void fetchM3UPreview(String url, String requestId) {
+            final String target = url == null ? "" : url;
+            final String id = requestId == null ? "" : requestId;
+            new Thread(() -> {
+                boolean ok = false;
+                String body = "#EXTM3U\n";
+                java.net.HttpURLConnection connection = null;
+                try {
+                    java.net.URL parsed = new java.net.URL(target);
+                    java.net.URLConnection raw = parsed.openConnection();
+                    if (!(raw instanceof java.net.HttpURLConnection)) throw new java.io.IOException("unsupported_protocol");
+                    connection = (java.net.HttpURLConnection) raw;
+                    connection.setInstanceFollowRedirects(true);
+                    connection.setConnectTimeout(12000);
+                    connection.setReadTimeout(25000);
+                    connection.setRequestProperty("User-Agent", "Fusion/1.3");
+                    connection.setRequestProperty("Accept", "application/vnd.apple.mpegurl,text/plain,*/*");
+                    int status = connection.getResponseCode();
+                    java.io.InputStream stream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
+                    if (stream == null) throw new java.io.IOException("empty_response");
+                    java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(stream, java.nio.charset.StandardCharsets.UTF_8));
+                    String meta = null, line;
+                    int live = 0, movies = 0, series = 0, selected = 0;
+                    while ((line = reader.readLine()) != null) {
+                        line = line.trim();
+                        if (line.isEmpty()) continue;
+                        if (line.startsWith("#EXTINF:")) { meta = line; continue; }
+                        if (meta == null || line.charAt(0) == '#') continue;
+                        String hay = (meta + " " + line).toLowerCase(java.util.Locale.US);
+                        boolean isSeries = hay.matches(".*(series|serie|série|temporada|season|episode|episodio|/series/|/episode/|s[0-9]{1,2}e[0-9]{1,2}).*");
+                        boolean isMovie = !isSeries && hay.matches(".*(filme|filmes|movie|movies|cinema|vod|documentario|documentário|desenho|cartoon|/movie/|/vod/).*");
+                        int limit = isSeries ? 80 : isMovie ? 80 : 80;
+                        int count = isSeries ? series : isMovie ? movies : live;
+                        if (count < limit) {
+                            body += meta + "\n" + line + "\n";
+                            selected++;
+                            if (isSeries) series++; else if (isMovie) movies++; else live++;
+                            if (live >= 80 && movies >= 80 && series >= 80) break;
+                        }
+                        meta = null;
+                    }
+                    reader.close();
+                    ok = status >= 200 && status < 300 && selected > 0;
+                } catch (Throwable ignored) {
+                    ok = false;
+                } finally {
+                    if (connection != null) connection.disconnect();
+                }
+                final boolean result = ok;
+                final String resultBody = body;
+                runOnUiThread(() -> {
+                    if (webView == null) return;
+                    String script = "try{window.__zxPlaylistPreviewResult(" + JSONObject.quote(id) + "," + result + "," + JSONObject.quote(resultBody) + ")}catch(e){}";
+                    webView.evaluateJavascript(script, null);
+                });
+            }, "Fusion-M3U-preview").start();
+        }
+
+        @JavascriptInterface
         public void openTrailer(String url, String title) {
             final String target = url == null ? "" : url.trim();
             if (target.isEmpty() || !(target.startsWith("https://") || target.startsWith("http://"))) return;

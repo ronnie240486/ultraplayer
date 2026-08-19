@@ -364,8 +364,44 @@ function fetchT(url, ms, options) {
     return fetch(url, options)
         .then(function (r) { clearTimeout(t); return r; }, function (e) { clearTimeout(t); throw e; });
 }
-var M3U_PENDING = {};
+var M3U_PENDING = {}, M3U_PREVIEW_PENDING = {};
 global.__zxPlaylistResult = function (id, ok, text) { var p = M3U_PENDING[id]; if (!p) return; delete M3U_PENDING[id]; if (ok) p.resolve(text || ''); else p.reject(new Error('playlist_fetch_failed')); };
+global.__zxPlaylistPreviewResult = function (id, ok, text) { var p = M3U_PREVIEW_PENDING[id]; if (!p) return; delete M3U_PREVIEW_PENDING[id]; if (ok) p.resolve(text || ''); else p.reject(new Error('playlist_preview_failed')); };
+function fetchM3UPreviewText(url) {
+    if (global.HdxNative && typeof global.HdxNative.fetchM3UPreview === 'function') {
+        return new Promise(function (resolve, reject) {
+            var id = 'm3up_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
+            M3U_PREVIEW_PENDING[id] = { resolve: resolve, reject: reject };
+            try { global.HdxNative.fetchM3UPreview(String(url || ''), id); } catch (e) { delete M3U_PREVIEW_PENDING[id]; reject(e); return; }
+            setTimeout(function () { if (M3U_PREVIEW_PENDING[id]) { delete M3U_PREVIEW_PENDING[id]; reject(new Error('playlist_preview_timeout')); } }, 28000);
+        });
+    }
+    return fetchT(url, 25000, { credentials: 'omit', headers: { 'Accept': 'application/vnd.apple.mpegurl,text/plain,*/*' } }).then(function (r) { return r.text(); });
+}
+function snapshotCatalogFromList(kind, list) {
+    list = Array.isArray(list) ? list : [];
+    var byCat = {}, cats = [], catIds = {}, counter = 0;
+    for (var i = 0; i < list.length; i++) {
+        var item = list[i], name = item.group || (kind === 'movies' ? 'Filmes' : kind === 'series' ? 'Séries' : 'Canais');
+        if (!catIds[name]) { counter++; catIds[name] = String(counter); byCat[catIds[name]] = []; cats.push({ category_id: catIds[name], category_name: name, num: 0, adult: isAdultName(name) }); }
+        item.category_id = catIds[name]; byCat[catIds[name]].push(item);
+    }
+    for (var c = 0; c < cats.length; c++) cats[c].num = byCat[cats[c].category_id].length;
+    return { cats: cats, byCat: byCat, all: list, partial: true };
+}
+var M3U_PREVIEW_PROMISE = null;
+function catalogFromM3UPreview() {
+    if (M3U_PREVIEW_PROMISE) return M3U_PREVIEW_PROMISE;
+    if (!S.playlistUrl) return Promise.reject(new Error('playlist_url_missing'));
+    M3U_PREVIEW_PROMISE = fetchM3UPreviewText(S.playlistUrl).then(function (text) {
+        var raw = kidsFilterList(parseM3UText(text)), buckets = { live: [], movies: [], series: [] };
+        for (var i = 0; i < raw.length; i++) {
+            var item = raw[i]; item.m3u_kind = classifyM3UItem(item); buckets[item.m3u_kind].push(item);
+        }
+        return { live: snapshotCatalogFromList('live', buckets.live), movies: snapshotCatalogFromList('movies', buckets.movies), series: snapshotCatalogFromList('series', buckets.series) };
+    }).catch(function (err) { M3U_PREVIEW_PROMISE = null; throw err; });
+    return M3U_PREVIEW_PROMISE;
+}
 function fetchPlaylistText(url) {
     if (global.HdxNative && typeof global.HdxNative.fetchText === 'function') {
         return new Promise(function (resolve, reject) {
@@ -1422,38 +1458,37 @@ function readCatalogCache(kind) {
         return hit.data;
     } catch (e) { return null; }
 }
-function ensureCatalog(kind) {
-    // Em TV Box, uma fotografia curta do catálogo libera a primeira tela imediatamente.
-    // A consulta completa continua em segundo plano e atualiza a fonte para a próxima entrada.
-    if (S.cat[kind]) return Promise.resolve(S.cat[kind]);
+function ensureCatalog(kind, forceFull) {
+    forceFull = !!forceFull;
+    // A Home e os contadores usam apenas snapshot/cache. Entrar numa categoria,
+    // pesquisar ou usar voz passa forceFull=true e aí recebe o catálogo completo.
+    if (S.cat[kind] && (!forceFull || !S.cat[kind].partial)) return Promise.resolve(S.cat[kind]);
     if (S.catPromises[kind]) return S.catPromises[kind];
     var cached = getFormFactor() === 'tv' ? readCatalogCache(kind) : null;
-    if (cached) {
-        S.cat[kind] = cached;
-        setTimeout(function () {
-            if (!S.catPromises[kind]) refreshCatalog(kind, true);
-        }, 0);
-        return Promise.resolve(cached);
-    }
-    return refreshCatalog(kind, false);
+    if (cached && !forceFull) { S.cat[kind] = cached; return Promise.resolve(cached); }
+    if (cached && forceFull) S.cat[kind] = cached;
+    return refreshCatalog(kind, forceFull);
 }
 function refreshCatalog(kind, forceFull) {
     if (S.catPromises[kind]) return S.catPromises[kind];
     var isM3u = (S.playlistType || '').indexOf('m3u') === 0;
     if (isM3u && !S.xtreamDerived && !S.xtreamUnavailable) xtreamCreds();
     var work;
-    if (isM3u && (!S.xtreamDerived || S.xtreamUnavailable)) work = catalogFromM3U();
+    if (isM3u && (!S.xtreamDerived || S.xtreamUnavailable)) {
+        work = forceFull ? catalogFromM3U() : catalogFromM3UPreview().then(function (all) { return all[kind] || snapshotCatalogFromList(kind, []); });
+    }
     else work = xtreamCatalog(kind, !forceFull && getFormFactor() === 'tv' && kind !== 'live').catch(function (err) {
         if (isM3u && S.xtreamDerived) {
             S.xtreamUnavailable = true; S.xtreamDerived = null;
             S.cat = { movies: null, series: null, live: null };
-            return catalogFromM3U();
+            return forceFull ? catalogFromM3U() : catalogFromM3UPreview().then(function (all) { return all[kind] || snapshotCatalogFromList(kind, []); });
         }
         throw err;
     });
     S.catPromises[kind] = work.then(function (result) {
         saveCatalogCache(kind, result); delete S.catPromises[kind];
-        if (!forceFull && result && result.partial) setTimeout(function () { refreshCatalog(kind, true); }, 350);
+        // Não atualiza o catálogo completo automaticamente depois do snapshot.
+        // A carga integral só é disparada quando o usuário entra na categoria ou pesquisa.
         return result;
     }, function (err) { delete S.catPromises[kind]; throw err; });
     return S.catPromises[kind];
@@ -1483,7 +1518,7 @@ function shimGet(url, cb) {
     m = path.match(/^\/(movies|series)\/category\/(\d+)$/);
     if (m && qs.ajax === '1') {
         var kind = m[1], catId = m[2], page = parseInt(qs.page || '1', 10) || 1;
-        ensureCatalog(kind).then(function () {
+        ensureCatalog(kind, true).then(function () {
             var list = streamsForCat(kind, catId);
             var start = (page - 1) * PAGE, slice = list.slice(start, start + PAGE);
             cb({ html: posterTiles(slice, kind), has_more: (start + PAGE) < list.length }, 200);
@@ -1494,12 +1529,12 @@ function shimGet(url, cb) {
     m = path.match(/^\/live\/category\/(\d+)$/);
     if (m && qs.ajax === '1') {
         var lc = m[1];
-        ensureCatalog('live').then(function () { cb({ html: channelTiles(streamsForCat('live', lc)) }, 200); });
+        ensureCatalog('live', true).then(function () { cb({ html: channelTiles(streamsForCat('live', lc)) }, 200); });
         return true;
     }
     // todos os canais (busca instantânea)
     if (path === '/api/live/all') {
-        ensureCatalog('live').then(function () {
+        ensureCatalog('live', true).then(function () {
             var all = S.cat.live.all, out = [];
             for (var i = 0; i < all.length; i++) {
                 var s = all[i]; if (isAdultName(s.category_name)) {}
@@ -2448,7 +2483,7 @@ function renderVoiceResults(kind, query, list) {
     focusHomeStart();
 }
 function voiceSearchKind(kind, q) {
-    return ensureCatalog(kind).then(function (cat) {
+    return ensureCatalog(kind, true).then(function (cat) {
         var all = kidsFilterList((cat && cat.all) || []), scored = [];
         for (var i = 0; i < all.length; i++) { var sc = voiceMatchScore(all[i], q, kind); if (sc > 0) scored.push({ item: all[i], score: sc }); }
         scored.sort(function (a, b) { return b.score - a.score; });
@@ -2482,7 +2517,7 @@ function universalSearchRun(query) {
     if (status) status.textContent = 'Procurando em Canais, Filmes e Séries…';
     if (out) out.innerHTML = '<div class="universal-empty">Carregando resultados…</div>';
     showLoading(true);
-    Promise.all(['live','movies','series'].map(function (kind) { return ensureCatalog(kind).then(function (cat) { var src = kidsFilterList((cat && cat.all) || []), rows = []; for (var i = 0; i < src.length; i++) { var sc = voiceMatchScore(src[i], q, kind); if (sc > 0) rows.push({ item: src[i], score: sc }); } rows.sort(function (x, y) { return y.score - x.score; }); return { kind: kind, rows: rows.slice(0, 36) }; }).catch(function () { return { kind: kind, rows: [] }; }); })).then(function (groups) {
+    Promise.all(['live','movies','series'].map(function (kind) { return ensureCatalog(kind, true).then(function (cat) { var src = kidsFilterList((cat && cat.all) || []), rows = []; for (var i = 0; i < src.length; i++) { var sc = voiceMatchScore(src[i], q, kind); if (sc > 0) rows.push({ item: src[i], score: sc }); } rows.sort(function (x, y) { return y.score - x.score; }); return { kind: kind, rows: rows.slice(0, 36) }; }).catch(function () { return { kind: kind, rows: [] }; }); })).then(function (groups) {
         showLoading(false);
         var labels = { live: 'Canais', movies: 'Filmes', series: 'Séries' }, html = '';
         for (var i = 0; i < groups.length; i++) {
@@ -2762,7 +2797,7 @@ function ultraSessionBuild(raw) {
     req._genreDeferred = !!(req.genres && req.genres.length);
     showLoading(true); S.ultraSessionBusy = true;
     if (!kinds.length) { S.ultraSessionBusy = false; showLoading(false); var empty = { id: 'us_' + Date.now(), created_at: Date.now(), request: req, candidates: [], selected: [], status: 'draft', message: 'Na primeira versão, o UltraSession monta sessões com canais, filmes e séries. As rádios continuam disponíveis pela tela Rádios.' }; lsSet('zx_ultrasession_last', empty); renderUltraSession(empty); return; }
-    Promise.all(kinds.map(function (kind) { return ensureCatalog(kind).then(function (cat) { var src = kidsFilterList((cat && cat.all) || []), out = []; for (var i = 0; i < src.length; i++) { var c = ultraSessionCandidate(req, kind, src[i]); if (c) out.push(c); } return { kind: kind, rows: out }; }).catch(function () { return { kind: kind, rows: [] }; }); })).then(function (groups) {
+    Promise.all(kinds.map(function (kind) { return ensureCatalog(kind, true).then(function (cat) { var src = kidsFilterList((cat && cat.all) || []), out = []; for (var i = 0; i < src.length; i++) { var c = ultraSessionCandidate(req, kind, src[i]); if (c) out.push(c); } return { kind: kind, rows: out }; }).catch(function () { return { kind: kind, rows: [] }; }); })).then(function (groups) {
         var jobs = []; for (var j = 0; j < groups.length; j++) if (groups[j].kind !== 'live') { groups[j].rows.sort(ultraSessionSort); var lim = req.genres && req.genres.length ? Math.max(40, (req.count || 10) * 3) : 12; jobs.push(tmdbEnrichCatalog(groups[j].kind, groups[j].rows.slice(0, lim).map(function (x) { return x.item; }), lim).catch(function () {})); }
         return Promise.all(jobs).then(function () { req._genreDeferred = false; var all = []; for (var g = 0; g < groups.length; g++) for (var r = 0; r < groups[g].rows.length; r++) { var n = ultraSessionCandidate(req, groups[g].kind, groups[g].rows[r].item); if (n) all.push(n); } all.sort(ultraSessionSort); return all.slice(0, req.count || 18); });
     }).then(function (candidates) {
@@ -3264,17 +3299,35 @@ function homeRecommendationsHtml() {
 function fillHomeRecommendations() {
     if (!S.server || !document.querySelector('.zx-home2')) return;
     var tv = getFormFactor() === 'tv';
-    // A TV Box usa o parser incremental e pode montar as duas fileiras sem
-    // bloquear o D-pad. Quando há snapshot, renderiza na hora; sem snapshot,
-    // carrega em lotes e atualiza a Home assim que cada catálogo fica pronto.
-    var ready = Promise.all([ensureCatalog('movies'), ensureCatalog('series')]);
-    ready.then(function () {
-        var sec = $('zhReco'), row = $('zhRecoRow'); if (!sec || !row) return;
+    var sec = $('zhReco'), row = $('zhRecoRow'); if (!sec || !row) return;
+    function renderRows() {
         fillHomeNewest();
-        var items = homeRecommendationItems(); if (!items.length) { sec.style.display = 'none'; return; }
+        var items = homeRecommendationItems();
+        if (!items.length) {
+            row.innerHTML = '<div class="zh-empty">' + te('Carregando recomendações…') + '</div>';
+            sec.style.display = '';
+            return;
+        }
         row.innerHTML = homeRecommendationCards(items); sec.style.display = '';
         loadHomePosters(); scheduleHomeFit(0);
-    }).catch(function () {});
+    }
+    // Na TV Box, pintar um placeholder e devolver imediatamente o foco ao
+    // D-pad. O parsing/consulta só começa depois, fora do caminho da primeira
+    // navegação; quando termina, substitui o placeholder pelos cards.
+    if (tv) {
+        var cm = readCatalogCache('movies'), cs = readCatalogCache('series');
+        if (cm && !S.cat.movies) S.cat.movies = cm;
+        if (cs && !S.cat.series) S.cat.series = cs;
+        if (S.cat.movies || S.cat.series) renderRows();
+        else { row.innerHTML = '<div class="zh-empty">' + te('Preparando recomendações…') + '</div>'; sec.style.display = ''; }
+        if (S._homeDeferredLoad) return;
+        S._homeDeferredLoad = true;
+        setTimeout(function () {
+            Promise.all([ensureCatalog('movies'), ensureCatalog('series')]).then(renderRows).catch(function () {});
+        }, 900);
+        return;
+    }
+    Promise.all([ensureCatalog('movies'), ensureCatalog('series')]).then(renderRows).catch(function () {});
 }
 /* Carrega as capas da home na mão (o lazy-loader global só varre grids). */
 function loadHomePosters() {
@@ -3837,7 +3890,7 @@ function renderSection(kind, opts) {
     opts = opts || {};
     if (!S.server) return renderNoPlaylist();   // sem lista -> "Playlist não adicionada"
     showLoading(true);
-    ensureCatalog(kind).then(function (cat) {
+    ensureCatalog(kind, true).then(function (cat) {
         if (kind !== 'live' && cat && cat.partial && opts.catId && !cat.byCat[String(opts.catId)]) {
             showLoading(true);
             return refreshCatalog(kind, true).then(function () { return renderSection(kind, opts); });
@@ -4636,7 +4689,7 @@ function similarTile(s, kind) {
 function loadSimilar(kind, id, catId) {
     if (!catId) return;
     var box = document.querySelector('.dh-similar-lazy'); if (!box) return;
-    ensureCatalog(kind).then(function () {
+        ensureCatalog(kind, true).then(function () {
         // "Você também pode gostar" VARIADO: ~9 da MESMA categoria (relevância) +
         // o resto do CATÁLOGO INTEIRO (descoberta), tudo SEM nome repetido (o
         // provider duplica, ex.: "Rio de Sangue" 2x), embaralhado, 12. Antes era
@@ -4689,7 +4742,7 @@ function renderSearch(kind) {
         var q = (inp.value || '').replace(/^\s+|\s+$/g, '');
         if (q.length < 3) { results.innerHTML = '<div style="color:#aaa;padding:30px;text-align:center;">' + te('Digite pelo menos 3 letras.') + '</div>'; return; }
         results.innerHTML = '<div style="color:#aaa;padding:30px;text-align:center;">' + te('Buscando…') + '</div>';
-        ensureCatalog(kind).then(function (cat) {
+        ensureCatalog(kind, true).then(function (cat) {
             var nq = norm(q), out = [];
             for (var i = 0; i < cat.all.length && out.length < 300; i++) { if (norm(cat.all[i].name).indexOf(nq) !== -1) out.push(cat.all[i]); }
             if (!out.length) { results.innerHTML = '<div style="color:#aaa;padding:30px;text-align:center;">' + te('Nenhum resultado para') + ' "' + esc(q) + '".</div>'; return; }
