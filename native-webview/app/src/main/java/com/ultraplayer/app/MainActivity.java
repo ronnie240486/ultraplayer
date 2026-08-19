@@ -499,6 +499,7 @@ public final class MainActivity extends Activity {
 
         miniPlayerView = new PlayerView(this);
         miniPlayerView.setUseController(false);
+        miniPlayerView.setKeepContentOnPlayerReset(true);
         miniPlayerView.setControllerShowTimeoutMs(0);
         miniPlayerView.setControllerHideOnTouch(false);
         miniPlayerView.setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING);
@@ -1088,6 +1089,8 @@ public final class MainActivity extends Activity {
         }
         miniContainer.setBackgroundColor(android.graphics.Color.rgb(4, 12, 9));
         miniContainer.setElevation(24f);
+        miniPlayerView.setVisibility(View.VISIBLE);
+        if (miniPlayer != null && miniPlayerView.getPlayer() == null) miniPlayerView.setPlayer(miniPlayer);
         miniContainer.setVisibility(View.VISIBLE);
         miniContainer.bringToFront();
         miniContainer.requestLayout();
