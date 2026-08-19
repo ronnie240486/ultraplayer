@@ -4020,7 +4020,13 @@ function renderSection(kind, opts) {
     }).catch(function (err) {
         showLoading(false);
         if (err && err.zxOffline) return renderOfflineReload();   // Android offline: tela Recarregar
+                if (kind === 'live') {
+            var cachedLive = null;
+            try { cachedLive = normalizeLiveCatalog(readCatalogCache('live') || S.cat.live); } catch (cacheErr) { cachedLive = normalizeLiveCatalog(S.cat.live); }
+            if (cachedLive && cachedLive.cats && cachedLive.cats.length) { S.cat.live = cachedLive; showLoading(false); return renderLiveSection(cachedLive, opts); }
+        }
         setHtml('<div style="padding:60px;text-align:center;color:#aaa">Não foi possível carregar. <a href="/home" style="color:#fff;text-decoration:underline">Voltar</a></div>');
+
     });
 }
 
@@ -4340,8 +4346,33 @@ function wireLiveRemoteFocus() {
         }
     }, true);
 }
+function normalizeLiveCatalog(cat) {
+    if (!cat) return null;
+    cat.cats = Array.isArray(cat.cats) ? cat.cats : [];
+    cat.byCat = cat.byCat || {};
+    cat.all = Array.isArray(cat.all) ? cat.all : [];
+    // Algumas respostas M3U/Xtream podem trazer os canais, mas não a lista
+    // auxiliar de categorias. Recria uma categoria visível sem descartar canais.
+    if (!cat.cats.length && cat.all.length) {
+        var groups = {}, order = [], i;
+        for (i = 0; i < cat.all.length; i++) {
+            var item = cat.all[i], name = item.category_name || item.group || item.group_title || 'Canais';
+            if (!groups[name]) { groups[name] = []; order.push(name); }
+            groups[name].push(item);
+        }
+        for (i = 0; i < order.length; i++) {
+            var key = order[i], id = String(i + 1);
+            cat.byCat[id] = groups[key];
+            for (var j = 0; j < groups[key].length; j++) groups[key][j].category_id = id;
+            cat.cats.push({ category_id: id, category_name: key, num: groups[key].length, adult: isAdultName(key) });
+        }
+    }
+    return cat;
+}
 function renderLiveSection(cat, opts) {
+    cat = normalizeLiveCatalog(cat);
     var selCat = null, selName = '', tiles = '', virtual = opts.virtual || '';
+
     // PC: voltando de um canal (history.back → /live SEM categoria) → restaura a
     // categoria de onde saiu (setada no goPlay). Senão caía na 1ª (Casa do Patrão).
     if (!nativeAvail() && !opts.catId && !virtual && S.liveBack) {   // PC + Samsung (Android toca direto, não navega)
