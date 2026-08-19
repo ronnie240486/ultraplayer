@@ -3165,12 +3165,17 @@ function renderHome() {
     applyHomePanelWall();
     applyPhoneHomeLayout();
     if (!srvName) startHomeClock();   // com nome de parceiro no topo não há relógio pra atualizar
-    loadHomePosters();   // capas do "Assistido Recentemente" (o lazy-loader global é escopado a grid)
-    fillHomeNewest();    // catálogo já em cache → "Recém adicionados" entra ANTES do 1º paint
-        try { setTimeout(fillHomeCounts, getFormFactor() === 'tv' ? 1800 : 400); } catch (e) { fillHomeCounts(); }   // contagens usam cache inicial e a sincronização integral atualiza depois
+        // A pintura inicial não espera imagens nem faz trabalho pesado. O foco/D-pad
+    // fica livre; as capas entram em uma fila pequena depois do primeiro frame.
+    if (!isTvHomeMode()) loadHomePosters();
+    fillHomeNewest();
 
-        fitHomeAll();               // SÍNCRONO (antes do 1º paint): sem o "abre grande e encolhe" ao voltar pra home
-    scheduleHomeFit(160);        // uma segunda medição coalescida depois de fontes/imagens assentarem
+        try { setTimeout(fillHomeCounts, isTvHomeMode() ? 1800 : 400); } catch (e) { fillHomeCounts(); }   // contagens usam cache inicial e a sincronização integral atualiza depois
+
+        // TV Box não mede/reescreve dezenas de cards antes do primeiro frame.
+        // A navegação fica livre imediatamente; a adaptação visual é adiada.
+        if (!isTvHomeMode()) fitHomeAll();
+    scheduleHomeFit(isTvHomeMode() ? 900 : 160);
 
     if (!S._homeFitBound) {   // girar/redimensionar → re-mede (zera o inline e ajusta de novo)
         S._homeFitBound = true;
@@ -3188,7 +3193,7 @@ function renderHome() {
     wireAnnounce(ann);
     afterRender();
     try { setTimeout(warmHomeCatalogs, getFormFactor() === 'tv' ? 700 : 220); } catch (e) {}
-    try { setTimeout(fillHomeRecommendations, getFormFactor() === 'tv' ? (homeCacheReady ? 80 : 1200) : 480); } catch (e) {}
+    try { setTimeout(fillHomeRecommendations, isTvHomeMode() ? 0 : 480); } catch (e) {}
     focusHomeStart();   // foco SEMPRE no "TV ao Vivo" já MARCADO (o harness focaria "Servidor")
     // PERFIS: avatar do topo abre o "Quem está assistindo?"
     try {
@@ -3349,20 +3354,37 @@ function homeRecommendationsHtml() {
     var head = '<h2 class="zh-h2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3z"></path></svg> Para você</h2>';
     return '<section class="zh-recent zh-recommend" id="zhReco" style="display:none">' + head + '<div class="zh-posters" id="zhRecoRow"></div></section>';
 }
+function homeSkeletonCards(count) {
+    var h = '', n = Math.max(1, Math.min(8, count || 6));
+    for (var i = 0; i < n; i++) {
+        h += '<div class="zh-poster zh-skeleton" aria-hidden="true"><div class="pt-img zh-art"></div><div class="zh-cbody"><div class="zh-cyear"> </div><div class="zh-cname">Carregando…</div><div class="zh-cleft"> </div></div></div>';
+    }
+    return h;
+}
+function isTvHomeMode() {
+    try {
+        return getFormFactor() === 'tv' || !!(document.body && /(^|\s)(zx-ff-tv|ui-tv)(\s|$)/.test(String(document.body.className || '')));
+    } catch (e) { return false; }
+}
 function fillHomeRecommendations(forceFull) {
     if (!S.server || !document.querySelector('.zx-home2')) return;
-    var tv = getFormFactor() === 'tv';
+    var tv = isTvHomeMode();
     var sec = $('zhReco'), row = $('zhRecoRow'); if (!sec || !row) return;
     function renderRows() {
         fillHomeNewest();
         var items = homeRecommendationItems();
         if (!items.length) {
-            row.innerHTML = '<div class="zh-empty">' + te('Carregando recomendações…') + '</div>';
+            row.innerHTML = isTvHomeMode() ? homeSkeletonCards(6) : '<div class="zh-empty">' + te('Carregando recomendações…') + '</div>';
             sec.style.display = '';
             return;
         }
         row.innerHTML = homeRecommendationCards(items); sec.style.display = '';
-        loadHomePosters(); scheduleHomeFit(0);
+        if (isTvHomeMode()) {
+            setTimeout(function () { loadHomePosters(); }, 0);
+            scheduleHomeFit(900);
+        } else {
+            loadHomePosters(); scheduleHomeFit(0);
+        }
     }
     // Na TV Box, pintar um placeholder e devolver imediatamente o foco ao
     // D-pad. O parsing/consulta só começa depois, fora do caminho da primeira
@@ -3390,7 +3412,7 @@ function fillHomeRecommendations(forceFull) {
 function loadHomePosters() {
     try {
         var imgs = document.querySelectorAll('.zh-art[data-src]'), pending = 0, started = 0;
-        var batch = getFormFactor() === 'tv' ? 6 : 8;
+        var batch = isTvHomeMode() ? 3 : 8;
         for (var i = 0; i < imgs.length; i++) {
             var el = imgs[i];
             if (el.getAttribute('data-loaded')) continue;
@@ -3408,7 +3430,7 @@ function loadHomePosters() {
         }
         if (pending > started) {
             try { if (S._homePosterTimer) clearTimeout(S._homePosterTimer); } catch (e2) {}
-            S._homePosterTimer = setTimeout(function () { S._homePosterTimer = null; loadHomePosters(); }, getFormFactor() === 'tv' ? 700 : 420);
+            S._homePosterTimer = setTimeout(function () { S._homePosterTimer = null; loadHomePosters(); }, isTvHomeMode() ? 1100 : 420);
         } else S._homePosterTimer = null;
     } catch (e) {}
 }
@@ -3494,7 +3516,14 @@ function fillHomeNewest(forceFull) {
     try {
         var row = document.getElementById('zhNewestRow'); if (!row) return;
                         if (row.childNodes.length && !forceFull) return;   // já preenchido
-        var c = S.cat && S.cat.movies; if (!c || !c.all || !c.all.length) return;
+        var c = S.cat && S.cat.movies;
+        if (!c || !c.all || !c.all.length) {
+            if (isTvHomeMode() && !row.querySelector('.zh-skeleton')) {
+                row.innerHTML = homeSkeletonCards(6);
+                var pendingSec = document.getElementById('zhNewest'); if (pendingSec) pendingSec.style.display = '';
+            }
+            return;
+        }
         if (forceFull) row.innerHTML = '';
         var h = '', n = 0;
 
@@ -3577,6 +3606,10 @@ function trimHomePosters() {
    largura JÁ encolhida da anterior e encolhia de novo (cards "pulavam"
    diminuindo a cada volta pra home). Tudo síncrono → sem flash. */
 function fitHomeAll() {
+    // No TV Box, medir e reescrever dezenas de cards durante a primeira
+    // hidratação compete com as teclas do controle. A composição da TV já usa
+    // rolagem horizontal/vertical e não precisa desse ajuste síncrono.
+    if (isTvHomeMode()) return;
     try {
         var ps = document.querySelectorAll('.zh-poster');
         for (var i = 0; i < ps.length; i++) { ps[i].style.width = ''; ps[i].style.display = ''; }
