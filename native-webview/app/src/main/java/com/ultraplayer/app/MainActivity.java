@@ -481,7 +481,7 @@ public final class MainActivity extends Activity {
                 try {
                     JSONObject json = new JSONObject(payload == null ? "{}" : payload);
                     if (!json.optString("url", "").isEmpty()) {
-                        showMiniPlayer(json.toString(), false);
+                        showMiniPlayer(json.toString(), true);
                         openFullMiniPlayer();
                     }
                 } catch (Throwable ignored) { }
