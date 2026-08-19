@@ -4070,14 +4070,15 @@ function liveStyles() {
         // pills mais LARGAS (pedido 19/07): sidebar larga (29vw) e altura/fonte
         // normais — cresce pro LADO, não pra cima. Capas seguem 4 colunas (alvo
         // é % da tela, a conta continua dando 4 com a sidebar larga).
-        + 'body.zx-ff-tv .cat-sidebar,body.ui-tv .cat-sidebar{width:21vw !important;max-width:21vw !important;padding:.55vw .45vw .55vw .6vw !important;}'
-        + 'body.zx-ff-tv .sidebar-content,body.ui-tv .sidebar-content{left:21vw !important;padding:.55vw .9vw .9vw !important;}'
-        + 'body.zx-ff-tv .cat-sidebar .cat-pill,body.ui-tv .cat-sidebar .cat-pill{font-size:15px !important;padding-top:12px !important;padding-bottom:12px !important;padding-left:.65vw !important;padding-right:1.8vw !important;margin-bottom:6px !important;min-height:54px !important;border-radius:.5vw !important;line-height:1.18 !important;display:flex !important;align-items:center !important;}'
-        + 'body.zx-ff-tv .cat-sidebar .cat-pill>span:first-child,body.ui-tv .cat-sidebar .cat-pill>span:first-child{white-space:normal !important;overflow:visible !important;text-overflow:clip !important;line-height:1.12 !important;}'
-        + 'body.zx-ff-tv .cat-sidebar .cat-pill .cat-count{font-size:13px !important;right:.8vw;margin-top:-7px;line-height:1.1;}'
-        + 'body.zx-ff-tv .cat-sidebar .cat-lock{width:.8vw;height:.8vw;}'
-        + 'body.zx-ff-tv .cat-sidebar{overflow-y:auto !important;scroll-behavior:auto !important;}'
-        + 'body.zx-ff-tv .cat-sidebar .cat-pill:focus-visible{scroll-margin-top:12px;scroll-margin-bottom:12px;}'
+        + 'body.zx-ff-tv .cat-sidebar,body.ui-tv .cat-sidebar{width:16vw !important;max-width:16vw !important;height:100% !important;box-sizing:border-box !important;padding:.35vw .3vw .35vw .4vw !important;display:flex !important;flex-direction:column !important;align-items:stretch !important;overflow-x:hidden !important;overflow-y:auto !important;scroll-behavior:auto !important;}'
+        + 'body.zx-ff-tv .sidebar-content,body.ui-tv .sidebar-content{left:16vw !important;padding:.35vw .7vw .7vw !important;}'
+        + 'body.zx-ff-tv .cat-sidebar .cat-pill,body.ui-tv .cat-sidebar .cat-pill{font-size:11px !important;padding:6px .65vw !important;margin-bottom:3px !important;min-height:36px !important;height:36px !important;max-height:36px !important;border-radius:7px !important;line-height:1.05 !important;display:flex !important;align-items:center !important;overflow:hidden !important;white-space:nowrap !important;text-overflow:ellipsis !important;}'
+        + 'body.zx-ff-tv .cat-sidebar .cat-pill>span:first-child,body.ui-tv .cat-sidebar .cat-pill>span:first-child{white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important;line-height:1.05 !important;min-width:0 !important;}'
+        + 'body.zx-ff-tv .cat-sidebar .cat-pill .cat-count,body.ui-tv .cat-sidebar .cat-pill .cat-count{font-size:10px !important;right:.45vw;margin-left:auto;margin-top:0 !important;line-height:1 !important;}'
+        + 'body.zx-ff-tv .cat-sidebar .cat-lock,body.ui-tv .cat-sidebar .cat-lock{width:12px !important;height:12px !important;flex:none !important;}'
+        + 'body.zx-ff-tv .cat-sidebar .cat-pill:focus-visible,body.ui-tv .cat-sidebar .cat-pill:focus-visible{scroll-margin-top:8px;scroll-margin-bottom:8px;}'
+        + 'body.zx-ff-tv .cat-sidebar .cat-pill:focus,body.ui-tv .cat-sidebar .cat-pill:focus{background:' + a + ' !important;border-color:#ffffff !important;color:#ffffff !important;box-shadow:0 0 0 3px #ffffff,0 0 0 6px ' + a + ' !important;outline:none !important;}'
+        + 'body.zx-ff-tv .cat-sidebar .cat-pill.is-active,body.ui-tv .cat-sidebar .cat-pill.is-active{background:' + a + 'cc !important;border-color:#ffffff !important;color:#ffffff !important;box-shadow:0 0 0 2px #ffffff !important;}'
         + 'body.zx-ff-tv a:focus,body.zx-ff-tv button:focus,body.zx-ff-tv [tabindex]:focus,body.ui-tv a:focus,body.ui-tv button:focus,body.ui-tv [tabindex]:focus{outline:3px solid #ffffff !important;outline-offset:2px !important;box-shadow:0 0 0 5px rgba(16,185,129,.95) !important;background-color:rgba(16,185,129,.28) !important;color:#ffffff !important;}'
         + 'body.zx-ff-tv .sidebar-content .sc-title{font-size:1.8vw;margin-bottom:1.1vw;}'
         + 'body.zx-ff-tv .live-split .channel-tile-tv,body.ui-tv .live-split .channel-tile-tv{min-height:64px !important;height:64px !important;padding:6px 7px !important;margin-bottom:4px !important;border-radius:8px !important;}'
