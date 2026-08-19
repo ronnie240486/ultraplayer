@@ -3010,13 +3010,16 @@ function renderHome() {
         + tile(dest('/movies'), svMov, 'Filmes', homeCountLabel('movies', 'filmes'), 'zhSubMovies', false, '', 'movies')
         + tile(dest('/series'), svSer, 'Séries', homeCountLabel('series', 'séries'), 'zhSubSeries', false, '', 'series')
         + '</div>'
-        + '<div class="zh-navbot">'
+        + '<div class="zh-navbot zh-navbot-placeholder" aria-hidden="true"></div>'
+        + '</div></nav>';
+
+    var quickBar = '<div class="zh-quickbar" id="zhQuickbar">'
         + stile(dest('/favorites'), svHeart, 'Favoritos', favN + ' ' + t('itens'))
         + stile(dest('/queue'), svQueue, 'Minha Fila', queueN + ' ' + t('itens'))
         + stile('/alerts', svBell, 'Meus Alertas', alertN + (alertN === 1 ? ' aviso' : ' avisos'))
         + stile('/lists', svPl, 'Playlist', te('Adicionar / gerenciar'))
-        + '</div>'
-        + '</div></nav>';
+        + '</div>';
+    top = top.replace('</header>', '</header>' + quickBar);
 
     var status = '<footer class="zh-status">'
         + '<span>' + te('Perfil:') + ' <b>' + esc(profName(profActive())) + '</b></span><span class="zh-bar"></span>'
@@ -5735,10 +5738,16 @@ function ffMobileCss() {
         /* TV Box Home: blocos grandes e rolagem vertical, sem sobrepor ícones. */
         + 'body.zx-ff-tv .zx-home2{position:absolute !important;inset:0 !important;overflow-x:hidden !important;overflow-y:auto !important;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}'
         + 'body.zx-ff-tv .zx-home2 .zh-ui{position:relative !important;inset:auto !important;height:auto !important;min-height:100vh !important;overflow:visible !important;display:flex !important;flex-direction:column !important;padding:2.4vw 3vw 5vw !important;box-sizing:border-box !important;}'
-        + 'body.zx-ff-tv .zx-home2 .zh-nav{display:flex !important;flex-direction:column !important;flex:none !important;width:100% !important;height:auto !important;min-height:0 !important;margin-top:2vw !important;gap:1.4vw !important;}'
-        + 'body.zx-ff-tv .zx-home2 .zh-nav>.zh-tile{display:flex !important;flex:none !important;width:100% !important;max-width:none !important;height:13.5vw !important;min-height:118px !important;max-height:160px !important;padding:1.3vw !important;border-radius:1.2vw !important;}'
-        + 'body.zx-ff-tv .zx-home2 .zh-navr{display:flex !important;flex-direction:column !important;flex:none !important;min-height:0 !important;width:100% !important;gap:1.4vw !important;}'
-        + 'body.zx-ff-tv .zx-home2 .zh-navtop,body.zx-ff-tv .zx-home2 .zh-navbot{display:grid !important;grid-template-columns:repeat(2,minmax(0,1fr)) !important;flex:none !important;gap:1.4vw !important;min-height:0 !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-quickbar{display:grid !important;grid-template-columns:repeat(4,minmax(0,1fr)) !important;width:100% !important;gap:1vw !important;margin-top:1vw !important;flex:none !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-quickbar .zh-stile{height:6.2vw !important;min-height:70px !important;max-height:92px !important;padding:.7vw !important;border-radius:1vw !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-quickbar .zh-stile svg{width:2.5vw !important;height:2.5vw !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-quickbar .zh-stile b{font-size:1.25vw !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-quickbar .zh-ssub{font-size:.85vw !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-nav{display:grid !important;grid-template-columns:repeat(3,minmax(0,1fr)) !important;flex:none !important;width:100% !important;height:10.5vw !important;min-height:98px !important;max-height:132px !important;margin-top:1.1vw !important;gap:1vw !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-nav>.zh-tile{display:flex !important;flex:none !important;width:auto !important;max-width:none !important;height:100% !important;min-height:98px !important;max-height:132px !important;padding:1vw !important;border-radius:1.1vw !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-navr{display:contents !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-navtop{display:contents !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-navbot-placeholder{display:none !important;}'
         + 'body.zx-ff-tv .zx-home2 .zh-navtop .zh-tile,body.zx-ff-tv .zx-home2 .zh-navbot .zh-stile{display:flex !important;flex:none !important;width:auto !important;max-width:none !important;height:10.5vw !important;min-height:98px !important;max-height:132px !important;padding:1.2vw !important;border-radius:1.1vw !important;}'
         + 'body.zx-ff-tv .zx-home2 .zh-navtop .zh-ico,body.zx-ff-tv .zx-home2 .zh-navtop .zh-ico svg{width:4vw !important;height:4vw !important;}'
         + 'body.zx-ff-tv .zx-home2 .zh-nav>.zh-tile .zh-ico,body.zx-ff-tv .zx-home2 .zh-nav>.zh-tile .zh-ico svg{width:5vw !important;height:5vw !important;}'
@@ -5747,11 +5756,11 @@ function ffMobileCss() {
         + 'body.zx-ff-tv .zx-home2 .zh-stile svg{width:3vw !important;height:3vw !important;}'
         + 'body.zx-ff-tv .zx-home2 .zh-stile b{font-size:1.45vw !important;}'
         + 'body.zx-ff-tv .zx-home2 .zh-ssub{font-size:1vw !important;}'
-        + 'body.zx-ff-tv .zx-home2 .zh-recent{display:flex !important;flex:none !important;width:100% !important;max-width:none !important;overflow:visible !important;margin-top:2vw !important;gap:1vw !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-recent{display:flex !important;flex:none !important;width:100% !important;max-width:none !important;overflow:visible !important;margin-top:1vw !important;gap:.45vw !important;}'
         + 'body.zx-ff-tv .zx-home2 .zh-recent .zh-posters{width:100% !important;max-width:none !important;overflow-x:auto !important;overflow-y:hidden !important;padding:1vw 0 1.3vw !important;gap:1.2vw !important;}'
         + 'body.zx-ff-tv .zx-home2 .zh-recent .zh-poster{display:flex !important;flex:0 0 23vw !important;width:23vw !important;min-width:23vw !important;height:9vw !important;min-height:82px !important;max-height:118px !important;}'
         + 'body.zx-ff-tv .zx-home2 .zh-h2{font-size:1.55vw !important;}'
-        + 'body.zx-ff-tv .zx-home2 .zh-status{margin-top:2vw !important;flex:none !important;}' ;
+        + 'body.zx-ff-tv .zx-home2 .zh-status{margin-top:1vw !important;flex:none !important;}' ;
 }
 function injectFfAskCss() {
     if ($('zx-ffa-css')) return;

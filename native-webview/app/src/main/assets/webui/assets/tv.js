@@ -65,7 +65,7 @@
         // the grid (e.g. lands on the sidebar).
         var row = currentEl.closest && currentEl.closest(
             '.home-grid, .live-categories, .live-channels, .live-days, .live-epg, ' +
-                        '.live-topbar, .profile-grid, .season-pills, .episode-row, .vkb-row, .dhs-row, .zh-navtop'
+                        '.live-topbar, .profile-grid, .season-pills, .episode-row, .vkb-row, .dhs-row, .zh-nav, .zh-navtop, .zh-quickbar'
 
         );
         if (!row) return null;
@@ -213,22 +213,19 @@
         if (!home) return null;
         var nav = home.querySelector ? home.querySelector('.zh-nav') : null;
         if (!nav) return null;
-        var inLive = !!homeAncestor(currentEl, 'zh-nav') && !!homeAncestor(currentEl, 'zh-tile');
-        var inTop = !!homeAncestor(currentEl, 'zh-navtop');
-        var inBottom = !!homeAncestor(currentEl, 'zh-navbot');
+        var inQuick = !!homeAncestor(currentEl, 'zh-quickbar');
+        var inNav = !!homeAncestor(currentEl, 'zh-nav') && !!homeAncestor(currentEl, 'zh-tile');
         var inRecent = !!homeAncestor(currentEl, 'zh-recent');
         var inRecommend = !!homeAncestor(currentEl, 'zh-recommend');
         if (dir === 'down') {
-            if (inLive && !inTop && !inBottom) return homeFirstFocusable(nav.querySelector('.zh-navtop'), '.zh-tile');
-            if (inTop) return homeFirstFocusable(nav.querySelector('.zh-navbot'), '.zh-stile');
-            if (inBottom) return homeFirstFocusable(home.querySelector('.zh-recent'), '.zh-poster');
+            if (inQuick) return homeFirstFocusable(nav, '.zh-tile');
+            if (inNav) return homeFirstFocusable(home.querySelector('.zh-recent:not(.zh-recommend)'), '.zh-poster');
             if (inRecent && !inRecommend) return homeFirstFocusable(home.querySelector('.zh-recommend'), '.zh-poster');
             return null;
         }
-        if (inRecommend) return homeFirstFocusable(home.querySelector('.zh-recent:not(.zh-recommend)'), '.zh-poster') || homeFirstFocusable(nav.querySelector('.zh-navbot'), '.zh-stile');
-        if (inRecent) return homeFirstFocusable(nav.querySelector('.zh-navbot'), '.zh-stile');
-        if (inBottom) return homeFirstFocusable(nav.querySelector('.zh-navtop'), '.zh-tile');
-        if (inTop) return (nav.firstElementChild && visible(nav.firstElementChild)) ? nav.firstElementChild : homeFirstFocusable(nav, '.zh-tile');
+        if (inRecommend) return homeFirstFocusable(home.querySelector('.zh-recent:not(.zh-recommend)'), '.zh-poster');
+        if (inRecent) return homeFirstFocusable(nav, '.zh-tile');
+        if (inNav) return homeFirstFocusable(home.querySelector('.zh-quickbar'), '.zh-stile');
         return null;
     }
     function pickSpatial(currentEl, dir) {
