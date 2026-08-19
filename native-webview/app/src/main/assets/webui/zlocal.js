@@ -4006,7 +4006,7 @@ function renderSection(kind, opts) {
     ensureCatalog(kind, true).then(function (cat) {
         // Proteção contra regressão: uma resposta de preview/cache vazia nunca
         // pode abrir a tela Live sem canais. Reconsulta uma vez e só então pinta.
-        if (kind === 'live' && !opts._liveRetry && (!cat || cat.partial || !cat.cats || !cat.cats.length || !cat.all || !cat.all.length)) {
+        if (kind === 'live' && isTvHomeMode() && !opts._liveRetry && (!cat || cat.partial || !cat.cats || !cat.cats.length || !cat.all || !cat.all.length)) {
             opts._liveRetry = true;
             return refreshCatalog(kind, true).then(function (full) { showLoading(false); return renderLiveSection(full, opts); });
         }
