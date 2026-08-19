@@ -2867,6 +2867,38 @@ function renderRadioScreen() {
     radioLoadCategory(cat).then(function (stations) { S.radioStations = stations; radioRefreshCountries(stations); radioRenderStations(stations); }).catch(function () { if (grid) grid.innerHTML = '<div class="zx-empty">Não foi possível carregar as rádios agora. Tente novamente.</div>'; var st = document.getElementById('radio-status'); if (st) st.textContent = 'Catálogo indisponível no momento'; });
     afterRender();
 }
+function refreshHomeCachedCatalogs(kinds, index) {
+    if (!kinds || index >= kinds.length) return;
+    var kind = kinds[index];
+    try {
+        refreshCatalog(kind, true).then(function () {
+            setTimeout(function () { refreshHomeCachedCatalogs(kinds, index + 1); }, 700);
+        })['catch'](function () {
+            setTimeout(function () { refreshHomeCachedCatalogs(kinds, index + 1); }, 700);
+        });
+    } catch (e) {
+        setTimeout(function () { refreshHomeCachedCatalogs(kinds, index + 1); }, 700);
+    }
+}
+function hydrateHomeCatalogCache() {
+    if (getFormFactor() !== 'tv' || !S.server) return false;
+    var ready = false, cachedKinds = [];
+    try {
+        ['movies', 'series', 'live'].forEach(function (kind) {
+            if (S.cat && S.cat[kind]) { ready = true; return; }
+            var cached = readCatalogCache(kind);
+            if (cached) { S.cat[kind] = cached; ready = true; cachedKinds.push(kind); }
+        });
+        if (cachedKinds.length && !S._homeCacheRefreshStarted) {
+            S._homeCacheRefreshStarted = true;
+            setTimeout(function () {
+                refreshHomeCachedCatalogs(cachedKinds, 0);
+                S._homeCacheRefreshStarted = false;
+            }, 1200);
+        }
+    } catch (e) {}
+    return ready;
+}
 function renderHome() {
     injectProfCss();   // avatar do topo usa .zx-pf-av — sem isto a 1ª pintura sai QUADRADA/torta (o CSS só entrava quando o gate abria)
     // Passou pela TELA INICIAL → zera a memória das seções (categoria + rolagem +
@@ -2939,7 +2971,8 @@ function renderHome() {
         + '<a href="#" class="zh-tbtn ic zh-profbtn" id="zxProfBtn" aria-label="' + te('Perfis') + '">' + profAvatarHtml(profActive().a, 34) + '</a>'
         + '</div></header>';
 
-        var recent = homeRecentHtml();
+        var homeCacheReady = hydrateHomeCatalogCache();
+    var recent = homeRecentHtml();
     var recommendations = homeRecommendationsHtml();
 
     var svTv = '<polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2"></rect>';
@@ -3030,7 +3063,7 @@ function renderHome() {
     wireAnnounce(ann);
     afterRender();
     try { setTimeout(warmHomeCatalogs, getFormFactor() === 'tv' ? 700 : 220); } catch (e) {}
-    try { setTimeout(fillHomeRecommendations, getFormFactor() === 'tv' ? 5000 : 480); } catch (e) {}
+    try { setTimeout(fillHomeRecommendations, getFormFactor() === 'tv' ? (homeCacheReady ? 80 : 1200) : 480); } catch (e) {}
     focusHomeStart();   // foco SEMPRE no "TV ao Vivo" já MARCADO (o harness focaria "Servidor")
     // PERFIS: avatar do topo abre o "Quem está assistindo?"
     try {

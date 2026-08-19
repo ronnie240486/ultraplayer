@@ -434,6 +434,8 @@ public final class MainActivity extends Activity {
 
         miniPlayerView = new PlayerView(this);
         miniPlayerView.setUseController(false);
+        miniPlayerView.setControllerShowTimeoutMs(0);
+        miniPlayerView.setControllerHideOnTouch(false);
         miniPlayerView.setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING);
         miniPlayerView.setBackgroundColor(android.graphics.Color.BLACK);
         miniPlayerView.setContentDescription("Abrir player em tela cheia");
@@ -865,6 +867,8 @@ public final class MainActivity extends Activity {
             miniPlayerView.setResizeMode(androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT);
             applyFullZoom();
             miniPlayerView.setUseController(true);
+            miniPlayerView.setControllerShowTimeoutMs(0);
+            miniPlayerView.setControllerHideOnTouch(false);
             miniPlayerView.setControllerAutoShow(true);
             if (miniCloseButton != null) {
                 miniCloseButton.setContentDescription("Voltar para o mini player");

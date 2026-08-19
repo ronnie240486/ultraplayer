@@ -54,7 +54,8 @@ public final class PlayerActivity extends Activity {
 
         playerView = new PlayerView(this);
         playerView.setUseController(true);
-        playerView.setControllerShowTimeoutMs(4500);
+        playerView.setControllerShowTimeoutMs(0);
+        playerView.setControllerHideOnTouch(false);
         playerView.setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS);
         playerView.setResizeMode(androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT);
         root.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
