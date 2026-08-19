@@ -306,7 +306,8 @@
              || cls.indexOf('settings-menu') !== -1
              || cls.indexOf('settings-content') !== -1
              || cls.indexOf('episode-row') !== -1
-             || cls.indexOf('dhs-row') !== -1) {
+             || cls.indexOf('dhs-row') !== -1
+             || cls.indexOf('zh-posters') !== -1) {
                 return p;
             }
             p = p.parentNode;
@@ -342,16 +343,25 @@
     function focusEl(el) {
         if (!el) return;
 
-        // Android (WebView moderno): usa o scrollIntoView NATIVO, que rola TODA a
-        // cadeia de ancestrais roláveis. O caminho manual abaixo (offsetTop + só o
-        // container MAIS PRÓXIMO) é p/ WebKit antigo da Samsung/LG e tem 2 furos no
-        // Android: (a) offsetTop é relativo ao offsetParent — erra quando há um
-        // ancestral posicionado no meio (ex.: recomendados do detalhe ficam em
-        // .dh-similar position:relative → offsetTop ~33 em vez de ~536, "acha" que
-        // já está visível); (b) só rola o container mais próximo (a fileira
-        // horizontal .dhs-row), nunca o .detail-screen vertical → o usuário descia
-        // o foco pros recomendados mas a tela não rolava. block/inline:'nearest' não
-        // "pula pro topo". Web/Tizen/LG seguem IDÊNTICOS (isAndroid=false).
+        // TV Box: categorias usam um scroller vertical próprio. Evite o
+        // scrollIntoView do Android, que percorre toda a cadeia de ancestrais e
+        // pode deslocar a página inteira a cada tecla. O caminho manual abaixo
+        // limita a rolagem ao .sidebar-content e reduz o custo visual do D-pad.
+        var tvForm = false;
+        try { var bc = document.body && String(document.body.className || ''); tvForm = bc.indexOf('zx-ff-tv') >= 0 || bc.indexOf('ui-tv') >= 0; } catch (e0) {}
+        var localScroll = findScrollableAncestor(el), localCls = localScroll && typeof localScroll.className === 'string' ? localScroll.className : '';
+        if (isAndroid() && tvForm && localScroll && localCls.indexOf('sidebar-content') >= 0) {
+            var savedSidebarTop = localScroll.scrollTop, oldWinY = window.pageYOffset || 0;
+            try { el.focus({ preventScroll: true }); } catch (e1) { try { el.focus(); } catch (e2) {} }
+            localScroll.scrollTop = savedSidebarTop;
+            var er = el.getBoundingClientRect(), sr = localScroll.getBoundingClientRect();
+            if (er.top < sr.top) localScroll.scrollTop -= (sr.top - er.top);
+            else if (er.bottom > sr.bottom) localScroll.scrollTop += (er.bottom - sr.bottom);
+            try { if (window.scrollTo) window.scrollTo(0, oldWinY); } catch (e3) {}
+            return;
+        }
+        // Android (WebView moderno): usa o scrollIntoView NATIVO nas demais telas.
+        // Web/Tizen/LG continuam no caminho manual histórico.
         if (isAndroid()) {
             try { el.focus({ preventScroll: true }); } catch (e) { try { el.focus(); } catch (e2) {} }
             try { el.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (e) {}
@@ -801,6 +811,45 @@
             return;
         }
 
+        // ---- Home: fileiras Para você / Filmes em destaque ----
+        // Na TV Box, as setas horizontais de uma fileira devem mover somente
+        // os cards. O WebView nativo pode tentar rolar a página inteira quando
+        // o próximo card está fora da viewport; interceptamos antes do algoritmo
+        // espacial e fazemos o foco/scroll manual no row horizontal.
+        if (isAndroid() && (isLeft(e) || isRight(e))) {
+            var hcur = document.activeElement, hnode = hcur, hrow = null, hcard = null;
+            while (hnode && hnode !== document.body) {
+                var hcls = (typeof hnode.className === 'string') ? hnode.className : '';
+                if (hnode.tagName === 'A' && hcls.indexOf('zh-poster') !== -1) { hcard = hnode; break; }
+                if (hcls.indexOf('zh-posters') !== -1) { hrow = hnode; }
+                hnode = hnode.parentNode;
+            }
+            if (!hrow && hcard) {
+                var hp = hcard.parentNode;
+                while (hp && hp !== document.body) {
+                    var hpcls = (typeof hp.className === 'string') ? hp.className : '';
+                    if (hpcls.indexOf('zh-posters') !== -1) { hrow = hp; break; }
+                    hp = hp.parentNode;
+                }
+            }
+            if (hrow && hcard) {
+                var hcards = hrow.querySelectorAll ? hrow.querySelectorAll('a.zh-poster') : [], hi = -1;
+                for (var hidx = 0; hidx < hcards.length; hidx++) if (hcards[hidx] === hcard) { hi = hidx; break; }
+                if (hi >= 0) {
+                    e.preventDefault(); e.stopPropagation();
+                    var hnext = isRight(e) ? hcards[hi + 1] : hcards[hi - 1];
+                    if (!hnext) return;
+                    var hpage = document.querySelector('.zx-home2'), hpageTop = hpage ? hpage.scrollTop : 0, hwinTop = window.pageYOffset || 0;
+                    try { hnext.focus({ preventScroll: true }); } catch (err) { try { hnext.focus(); } catch (err2) {} }
+                    if (hpage) hpage.scrollTop = hpageTop;
+                    try { if (window.scrollTo) window.scrollTo(0, hwinTop); } catch (err3) {}
+                    var hleft = hnext.offsetLeft, hright = hleft + hnext.offsetWidth, hvisLeft = hrow.scrollLeft, hvisRight = hvisLeft + hrow.clientWidth;
+                    if (hleft < hvisLeft) hrow.scrollLeft = hleft;
+                    else if (hright > hvisRight) hrow.scrollLeft = hright - hrow.clientWidth;
+                    return;
+                }
+            }
+        }
         // ---- Normal pages: spatial navigation ----
         var dir = null;
         if (isUp(e))         dir = 'up';

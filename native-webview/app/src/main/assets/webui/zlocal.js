@@ -3450,6 +3450,7 @@ function homeStyles(ac) {
            ano/temporada + título + tempo restante + barra de progresso à direita.
            Largura limitada pela ALTURA da tela (46vh) e pela fatia da fileira (22vw). */
         + '.zh-posters{display:flex;gap:1.2vw;align-items:stretch;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-posters{overflow-x:auto;overflow-y:hidden;max-width:100%;overscroll-behavior:contain;scrollbar-width:thin;-webkit-overflow-scrolling:touch;}'
         + '.zh-poster{display:flex;flex-direction:row;text-decoration:none;color:#e7efe9;flex:none;width:min(40vh,22vw);aspect-ratio:2.42/1;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:1.1vw;padding:.55vw;box-sizing:border-box;overflow:hidden;}'
         + '.zh-poster:focus,.zh-poster:focus-visible{border-color:' + a + ';box-shadow:0 0 0 .25vw ' + a + '66;outline:none;}'
         + '.zh-art{position:relative;height:100%;aspect-ratio:2/3;width:auto;flex:none;border-radius:.7vw;overflow:hidden;background:linear-gradient(145deg,' + a + '55,#10251b 58%,#07110d);background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;}'

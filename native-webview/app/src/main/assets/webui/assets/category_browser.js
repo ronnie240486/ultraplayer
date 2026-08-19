@@ -171,12 +171,37 @@
     };
 
     /* ===== Lazy de imagem por ÍNDICE (sem getBoundingClientRect por tile) ===== */
+    // Fila curta de imagens: em TV Box fraca, decodificar muitas capas ao
+    // mesmo tempo congela o WebView e compete com o foco D-pad. A fila mantém
+    // no máximo 3 imagens ativas na TV e 6 nos demais form factors.
+    var imgQueue = [], imgActive = 0;
+    function imageConcurrency() {
+        try {
+            var bc = document.body && String(document.body.className || '');
+            return (bc.indexOf('zx-ff-tv') >= 0 || bc.indexOf('ui-tv') >= 0) ? 3 : 6;
+        } catch (e) { return 4; }
+    }
+    function pumpImages() {
+        var max = imageConcurrency();
+        while (imgActive < max && imgQueue.length) {
+            var job = imgQueue.shift(), el = job.el, src = job.src;
+            if (!el || !el.parentNode || el.className.indexOf('is-loaded') !== -1) continue;
+            imgActive++;
+            var im = new Image();
+            (function (image, node, url) {
+                function done() { imgActive--; if (node) node.removeAttribute('data-loading'); pumpImages(); }
+                image.onload = function () { if (node && node.parentNode) { node.style.backgroundImage = "url('" + url + "')"; node.className += ' is-loaded'; } done(); };
+                image.onerror = done;
+                image.src = url;
+            })(im, el, src);
+        }
+    }
+    function clearImageQueue() { imgQueue = []; }
     function loadOne(el, src) {
-        el.setAttribute('data-loading', '1');
-        var im = new Image();
-        im.onload = function () { el.style.backgroundImage = "url('" + src + "')"; el.className += ' is-loaded'; };
-        im.onerror = function () { el.removeAttribute('data-loading'); };
-        im.src = src;
+        if (!el || !src || el.getAttribute('data-loading') || el.className.indexOf('is-loaded') !== -1) return;
+        el.setAttribute('data-loading', 'queued');
+        imgQueue.push({ el: el, src: src });
+        pumpImages();
     }
     function loadImgAt(tile) {
         if (!tile) return;
@@ -283,7 +308,7 @@
                 var zs = window.ZLocal.S; zs.vodBack = zs.vodBack || {}; zs.vodBack[KIND] = String(newId);
             }
         } catch (zerr) {}
-        grid.innerHTML = '';                 // LIMPA na hora (sem deixar a velha presa)
+        clearImageQueue(); grid.innerHTML = '';                 // LIMPA na hora (sem deixar a velha presa)
         tileEls = []; cols = 0; rowH = 0;
         if (emptyEl) emptyEl.style.display = 'none';
         if (loadMoreEl) { loadMoreEl.textContent = 'Carregando…'; loadMoreEl.style.display = ''; }
@@ -327,7 +352,7 @@
                 if (zvm) { var zs2 = window.ZLocal.S; zs2.vodBack = zs2.vodBack || {}; zs2.vodBack[KIND] = 'v:' + zvm[1]; }
             }
         } catch (zerr2) {}
-        grid.innerHTML = '';
+        clearImageQueue(); grid.innerHTML = '';
         tileEls = []; cols = 0; rowH = 0;
         if (emptyEl) emptyEl.style.display = 'none';
         if (loadMoreEl) { loadMoreEl.textContent = 'Carregando…'; loadMoreEl.style.display = ''; }
@@ -416,7 +441,7 @@
         window.__liveSearchClear = function () {
             var act = document.querySelector('.cat-sidebar .cat-pill.is-active span');
             if (titleEl && act) titleEl.textContent = (act.textContent || '').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
-            grid.innerHTML = ''; contentEl.scrollTop = 0;
+            clearImageQueue(); grid.innerHTML = ''; contentEl.scrollTop = 0;
             if (!state.catId) { reindex(); if (emptyEl) emptyEl.style.display = ''; return; }
             fetchJson('/live/category/' + state.catId + '?ajax=1', function (data) {
                 var html = (data && data.html) ? data.html : '';
