@@ -868,6 +868,55 @@
             return;
         }
 
+        // ---- TV Box: categorias de Canais (.cat-sidebar) ----
+        // A barra de categorias não é uma grade espacial: esquerda/direita
+        // precisa obedecer estritamente à ordem dos .cat-pill. Sem esta regra,
+        // o WebView tenta encontrar o retângulo mais próximo e às vezes coloca
+        // foco no quadro inteiro, no conteúdo ou em nenhum item.
+        // Cima/baixo não entra aqui e continua no algoritmo normal para sair da faixa.
+        if (isAndroid() && (isLeft(e) || isRight(e))) {
+            var ccur = document.activeElement, cnode = ccur, csidebar = null, cpill = null;
+            while (cnode && cnode !== document.body) {
+                var ccls = (typeof cnode.className === 'string') ? cnode.className : '';
+                if (!cpill && (ccls.indexOf('cat-pill') !== -1)) cpill = cnode;
+                if (ccls.indexOf('cat-sidebar') !== -1) { csidebar = cnode; break; }
+                cnode = cnode.parentNode;
+            }
+            if (csidebar && cpill) {
+                var craw = csidebar.querySelectorAll ? csidebar.querySelectorAll('.cat-pill') : [];
+                var cpills = [], ci = -1;
+                for (var cidx = 0; cidx < craw.length; cidx++) {
+                    if (!visible(craw[cidx])) continue;
+                    cpills.push(craw[cidx]);
+                    if (craw[cidx] === cpill) ci = cpills.length - 1;
+                }
+                // Mesmo na primeira/última categoria, consome a tecla: o foco
+                // fica preso na faixa e não pode ser tomado pelo quadro inteiro.
+                e.preventDefault();
+                e.stopPropagation();
+                if (ci < 0) return;
+                var cnextIndex = isRight(e) ? ci + 1 : ci - 1;
+                var cnext = cpills[cnextIndex];
+                if (!cnext) return;
+
+                // Evita o auto-scroll vertical/horizontal do WebView antigo ao
+                // focar e depois mostra o próximo botão somente se necessário.
+                var ctop = csidebar.scrollTop, cleft = csidebar.scrollLeft, cwinY = window.pageYOffset || 0;
+                try { cnext.focus({ preventScroll: true }); } catch (cerr) { try { cnext.focus(); } catch (cerr2) {} }
+                csidebar.scrollTop = ctop;
+                csidebar.scrollLeft = cleft;
+                var cr = cnext.getBoundingClientRect(), sr = csidebar.getBoundingClientRect();
+                // A implementação atual usa lista vertical (overflow-y), mas a
+                // regra também cobre uma faixa horizontal caso o layout mude.
+                if (cr.top < sr.top) csidebar.scrollTop -= (sr.top - cr.top);
+                else if (cr.bottom > sr.bottom) csidebar.scrollTop += (cr.bottom - sr.bottom);
+                if (cr.left < sr.left) csidebar.scrollLeft -= (sr.left - cr.left);
+                else if (cr.right > sr.right) csidebar.scrollLeft += (cr.right - sr.right);
+                try { if (window.scrollTo) window.scrollTo(0, cwinY); } catch (cerr3) {}
+                return;
+            }
+        }
+
         // ---- Home: fileiras Para você / Filmes em destaque ----
         // Na TV Box, as setas horizontais de uma fileira devem mover somente
         // os cards. O WebView nativo pode tentar rolar a página inteira quando
