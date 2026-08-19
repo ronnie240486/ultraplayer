@@ -402,6 +402,9 @@ function catalogFromM3UPreview() {
         for (var i = 0; i < raw.length; i++) {
             var item = raw[i]; item.m3u_kind = classifyM3UItem(item); buckets[item.m3u_kind].push(item);
         }
+        // Preview amplo, mas controlado para abrir rápido: a seção completa
+        // usa catalogFromM3U() quando o usuário entra nela.
+        for (var bk in buckets) if (buckets.hasOwnProperty(bk) && buckets[bk].length > 360) buckets[bk] = buckets[bk].slice(0, 360);
         return { live: snapshotCatalogFromList('live', buckets.live), movies: snapshotCatalogFromList('movies', buckets.movies), series: snapshotCatalogFromList('series', buckets.series) };
     }).catch(function (err) { M3U_PREVIEW_PROMISE = null; throw err; });
     return M3U_PREVIEW_PROMISE;
@@ -1433,11 +1436,15 @@ function xtreamCatalog(kind, fastFirstCategory) {
         return S.cat[kind];
     }
     if (fastFirstCategory && kind !== 'live') {
+        // A Home usa uma amostra ampla para abrir rápido. O filtro antigo pela
+        // primeira categoria fazia a TV Box mostrar somente 1 filme ou 5 séries.
+        // Busca até 360 itens da resposta geral; ao entrar na seção, forceFull
+        // consulta novamente e monta o catálogo completo.
         return xt(catsAction).then(function (catsRaw) {
-            var cats = arr1(catsRaw), chosen = null;
-            for (var i = 0; i < cats.length; i++) if (!isAdultName(cats[i].category_name)) { chosen = cats[i]; break; }
-            var extra = chosen && chosen.category_id ? '&category_id=' + enc(chosen.category_id) : '';
-            return xt(listAction, extra).then(function (streamsRaw) { return finish(catsRaw, streamsRaw); });
+            return xt(listAction).then(function (streamsRaw) {
+                var preview = arr1(streamsRaw).slice(0, 360);
+                return finish(catsRaw, preview);
+            });
         });
     }
     return Promise.all([xt(catsAction), xt(listAction)]).then(function (res) { return finish(res[0], res[1]); });
@@ -5809,6 +5816,15 @@ function ffMobileCss() {
         + 'body.zx-ff-tv .live-epg .epg-title{display:block !important;font-size:23px !important;line-height:1.16 !important;white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important}'
         + 'body.zx-ff-tv .live-epg .epg-time{font-size:18px !important;line-height:1.08 !important}'
         + 'body.zx-ff-tv .live-epg .epg-alarm{position:static !important;display:flex !important;visibility:visible !important;opacity:1 !important;flex:0 0 40px !important;width:40px !important;min-width:40px !important;height:40px !important;font-size:23px !important;border-radius:8px !important;margin:0 2px 0 0 !important;padding:0 !important;align-items:center !important;justify-content:center !important;z-index:999 !important;float:none !important}'
+        + 'body.ui-tv .live-epg{padding:22px 24px !important;overflow-x:hidden !important;box-sizing:border-box !important}'
+        + 'body.ui-tv .live-epg .epg-ch{font-size:30px !important;line-height:1.12 !important;margin-bottom:8px !important}'
+        + 'body.ui-tv .live-epg .epg-sub{font-size:16px !important;line-height:1.2 !important;margin-bottom:12px !important}'
+        + 'body.ui-tv .live-epg .epg-item{display:flex !important;align-items:center !important;gap:10px !important;padding:11px 0 !important;min-height:48px !important;box-sizing:border-box !important;overflow:visible !important}'
+        + 'body.ui-tv .live-epg .epg-copy{display:block !important;min-width:0 !important;flex:1 1 auto !important;overflow:hidden !important}'
+        + 'body.ui-tv .live-epg .epg-title{display:block !important;font-size:23px !important;line-height:1.16 !important;white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important}'
+        + 'body.ui-tv .live-epg .epg-time{font-size:18px !important;line-height:1.08 !important}'
+        + 'body.ui-tv .live-epg .epg-alarm{position:static !important;display:flex !important;visibility:visible !important;opacity:1 !important;flex:0 0 40px !important;width:40px !important;min-width:40px !important;height:40px !important;font-size:23px !important;border-radius:8px !important;margin:0 2px 0 0 !important;padding:0 !important;align-items:center !important;justify-content:center !important;z-index:999 !important;float:none !important}'
+        + 'body.zx-home2 .zh-nav .zh-tsub,body.zx-home2 .zh-nav .zh-ssub{display:none !important}'
         + 'body.zx-ff-mobile .live-epg{padding:10px 10px !important;overflow-x:hidden !important;box-sizing:border-box !important}'
         + 'body.zx-ff-mobile .live-epg .epg-ch{font-size:13px !important;margin-bottom:3px !important}'
         + 'body.zx-ff-mobile .live-epg .epg-sub{font-size:8px !important;margin-bottom:5px !important}'
@@ -6487,19 +6503,19 @@ function injectAndroidCss() {
     }
 }
 
-function openHomeAfterFullCatalog() {
+function openHomeAfterPreviewCatalog() {
     if (S._homeCatalogGate) return;
     if (!S.server && !S.playlistUrl) { go('/home', true); return; }
     S._homeCatalogGate = true;
     var kinds = ['movies', 'series', 'live'];
     Promise.all(kinds.map(function (kind) {
-        return ensureCatalog(kind, true).catch(function () { return null; });
+        return ensureCatalog(kind, false).catch(function () { return null; });
     })).then(function () {
         S._homeCatalogReady = true;
         go('/home', true);
     }).catch(function () {
         // Se uma fonte falhar, libera a Home com o que estiver disponível;
-        // as demais tentativas continuam pelo sincronizador normal.
+        // o catálogo integral continua sendo tentado ao entrar na seção.
         S._homeCatalogReady = false;
         go('/home', true);
     });
@@ -6534,7 +6550,7 @@ function boot() {
     if (snap && snapAgeDays(snap) <= snapMaxDays(snap)) {
         // ABRE NA HORA com o snapshot — funciona mesmo com a VPS fora.
         applyResolve(snap.d, true);
-                openHomeAfterFullCatalog();
+                openHomeAfterPreviewCatalog();
         refresh(snap);                               // re-verifica em segundo plano
 
     } else {
@@ -6551,13 +6567,13 @@ function boot() {
         if (eagerHome) {
             S.server = eagerServer; S.xtreamDerived = eagerCreds || S.xtreamDerived;
             applyResolve({ ok: true, dns: { base: eagerServer, name: '' }, license: { mac: S.user || '', exp_date: 0 } }, true);
-            openHomeAfterFullCatalog();
+            openHomeAfterPreviewCatalog();
         } else showLoading(true);
         api('resolve', '', 12000).then(function (d) {
             if (!eagerHome) showLoading(false);
             if (d && d.error === 'license') { if (applyPush(d)) return; if (!eagerHome) renderPaywall(d); return; }
-            if (d && d.ok && d.dns && d.dns.base) { applyResolve(d, false); saveSnap(d); if (!eagerHome) openHomeAfterFullCatalog(); }
-            else if (!eagerHome && snap) { applyResolve(snap.d, true); openHomeAfterFullCatalog(); }
+            if (d && d.ok && d.dns && d.dns.base) { applyResolve(d, false); saveSnap(d); if (!eagerHome) openHomeAfterPreviewCatalog(); }
+            else if (!eagerHome && snap) { applyResolve(snap.d, true); openHomeAfterPreviewCatalog(); }
             else if (!eagerHome) renderOfflineFirst();
         });
     }

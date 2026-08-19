@@ -298,6 +298,12 @@
         if ((dir === 'down' || dir === 'up') && currentEl && currentEl.closest
             && currentEl.closest('.sidebar-content')) {
             if (best && best.closest && !best.closest('.sidebar-content')) {
+                // No primeiro canal, ▲ retorna à categoria ativa; nos demais
+                // itens, a grade continua isolada e desce/sobe normalmente.
+                if (dir === 'up') {
+                    var liveActiveUp = document.querySelector('.cat-sidebar .cat-pill.is-active');
+                    if (liveActiveUp && visible(liveActiveUp)) return liveActiveUp;
+                }
                 return null;
             }
         }
@@ -308,6 +314,12 @@
         if ((dir === 'down' || dir === 'up') && currentEl && currentEl.closest
             && currentEl.closest('.cat-sidebar')) {
             if (best && best.closest && !best.closest('.cat-sidebar')) {
+                // No limite inferior da barra, ▼ entra no primeiro canal sem
+                // exigir OK; no meio da barra, continua apenas entre categorias.
+                if (dir === 'down') {
+                    var liveFirstDown = document.querySelector('#content-grid .channel-tile-tv, #content-grid .poster-tile-tv');
+                    if (liveFirstDown && visible(liveFirstDown)) return liveFirstDown;
+                }
                 return null;
             }
         }
@@ -327,8 +339,9 @@
         // categorias pro conteúdo (só OK entra), nem do grid de canais pro EPG
         // (que é só informativo, intocável). ◄ segue valendo (voltar pra sidebar).
         if (isAndroid() && dir === 'right' && currentEl && best && currentEl.closest && best.closest) {
-            if (currentEl.closest('.cat-sidebar') && !best.closest('.cat-sidebar')) return null;
+                        if (currentEl.closest('.cat-sidebar') && !best.closest('.cat-sidebar')) return null;
             if (currentEl.closest('#content-grid') && !best.closest('#content-grid')) return null;
+
         }
 
         return best;
@@ -346,7 +359,8 @@
              || cls.indexOf('settings-content') !== -1
              || cls.indexOf('episode-row') !== -1
              || cls.indexOf('dhs-row') !== -1
-             || cls.indexOf('zh-posters') !== -1) {
+             || cls.indexOf('zh-posters') !== -1
+             || cls.indexOf('live-epg') !== -1) {
                 return p;
             }
             p = p.parentNode;
@@ -407,7 +421,8 @@
         // pode deslocar a página inteira a cada tecla. O caminho manual abaixo
         // limita a rolagem ao .sidebar-content e reduz o custo visual do D-pad.
         var localScroll = findScrollableAncestor(el), localCls = localScroll && typeof localScroll.className === 'string' ? localScroll.className : '';
-        if (isAndroid() && tvForm && localScroll && localCls.indexOf('sidebar-content') >= 0) {
+        if (isAndroid() && tvForm && localScroll
+            && (localCls.indexOf('sidebar-content') >= 0 || localCls.indexOf('cat-sidebar') >= 0 || localCls.indexOf('live-epg') >= 0)) {
             var savedSidebarTop = localScroll.scrollTop, oldWinY = window.pageYOffset || 0;
             try { el.focus({ preventScroll: true }); } catch (e1) { try { el.focus(); } catch (e2) {} }
             localScroll.scrollTop = savedSidebarTop;
@@ -868,6 +883,27 @@
             return;
         }
 
+        // ---- TV Box: sair da grade de canais para a categoria ativa ----
+        // Na lista Live, ◄ na primeira coluna volta deterministicamente para a
+        // categoria ativa. Assim não é necessário apertar OK em outra tela para
+        // alcançar AMC/AXN e a navegação não depende da geometria do WebView.
+        if (isAndroid() && isLeft(e)) {
+            var lcur = document.activeElement, lnode = lcur, lchannel = null;
+            while (lnode && lnode !== document.body) {
+                var lcls = (typeof lnode.className === 'string') ? lnode.className : '';
+                if (lcls.indexOf('channel-tile-tv') !== -1) { lchannel = lnode; break; }
+                lnode = lnode.parentNode;
+            }
+            if (lchannel) {
+                var lactive = document.querySelector('.cat-sidebar .cat-pill.is-active');
+                if (lactive && visible(lactive)) {
+                    e.preventDefault(); e.stopPropagation();
+                    focusEl(lactive);
+                    return;
+                }
+            }
+        }
+
         // ---- TV Box: categorias de Canais (.cat-sidebar) ----
         // A barra de categorias não é uma grade espacial: esquerda/direita
         // precisa obedecer estritamente à ordem dos .cat-pill. Sem esta regra,
@@ -883,6 +919,11 @@
                 cnode = cnode.parentNode;
             }
             if (csidebar && cpill) {
+                // category_browser troca a categoria em-place e mantém o foco
+                // na pílula; não exige OK e não deixa o foco cair no quadro.
+                try {
+                    if (window.__hdxMoveCategory && window.__hdxMoveCategory(isRight(e) ? 'right' : 'left')) return;
+                } catch (moveErr) {}
                 var craw = csidebar.querySelectorAll ? csidebar.querySelectorAll('.cat-pill') : [];
                 var cpills = [], ci = -1;
                 for (var cidx = 0; cidx < craw.length; cidx++) {

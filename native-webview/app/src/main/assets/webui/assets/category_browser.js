@@ -269,6 +269,27 @@
     }
     var rxCat = new RegExp('^\\/' + KIND + '\\/category\\/(\\d+)$');
     var rxVirtual = new RegExp('^\\/' + KIND + '\\/(favorites|recent|continue)$');
+    // Move a categoria sem exigir OK. Usado pelo D-pad da TV Box: a seta
+    // altera a categoria, mas mantém o foco na barra para que o usuário possa
+    // continuar avançando por AMC, AXN e as demais sem cair na grade.
+    window.__hdxMoveCategory = function (dir) {
+        if (dir !== 'left' && dir !== 'right') return false;
+        var pills = document.querySelectorAll('.cat-sidebar .cat-pill'), list = [], idx = -1;
+        for (var pi = 0; pi < pills.length; pi++) {
+            if (!pills[pi].offsetParent && pills[pi].getClientRects && !pills[pi].getClientRects().length) continue;
+            list.push(pills[pi]);
+            if (pills[pi] === document.activeElement || (idx < 0 && (' ' + pills[pi].className + ' ').indexOf(' is-active ') >= 0)) idx = list.length - 1;
+        }
+        if (idx < 0) return false;
+        var next = list[idx + (dir === 'right' ? 1 : -1)];
+        if (!next) return true;
+        var href = next.getAttribute('href') || '';
+        var m = rxCat.exec(stripBase(href));
+        if (!m) return true;
+        try { next.focus({ preventScroll: true }); } catch (e) { try { next.focus(); } catch (e2) {} }
+        switchCategory(next, parseInt(m[1], 10), href, true);
+        return true;
+    };
     function onCatClick(e) {
         var a = findAnchor(e.target);
         if (!a) return;
@@ -283,7 +304,7 @@
         if (m) {
             var newId = parseInt(m[1], 10);
             if (newId === state.catId && !state.loading) return;
-            switchCategory(a, newId, href);
+            switchCategory(a, newId, href, false);
         } else {
             switchVirtual(a, href);   // Favoritos/Recentes/Continue — in-place, sem piscar
         }
@@ -292,7 +313,7 @@
     window.__hdxCatClick = onCatClick;
     document.addEventListener('click', onCatClick, true);
 
-    function switchCategory(pill, newId, href) {
+    function switchCategory(pill, newId, href, keepCategoryFocus) {
         var pills = document.querySelectorAll('.cat-sidebar .cat-pill');
         for (var i = 0; i < pills.length; i++) pills[i].className = pills[i].className.replace(/\s*is-active/g, '');
         pill.className += ' is-active';
@@ -326,10 +347,13 @@
             if (emptyEl) emptyEl.style.display = (data.html === '') ? '' : 'none';
             lazyImages();
             setTimeout(checkScroll, 150);
-            // Selecionar a categoria JÁ leva o foco pro 1º item dela — sem
-            // precisar apertar ► depois. (afterSwap do tv.js foca o primeiro
-            // poster/canal do conteúdo; categoria vazia mantém o foco na pílula.)
-            try { if (window.__hdxTv && window.__hdxTv.afterSwap) window.__hdxTv.afterSwap(); } catch (err) {}
+            // Clique/OK entra no conteúdo; seta esquerda/direita mantém o
+            // foco na categoria para permitir percorrer a barra continuamente.
+            if (keepCategoryFocus) {
+                try { pill.focus({ preventScroll: true }); } catch (ferr) { try { pill.focus(); } catch (ferr2) {} }
+            } else {
+                try { if (window.__hdxTv && window.__hdxTv.afterSwap) window.__hdxTv.afterSwap(); } catch (err) {}
+            }
         }, cacheKey(newId, 1));
     }
 
