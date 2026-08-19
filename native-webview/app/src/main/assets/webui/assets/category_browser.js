@@ -31,7 +31,8 @@
         catId:   window.__catId || 0,
         page:    window.__catPage || 1,
         hasMore: !!window.__catHasMore,
-        loading: false
+        loading: false,
+        switchSeq: 0
     };
 
     var grid       = document.getElementById('content-grid');
@@ -320,6 +321,7 @@
         var span = pill.querySelector('span');
         if (titleEl && span) titleEl.textContent = (span.textContent || '').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
 
+        var requestSeq = ++state.switchSeq;
         state.catId = newId; state.page = 1; state.hasMore = false; state.loading = true;
         // Android/file://: o replaceState abaixo NÃO grava a URL → o Voltar de um
         // detalhe perdia a categoria. Grava no ZLocal (S.vodBack) pro renderVodSection
@@ -337,6 +339,7 @@
         try { history.replaceState(null, '', href); } catch (err) {}
 
         fetchJson(href + '?ajax=1&page=1', function (data) {
+            if (requestSeq !== state.switchSeq) return;
             state.loading = false;
             if (!data || typeof data.html !== 'string') { window.location.replace(href); return; }
             grid.innerHTML = data.html;

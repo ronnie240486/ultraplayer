@@ -4305,6 +4305,16 @@ function wireLiveRemoteFocus() {
     var side = document.querySelector('.cat-sidebar'), content = document.getElementById('content-grid');
     if (!side || !content || side.getAttribute('data-remote-focus')) return;
     side.setAttribute('data-remote-focus', '1');
+    function keepVisible(scroller, el) {
+        try {
+            if (!scroller || !el) return;
+            var top = el.offsetTop, bottom = top + el.offsetHeight, viewTop = scroller.scrollTop, viewBottom = viewTop + scroller.clientHeight;
+            if (top < viewTop) scroller.scrollTop = Math.max(0, top - 12);
+            else if (bottom > viewBottom) scroller.scrollTop = Math.max(0, bottom - scroller.clientHeight + 12);
+        } catch (e) {}
+    }
+    side.addEventListener('focusin', function (e) { if (e.target && String(e.target.className || '').indexOf('cat-pill') >= 0) keepVisible(side, e.target); }, true);
+    content.addEventListener('focusin', function (e) { var row = e.target && String(e.target.className || '').indexOf('channel-tile-tv') >= 0 ? e.target : null; if (row) keepVisible(content, row); }, true);
     side.addEventListener('keydown', function (e) {
         var key = e.key || '';
         var target = e.target;
@@ -4397,17 +4407,28 @@ function wireLiveSearch() {
 // os .ct-logo de forma confiável aqui). Canais por categoria são poucos, então
 // carregar tudo é tranquilo. Guard __zl evita recarregar.
 function loadChannelLogos() {
-    var logos = document.querySelectorAll('#content-grid .ct-logo[data-logo]');
+    var logos = document.querySelectorAll('#content-grid .ct-logo[data-logo]'), started = 0, pending = 0;
+    var tv = isTvHomeMode(), batch = tv ? 5 : 14;
     for (var i = 0; i < logos.length; i++) {
-        (function (el) {
-            if (el.__zl) return; el.__zl = 1;
-            var src = el.getAttribute('data-logo'); if (!src) return;
+        var el = logos[i], src = el.getAttribute('data-logo');
+        if (!src || el.className.indexOf('is-loaded') >= 0 || el.getAttribute('data-loading')) continue;
+        pending++;
+        if (started >= batch) continue;
+        started++;
+        el.setAttribute('data-loading', '1');
+        (function (target, imageSrc) {
             var im = new Image();
-            im.onload = function () { el.style.backgroundImage = "url('" + src + "')"; if (el.className.indexOf('is-loaded') < 0) el.className += ' is-loaded'; };
-            im.src = src;
-        })(logos[i]);
+            im.onload = function () { target.style.backgroundImage = "url('" + imageSrc + "')"; if (target.className.indexOf('is-loaded') < 0) target.className += ' is-loaded'; target.removeAttribute('data-loading'); };
+            im.onerror = function () { target.removeAttribute('data-loading'); };
+            im.src = imageSrc;
+        })(el, src);
     }
+    if (pending > started) {
+        try { if (S._liveLogoTimer) clearTimeout(S._liveLogoTimer); } catch (e) {}
+        S._liveLogoTimer = setTimeout(function () { S._liveLogoTimer = null; loadChannelLogos(); }, tv ? 900 : 420);
+    } else S._liveLogoTimer = null;
 }
+
 function wireLiveEpg() {
     var content = $('content-grid'), panel = $('live-epg');
     if (!content || !panel) return;
@@ -4455,10 +4476,29 @@ var h = '';
             var parsed = epgItemsFromResponse(data); epgCache[sid] = parsed; paintEpg(parsed);
         }).catch(function () { epgCache[sid] = []; paintEpg([]); });
     }
-    function preloadFirst() { var first = content.querySelector('.channel-tile-tv'); if (first) renderEpg(first); }
-    var t = null;
-    content.addEventListener('focusin', function (e) { var row = closestCls(e.target, 'channel-tile-tv'); if (!row) return; if (t) clearTimeout(t); t = setTimeout(function () { renderEpg(row); }, 220); });
-    content.addEventListener('mouseover', function (e) { var row = closestCls(e.target, 'channel-tile-tv'); if (!row || row.getAttribute('data-sid') === selSid) return; if (t) clearTimeout(t); t = setTimeout(function () { renderEpg(row); }, 220); });
+        var t = null, lastNavAt = 0;
+    function scheduleEpg(row) {
+        if (!row) return;
+        if (t) clearTimeout(t);
+        t = setTimeout(function waitForRemoteIdle() {
+            var idle = Date.now() - lastNavAt;
+            if (idle < 520) { t = setTimeout(waitForRemoteIdle, 180); return; }
+            t = null;
+            renderEpg(row);
+        }, 560);
+    }
+    // Durante o D-pad não consulta EPG nem reescreve o painel. Só registra o
+    // último canal focado e agenda a consulta depois que as setas pararem.
+    content.addEventListener('keydown', function (e) {
+        var k = e.key || '';
+        if (/^Arrow(Up|Down|Left|Right)$/.test(k)) { lastNavAt = Date.now(); if (t) { clearTimeout(t); t = null; } }
+    }, true);
+    content.addEventListener('focusin', function (e) { var row = closestCls(e.target, 'channel-tile-tv'); if (!row) return; scheduleEpg(row); });
+    content.addEventListener('mouseover', function (e) { var row = closestCls(e.target, 'channel-tile-tv'); if (!row || row.getAttribute('data-sid') === selSid) return; scheduleEpg(row); });
+    // A primeira programação aparece depois da primeira pintura, nunca junto
+    // com a montagem da tela e do foco inicial.
+    if (!isTvHomeMode()) { var first = content.querySelector('.channel-tile-tv'); if (first) setTimeout(function () { renderEpg(first); }, 420); }
+
     var lastEl = null, lastT = 0;
     content.addEventListener('click', function (e) {
         if (closestCls(e.target, 'ct-fav')) return;

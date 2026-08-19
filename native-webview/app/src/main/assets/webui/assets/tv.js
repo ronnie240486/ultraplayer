@@ -922,7 +922,10 @@
                 // category_browser troca a categoria em-place e mantém o foco
                 // na pílula; não exige OK e não deixa o foco cair no quadro.
                 try {
-                    if (window.__hdxMoveCategory && window.__hdxMoveCategory(isRight(e) ? 'right' : 'left')) return;
+                    if (window.__hdxMoveCategory && window.__hdxMoveCategory(isRight(e) ? 'right' : 'left')) {
+                        e.preventDefault(); e.stopPropagation();
+                        return;
+                    }
                 } catch (moveErr) {}
                 var craw = csidebar.querySelectorAll ? csidebar.querySelectorAll('.cat-pill') : [];
                 var cpills = [], ci = -1;
