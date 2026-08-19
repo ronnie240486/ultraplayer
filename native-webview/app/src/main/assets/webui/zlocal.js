@@ -3371,6 +3371,7 @@ function fillHomeNewest() {
    Topo e menus são fixos; SÓ as capas se adaptam. Em TV (sobra espaço) é no-op. */
 function fitHomePosters() {
     try {
+        if (getFormFactor() === 'tv') return; // TV Box usa scroll vertical; não encolher cards para caber em uma tela fixa
         var ui = document.querySelector('.zh-ui'), wrap = document.querySelector('.zh-posters');
         if (!ui || !wrap) return;
         var posters = wrap.querySelectorAll('.zh-poster'); if (!posters.length) return;
@@ -3390,6 +3391,7 @@ function fitHomePosters() {
    e a fileira preencher a tela sem sobra. O resto fica escondido. */
 function trimHomePosters() {
     try {
+        if (getFormFactor() === 'tv') return; // manter todos os cards; a fileira rola horizontalmente na TV Box
         var wrap = document.querySelector('.zh-posters'); if (!wrap) return;
         var ps = wrap.querySelectorAll('.zh-poster'); if (!ps.length) return;
         for (var i = 0; i < ps.length; i++) ps[i].style.display = '';   // re-mostra tudo antes de medir
@@ -5728,7 +5730,27 @@ function ffMobileCss() {
         + 'body.zx-ff-tv .zh-navtop .zh-tile .zh-tl,body.zx-ff-tv .zh-navbot .zh-tile .zh-tl{font-size:18px !important;}'
         + 'body.zx-ff-tv .zh-navtop .zh-tile .zh-tsub,body.zx-ff-tv .zh-navbot .zh-tile .zh-tsub{font-size:13px !important;}'
         + 'body.zx-ff-tv .poster-grid-tv{gap:12px !important;}'
-        + 'body.zx-ff-tv .poster-tile-tv{min-height:210px !important;}' ;
+        + 'body.zx-ff-tv .poster-tile-tv{min-height:210px !important;}'
+        /* TV Box Home: blocos grandes e rolagem vertical, sem sobrepor ícones. */
+        + 'body.zx-ff-tv .zx-home2{position:absolute !important;inset:0 !important;overflow-x:hidden !important;overflow-y:auto !important;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-ui{position:relative !important;inset:auto !important;height:auto !important;min-height:100vh !important;overflow:visible !important;display:flex !important;flex-direction:column !important;padding:2.4vw 3vw 5vw !important;box-sizing:border-box !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-nav{display:flex !important;flex-direction:column !important;flex:none !important;width:100% !important;height:auto !important;min-height:0 !important;margin-top:2vw !important;gap:1.4vw !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-nav>.zh-tile{display:flex !important;flex:none !important;width:100% !important;max-width:none !important;height:18vw !important;min-height:150px !important;max-height:210px !important;padding:2vw !important;border-radius:1.4vw !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-navr{display:flex !important;flex-direction:column !important;flex:none !important;min-height:0 !important;width:100% !important;gap:1.4vw !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-navtop,body.zx-ff-tv .zx-home2 .zh-navbot{display:grid !important;grid-template-columns:repeat(2,minmax(0,1fr)) !important;flex:none !important;gap:1.4vw !important;min-height:0 !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-navtop .zh-tile,body.zx-ff-tv .zx-home2 .zh-navbot .zh-stile{display:flex !important;flex:none !important;width:auto !important;max-width:none !important;height:15vw !important;min-height:132px !important;max-height:180px !important;padding:1.8vw !important;border-radius:1.3vw !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-navtop .zh-ico,body.zx-ff-tv .zx-home2 .zh-navtop .zh-ico svg{width:5.2vw !important;height:5.2vw !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-nav>.zh-tile .zh-ico,body.zx-ff-tv .zx-home2 .zh-nav>.zh-tile .zh-ico svg{width:6.5vw !important;height:6.5vw !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-tl{font-size:2.1vw !important;line-height:1.12 !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-tsub{font-size:1.35vw !important;margin-top:.5vw !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-stile svg{width:3.8vw !important;height:3.8vw !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-stile b{font-size:1.8vw !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-ssub{font-size:1.2vw !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-recent{display:flex !important;flex:none !important;width:100% !important;max-width:none !important;overflow:visible !important;margin-top:2vw !important;gap:1vw !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-recent .zh-posters{width:100% !important;max-width:none !important;overflow-x:auto !important;overflow-y:hidden !important;padding:1vw 0 1.3vw !important;gap:1.2vw !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-recent .zh-poster{display:flex !important;flex:0 0 27vw !important;width:27vw !important;min-width:27vw !important;height:11vw !important;min-height:100px !important;max-height:150px !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-h2{font-size:2vw !important;}'
+        + 'body.zx-ff-tv .zx-home2 .zh-status{margin-top:2vw !important;flex:none !important;}' ;
 }
 function injectFfAskCss() {
     if ($('zx-ffa-css')) return;

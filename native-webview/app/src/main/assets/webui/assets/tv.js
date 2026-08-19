@@ -65,7 +65,8 @@
         // the grid (e.g. lands on the sidebar).
         var row = currentEl.closest && currentEl.closest(
             '.home-grid, .live-categories, .live-channels, .live-days, .live-epg, ' +
-            '.live-topbar, .profile-grid, .season-pills, .episode-row, .vkb-row, .dhs-row'
+                        '.live-topbar, .profile-grid, .season-pills, .episode-row, .vkb-row, .dhs-row, .zh-navtop'
+
         );
         if (!row) return null;
         var sibs = focusables(row);
@@ -191,7 +192,48 @@
         return null;
     }
 
+    function homeAncestor(el, token) {
+        var p = el;
+        while (p && p !== document.body) {
+            var c = typeof p.className === 'string' ? p.className : '';
+            if (c.indexOf(token) !== -1) return p;
+            p = p.parentNode;
+        }
+        return null;
+    }
+    function homeFirstFocusable(root, selector) {
+        if (!root || !root.querySelectorAll) return null;
+        var list = root.querySelectorAll(selector || 'a,button,[tabindex]');
+        for (var i = 0; i < list.length; i++) if (visible(list[i])) return list[i];
+        return null;
+    }
+    function homeSectionSibling(currentEl, dir) {
+        if (!currentEl || (dir !== 'up' && dir !== 'down')) return null;
+        var home = homeAncestor(currentEl, 'zx-home2');
+        if (!home) return null;
+        var nav = home.querySelector ? home.querySelector('.zh-nav') : null;
+        if (!nav) return null;
+        var inLive = !!homeAncestor(currentEl, 'zh-nav') && !!homeAncestor(currentEl, 'zh-tile');
+        var inTop = !!homeAncestor(currentEl, 'zh-navtop');
+        var inBottom = !!homeAncestor(currentEl, 'zh-navbot');
+        var inRecent = !!homeAncestor(currentEl, 'zh-recent');
+        var inRecommend = !!homeAncestor(currentEl, 'zh-recommend');
+        if (dir === 'down') {
+            if (inLive && !inTop && !inBottom) return homeFirstFocusable(nav.querySelector('.zh-navtop'), '.zh-tile');
+            if (inTop) return homeFirstFocusable(nav.querySelector('.zh-navbot'), '.zh-stile');
+            if (inBottom) return homeFirstFocusable(home.querySelector('.zh-recent'), '.zh-poster');
+            if (inRecent && !inRecommend) return homeFirstFocusable(home.querySelector('.zh-recommend'), '.zh-poster');
+            return null;
+        }
+        if (inRecommend) return homeFirstFocusable(home.querySelector('.zh-recent:not(.zh-recommend)'), '.zh-poster') || homeFirstFocusable(nav.querySelector('.zh-navbot'), '.zh-stile');
+        if (inRecent) return homeFirstFocusable(nav.querySelector('.zh-navbot'), '.zh-stile');
+        if (inBottom) return homeFirstFocusable(nav.querySelector('.zh-navtop'), '.zh-tile');
+        if (inTop) return (nav.firstElementChild && visible(nav.firstElementChild)) ? nav.firstElementChild : homeFirstFocusable(nav, '.zh-tile');
+        return null;
+    }
     function pickSpatial(currentEl, dir) {
+        var homeNext = homeSectionSibling(currentEl, dir);
+        if (homeNext) return homeNext;
         var liveNext = liveEpgSibling(currentEl, dir);
         if (liveNext) return liveNext;
         var settingsNext = settingsSibling(currentEl, dir);
@@ -340,15 +382,33 @@
      *  Solução: salvar scrollTop antes do focus, restaurar depois (cancela
      *  o auto-scroll), e aplicar nossa própria lógica de "só scrolla se
      *  o elemento saiu da área visível". */
+        function focusHomeEl(el, home) {
+        if (!el || !home) return false;
+        var row = homeAncestor(el, 'zh-posters');
+        var savedTop = home.scrollTop, savedLeft = row ? row.scrollLeft : 0, oldWinY = window.pageYOffset || 0;
+        try { el.focus({ preventScroll: true }); } catch (e) { try { el.focus(); } catch (e2) {} }
+        if (row) row.scrollLeft = savedLeft;
+        var er = el.getBoundingClientRect(), hr = home.getBoundingClientRect();
+        if (er.top < hr.top) home.scrollTop -= (hr.top - er.top);
+        else if (er.bottom > hr.bottom) home.scrollTop += (er.bottom - hr.bottom);
+        if (row) row.scrollLeft = savedLeft;
+        try { if (window.scrollTo) window.scrollTo(0, oldWinY); } catch (e3) {}
+        return true;
+    }
     function focusEl(el) {
         if (!el) return;
+
+        // TV Box Home: foco manual dentro da coluna rolável; evita scrollIntoView
+        // do WebView, que deslocava a página inteira e comprimía os blocos.
+        var tvForm = false;
+        try { var hbc = document.body && String(document.body.className || ''); tvForm = hbc.indexOf('zx-ff-tv') >= 0 || hbc.indexOf('ui-tv') >= 0; } catch (e0) {}
+        var home = tvForm ? homeAncestor(el, 'zx-home2') : null;
+        if (isAndroid() && home) { focusHomeEl(el, home); return; }
 
         // TV Box: categorias usam um scroller vertical próprio. Evite o
         // scrollIntoView do Android, que percorre toda a cadeia de ancestrais e
         // pode deslocar a página inteira a cada tecla. O caminho manual abaixo
         // limita a rolagem ao .sidebar-content e reduz o custo visual do D-pad.
-        var tvForm = false;
-        try { var bc = document.body && String(document.body.className || ''); tvForm = bc.indexOf('zx-ff-tv') >= 0 || bc.indexOf('ui-tv') >= 0; } catch (e0) {}
         var localScroll = findScrollableAncestor(el), localCls = localScroll && typeof localScroll.className === 'string' ? localScroll.className : '';
         if (isAndroid() && tvForm && localScroll && localCls.indexOf('sidebar-content') >= 0) {
             var savedSidebarTop = localScroll.scrollTop, oldWinY = window.pageYOffset || 0;
