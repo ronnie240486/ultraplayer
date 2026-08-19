@@ -35,6 +35,7 @@ public final class PlayerActivity extends Activity {
     private String url = "";
     private String mediaTitle = "Fusion";
     private long resumeMs = 0L;
+    private boolean liveContent = false;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -100,6 +101,7 @@ public final class PlayerActivity extends Activity {
                 .setReadTimeoutMs(25000);
         DefaultDataSource.Factory data = new DefaultDataSource.Factory(this, http);
         player = new ExoPlayer.Builder(this)
+                .setLoadControl(new FusionLoadControl(liveContent))
                 .setMediaSourceFactory(new DefaultMediaSourceFactory(data))
                 .build();
         playerView.setPlayer(player);
@@ -147,6 +149,8 @@ public final class PlayerActivity extends Activity {
             JSONObject json = new JSONObject(payload == null ? "{}" : payload);
             url = json.optString("url", "").trim();
             mediaTitle = json.optString("title", "Fusion");
+            liveContent = "live".equalsIgnoreCase(json.optString("kind", ""))
+                    || "live".equalsIgnoreCase(json.optString("zxKind", ""));
             long resume = json.optLong("resume", 0L);
             resumeMs = resume > 0 && resume < 10_000_000 ? resume * 1000L : resume;
         } catch (Throwable ignored) { }

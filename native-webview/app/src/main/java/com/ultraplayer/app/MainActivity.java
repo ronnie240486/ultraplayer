@@ -45,6 +45,7 @@ public final class MainActivity extends Activity {
     private FrameLayout miniContainer;
     private PlayerView miniPlayerView;
     private ExoPlayer miniPlayer;
+    private FusionLoadControl miniLoadControl;
     private TextView miniTitle;
     private ImageButton miniCloseButton;
     private View miniExpandHit;
@@ -772,12 +773,16 @@ public final class MainActivity extends Activity {
             String title = json.optString("title", "Canal selecionado");
             if (url.isEmpty()) return;
             miniPayload = json.toString();
+            boolean liveContent = "live".equalsIgnoreCase(json.optString("kind", ""))
+                    || "live".equalsIgnoreCase(json.optString("zxKind", ""));
             notifyWebPlaybackStarted(miniPayload);
             if (miniPlayer == null) {
                 DefaultHttpDataSource.Factory http = new DefaultHttpDataSource.Factory()
                         .setUserAgent("Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Fusion/4.31")
                         .setAllowCrossProtocolRedirects(true);
+                miniLoadControl = new FusionLoadControl(liveContent);
                 miniPlayer = new ExoPlayer.Builder(this)
+                        .setLoadControl(miniLoadControl)
                         .setMediaSourceFactory(new DefaultMediaSourceFactory(http))
                         .build();
                 miniPlayer.addListener(new androidx.media3.common.Player.Listener() {
@@ -786,6 +791,8 @@ public final class MainActivity extends Activity {
                     }
                 });
                 miniPlayerView.setPlayer(miniPlayer);
+            } else if (miniLoadControl != null) {
+                miniLoadControl.setLive(liveContent);
             }
             if (!url.equals(miniContainer.getTag())) {
                 miniSourceUrl = url;
