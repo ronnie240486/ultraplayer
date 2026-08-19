@@ -51,6 +51,9 @@ public final class MainActivity extends Activity {
     private View miniExpandHit;
     private android.widget.LinearLayout fullControls;
     private android.widget.Button fullMenuButton;
+    private android.widget.Button fullControlsRevealButton;
+    private final android.os.Handler fullControlsHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable fullControlsHideTask = () -> hideFullControls();
     private FrameLayout fullChannelMenu;
     private android.widget.LinearLayout fullCategoryBar;
     private android.widget.LinearLayout fullChannelList;
@@ -563,6 +566,42 @@ public final class MainActivity extends Activity {
         return b;
     }
 
+    private void armFullControlsHide() {
+        if (!miniExpanded || fullControls == null || fullControls.getVisibility() != View.VISIBLE) return;
+        fullControlsHandler.removeCallbacks(fullControlsHideTask);
+        fullControlsHandler.postDelayed(fullControlsHideTask, 4500L);
+    }
+
+    private void showFullControlsTemporarily() {
+        if (!miniExpanded || fullControls == null) return;
+        fullControlsHandler.removeCallbacks(fullControlsHideTask);
+        fullControls.setVisibility(View.VISIBLE);
+        fullControls.setAlpha(1.0f);
+        fullControls.setTranslationY(0f);
+        fullControls.bringToFront();
+        fullControls.requestLayout();
+        if (fullControlsRevealButton != null) fullControlsRevealButton.setVisibility(View.GONE);
+        if (fullMenuButton != null) fullMenuButton.postDelayed(() -> fullMenuButton.requestFocus(), 40);
+        armFullControlsHide();
+    }
+
+    private void hideFullControls() {
+        if (!miniExpanded || fullControls == null) return;
+        fullControlsHandler.removeCallbacks(fullControlsHideTask);
+        fullControls.setVisibility(View.GONE);
+        if (fullControlsRevealButton != null) {
+            fullControlsRevealButton.setVisibility(View.VISIBLE);
+            fullControlsRevealButton.bringToFront();
+            fullControlsRevealButton.requestFocus();
+        }
+    }
+
+    private void toggleFullControls() {
+        if (fullControls == null) return;
+        if (fullControls.getVisibility() == View.VISIBLE) hideFullControls();
+        else showFullControlsTemporarily();
+    }
+
     private void createFullPlayerOverlays() {
         fullControls = new android.widget.LinearLayout(this);
         fullControls.setOrientation(android.widget.LinearLayout.HORIZONTAL);
@@ -579,15 +618,23 @@ public final class MainActivity extends Activity {
         cp.leftMargin = dp(8); cp.rightMargin = dp(8); cp.topMargin = dp(6);
         miniContainer.addView(fullControls, cp);
 
+        fullControlsRevealButton = fullButton("☰", "Mostrar controles do player");
+        fullControlsRevealButton.setVisibility(View.GONE);
+        fullControlsRevealButton.setOnClickListener(v -> showFullControlsTemporarily());
+        FrameLayout.LayoutParams rp = new FrameLayout.LayoutParams(dp(58), dp(52), android.view.Gravity.TOP | android.view.Gravity.LEFT);
+        rp.leftMargin = dp(8); rp.topMargin = dp(6);
+        miniContainer.addView(fullControlsRevealButton, rp);
+
         android.widget.Button menu = fullButton("☰", "Abrir menu de canais");
         fullMenuButton = menu;
         menu.setFocusable(true);
         menu.setFocusableInTouchMode(true);
-        menu.setOnClickListener(v -> toggleFullChannelMenu());
+        menu.setOnClickListener(v -> { armFullControlsHide(); toggleFullChannelMenu(); });
         fullControls.addView(menu, new android.widget.LinearLayout.LayoutParams(dp(54), -1));
 
         android.widget.Button stretch = fullButton("↔", "Esticar ou ajustar a imagem");
         stretch.setOnClickListener(v -> {
+            armFullControlsHide();
             int mode = miniPlayerView.getResizeMode();
             miniPlayerView.setResizeMode(mode == androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
                     ? androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FILL
@@ -596,11 +643,11 @@ public final class MainActivity extends Activity {
         fullControls.addView(stretch, new android.widget.LinearLayout.LayoutParams(dp(54), -1));
 
         android.widget.Button minus = fullButton("−", "Diminuir zoom");
-        minus.setOnClickListener(v -> changeFullZoom(-0.1f));
+        minus.setOnClickListener(v -> { armFullControlsHide(); changeFullZoom(-0.1f); });
         fullControls.addView(minus, new android.widget.LinearLayout.LayoutParams(dp(48), -1));
 
         android.widget.Button plus = fullButton("+", "Aumentar zoom");
-        plus.setOnClickListener(v -> changeFullZoom(0.1f));
+        plus.setOnClickListener(v -> { armFullControlsHide(); changeFullZoom(0.1f); });
         fullControls.addView(plus, new android.widget.LinearLayout.LayoutParams(dp(48), -1));
 
         fullZoomLabel = new TextView(this);
@@ -611,7 +658,7 @@ public final class MainActivity extends Activity {
         fullControls.addView(fullZoomLabel, new android.widget.LinearLayout.LayoutParams(dp(58), -1));
 
         android.widget.Button reset = fullButton("1×", "Voltar ao tamanho original");
-        reset.setOnClickListener(v -> { fullZoom = 1.0f; applyFullZoom(); });
+        reset.setOnClickListener(v -> { armFullControlsHide(); fullZoom = 1.0f; applyFullZoom(); });
         fullControls.addView(reset, new android.widget.LinearLayout.LayoutParams(dp(52), -1));
 
         fullChannelMenu = new FrameLayout(this);
@@ -933,19 +980,15 @@ public final class MainActivity extends Activity {
             if (miniTitle != null) miniTitle.setVisibility(View.GONE);
             if (miniExpandHit != null) miniExpandHit.setVisibility(View.GONE);
             if (fullControls != null) {
-                fullControls.setVisibility(View.VISIBLE);
-                fullControls.setAlpha(1.0f);
-                fullControls.setTranslationY(0f);
-                fullControls.bringToFront();
-                fullControls.requestLayout();
+                showFullControlsTemporarily();
             }
             if (fullChannelMenu != null) fullChannelMenu.setVisibility(View.GONE);
             fullZoom = 1.0f;
             miniPlayerView.setResizeMode(androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT);
             applyFullZoom();
             miniPlayerView.setUseController(true);
-            miniPlayerView.setControllerShowTimeoutMs(0);
-            miniPlayerView.setControllerHideOnTouch(false);
+            miniPlayerView.setControllerShowTimeoutMs(3500);
+            miniPlayerView.setControllerHideOnTouch(true);
             miniPlayerView.setControllerAutoShow(true);
             if (miniCloseButton != null) {
                 miniCloseButton.setContentDescription("Voltar para o mini player");
@@ -980,7 +1023,9 @@ public final class MainActivity extends Activity {
         miniContainer.requestLayout();
         if (miniTitle != null) miniTitle.setVisibility(View.VISIBLE);
         if (miniExpandHit != null) miniExpandHit.setVisibility(View.VISIBLE);
+        fullControlsHandler.removeCallbacks(fullControlsHideTask);
         if (fullControls != null) fullControls.setVisibility(View.GONE);
+        if (fullControlsRevealButton != null) fullControlsRevealButton.setVisibility(View.GONE);
         if (fullChannelMenu != null) fullChannelMenu.setVisibility(View.GONE);
         fullZoom = 1.0f;
         miniPlayerView.setScaleX(1.0f);
@@ -1167,6 +1212,11 @@ public final class MainActivity extends Activity {
         }
         if (webView != null && keyCode == KeyEvent.KEYCODE_MENU) {
             webView.evaluateJavascript("try{document.dispatchEvent(new KeyboardEvent('keydown',{key:'ContextMenu',bubbles:true,cancelable:true}))}catch(e){}", null);
+            return true;
+        }
+        if (miniExpanded && fullControls != null && fullControls.getVisibility() != View.VISIBLE
+                && keyCode != KeyEvent.KEYCODE_BACK && keyCode != KeyEvent.KEYCODE_ESCAPE) {
+            showFullControlsTemporarily();
             return true;
         }
         return super.onKeyDown(keyCode, event);
