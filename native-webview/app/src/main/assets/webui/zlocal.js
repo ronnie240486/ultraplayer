@@ -395,6 +395,30 @@ function parseM3UText(text) {
     }
     return all;
 }
+function parseM3UTextAsync(text) {
+    var lines = String(text || '').split(/\r?\n/), all = [], cur = null, nextId = 1, index = 0;
+    return new Promise(function (resolve) {
+        function step() {
+            var end = Math.min(lines.length, index + 420);
+            for (; index < end; index++) {
+                var line = String(lines[index] || '').replace(/^\uFEFF/, '').trim();
+                if (!line) continue;
+                if (line.indexOf('#EXTINF:') === 0) {
+                    var comma = line.indexOf(','), title = comma >= 0 ? line.slice(comma + 1).trim() : 'Canal ' + nextId;
+                    var group = (line.match(/group-title=["']([^"']*)["']/i) || line.match(/group-title=([^\s,]+)/i) || [,''])[1] || 'Canais';
+                    var logo = (line.match(/tvg-logo=["']([^"']*)["']/i) || line.match(/tvg-logo=([^\s,]+)/i) || [,''])[1] || '';
+                    var tvg = (line.match(/tvg-name=["']([^"']*)["']/i) || line.match(/tvg-name=([^\s,]+)/i) || [,''])[1] || '';
+                    cur = { name: tvg || title || ('Canal ' + nextId), group: group || 'Canais', stream_icon: logo, stream_id: nextId, num: nextId };
+                    nextId++;
+                } else if (line.charAt(0) !== '#' && cur) {
+                    cur.stream_url = line; all.push(cur); cur = null;
+                }
+            }
+            if (index < lines.length) setTimeout(step, 0); else resolve(all);
+        }
+        step();
+    });
+}
 function classifyM3UItem(item) {
     var group = String(item.group || '').trim(), name = String(item.name || '').trim(), url = String(item.stream_url || '');
     var g = group.toLowerCase(), n = name.toLowerCase(), u = url.toLowerCase();
@@ -430,26 +454,47 @@ function m3uFallbackArt(item, kind) {
 function catalogFromM3U() {
     if (S.m3uCatalogPromise) return S.m3uCatalogPromise;
     if (!S.playlistUrl) return Promise.reject(new Error('playlist_url_missing'));
-    S.m3uCatalogPromise = fetchPlaylistText(S.playlistUrl).then(function (text) {
-        var all = kidsFilterList(parseM3UText(text)), buckets = { live: [], movies: [], series: [] };
-        for (var i = 0; i < all.length; i++) {
-            all[i].m3u_kind = classifyM3UItem(all[i]);
-            if (!all[i].stream_icon) all[i].stream_icon = m3uFallbackArt(all[i], all[i].m3u_kind);
-            buckets[all[i].m3u_kind].push(all[i]);
-        }
-        var outputs = {};
-        for (var kind in buckets) if (buckets.hasOwnProperty(kind)) {
-            var byCat = {}, cats = [], catIds = {}, counter = 0, list = buckets[kind];
-            for (var j = 0; j < list.length; j++) {
-                var item = list[j], name = item.group || (kind === 'movies' ? 'Filmes' : kind === 'series' ? 'Séries' : 'Canais');
-                if (!catIds[name]) { counter++; catIds[name] = String(counter); byCat[catIds[name]] = []; cats.push({ category_id: catIds[name], category_name: name, num: 0, adult: isAdultName(name) }); }
-                item.category_id = catIds[name]; byCat[catIds[name]].push(item);
+    S.m3uCatalogPromise = fetchPlaylistText(S.playlistUrl).then(parseM3UTextAsync).then(function (raw) {
+        var buckets = { live: [], movies: [], series: [] }, index = 0;
+        return new Promise(function (resolve) {
+            function classifyStep() {
+                var end = Math.min(raw.length, index + 420);
+                for (; index < end; index++) {
+                    var item = raw[index];
+                    if (!kidsAllows(item)) continue;
+                    item.m3u_kind = classifyM3UItem(item);
+                    if (!item.stream_icon) item.stream_icon = m3uFallbackArt(item, item.m3u_kind);
+                    buckets[item.m3u_kind].push(item);
+                }
+                if (index < raw.length) setTimeout(classifyStep, 0); else resolve(buckets);
             }
-            for (var c = 0; c < cats.length; c++) cats[c].num = byCat[cats[c].category_id].length;
-            outputs[kind] = { cats: cats, byCat: byCat, all: list };
-        }
-        S.cat.live = outputs.live; S.cat.movies = outputs.movies; S.cat.series = outputs.series;
-        return outputs;
+            classifyStep();
+        });
+    }).then(function (buckets) {
+        var outputs = {}, kinds = ['live', 'movies', 'series'], kindIndex = 0;
+        return new Promise(function (resolve) {
+            function buildNextKind() {
+                if (kindIndex >= kinds.length) {
+                    S.cat.live = outputs.live; S.cat.movies = outputs.movies; S.cat.series = outputs.series;
+                    resolve(outputs); return;
+                }
+                var kind = kinds[kindIndex++], byCat = {}, cats = [], catIds = {}, counter = 0, list = buckets[kind] || [], j = 0;
+                function buildStep() {
+                    var end = Math.min(list.length, j + 420);
+                    for (; j < end; j++) {
+                        var item = list[j], name = item.group || (kind === 'movies' ? 'Filmes' : kind === 'series' ? 'Séries' : 'Canais');
+                        if (!catIds[name]) { counter++; catIds[name] = String(counter); byCat[catIds[name]] = []; cats.push({ category_id: catIds[name], category_name: name, num: 0, adult: isAdultName(name) }); }
+                        item.category_id = catIds[name]; byCat[catIds[name]].push(item);
+                    }
+                    if (j < list.length) { setTimeout(buildStep, 0); return; }
+                    for (var c = 0; c < cats.length; c++) cats[c].num = byCat[cats[c].category_id].length;
+                    outputs[kind] = { cats: cats, byCat: byCat, all: list };
+                    setTimeout(buildNextKind, 0);
+                }
+                buildStep();
+            }
+            buildNextKind();
+        });
     }).catch(function (err) { S.m3uCatalogPromise = null; throw err; });
     return S.m3uCatalogPromise;
 }
@@ -997,10 +1042,10 @@ function appThemeId() { try { var v = localStorage.getItem('zx_app_theme'); if (
 function appTheme() { var id = appThemeId(), i; for (i = 0; i < APP_THEMES.length; i++) if (APP_THEMES[i].id === id) return APP_THEMES[i]; return APP_THEMES[0]; }
 function appThemeCss(th) {
     return ':root{--zx-accent:' + th.accent + ';--zx-bg:' + th.bg + ';--zx-panel:' + th.panel + ';--zx-text:' + th.text + ';--zx-muted:' + th.muted + ';}'
-        + 'html,body,#app-root{background-color:' + th.bg + ';color:' + th.text + ';}'
+        + "html,body,#app-root{background-color:" + th.bg + ";color:" + th.text + ";background-image:url('assets/branding/fusion_background.png');background-position:center center;background-repeat:no-repeat;background-size:cover;background-attachment:fixed;}"
         + 'body{--zx-accent:' + th.accent + ';--zx-bg:' + th.bg + ';--zx-panel:' + th.panel + ';--zx-text:' + th.text + ';--zx-muted:' + th.muted + ';}'
         + '.brand-lockup{display:inline-flex;align-items:center;gap:9px;vertical-align:middle}.brand-mark{width:42px;height:42px;object-fit:contain;display:block;border-radius:6px}.brand-logo{color:' + th.text + ';}.brand-logo .accent,.brand-logo .accent{color:' + th.accent + ';}'
-        + '.settings-screen,.zx-login-screen,.search-screen,.zx-home2,.home-screen{background-color:' + th.bg + ' !important;color:' + th.text + ' !important;}'
+        + '.settings-screen,.zx-login-screen,.search-screen,.zx-home2,.home-screen{background-color:transparent !important;background-image:none !important;color:' + th.text + ' !important;}'
         + '.settings-content,.settings-menu .sm-item,.info-card,.opt-btn,.action-btn,.zx-pf-kids{background-color:' + th.panel + ';color:' + th.text + ';}'
         + '.settings-screen .settings-sub,.settings-pane .pane-sub,.settings-pane .pane-section-title,.zx-pf-kids-sub{color:' + th.muted + ';}'
         + '.settings-menu .sm-item:focus,.settings-menu .sm-item.is-active,.opt-btn:focus,.opt-btn.is-active,.opt-btn.is-on{border-color:' + th.accent + ';box-shadow:0 0 0 3px ' + th.accent + '55;}'
@@ -1087,29 +1132,23 @@ function applyWallpaper(url) {
     var st = $('zx-wall');
     if (!st) { st = document.createElement('style'); st.id = 'zx-wall'; document.head.appendChild(st); }
     var safe = String(url || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-    if (safe) {
-        // A imagem escolhida no painel precisa ficar no próprio root, que ocupa
-        // toda a tela. O .bg-diamonds fica transparente para não mostrar a arte
-        // antiga nem criar uma segunda camada por baixo.
-        st.textContent = ".bg-diamonds{background-color:transparent !important;background-image:none !important;}"
-            + "#app-root,.app-root{background-color:transparent !important;background-image:url('" + safe + "') !important;background-position:center center;background-repeat:no-repeat;background-size:cover;background-attachment:fixed;}"
-            + '.sidebar-screen,.zx-home2,.home-screen,.radio-screen,.search-screen,.settings-screen,.detail-screen,.detail-bg,.category-screen,.cat-screen,.content-screen,.live-screen{background-color:transparent !important;background-image:none !important;}'
-            + '.zx-home2{background:transparent !important;}.zx-home2 .zh-amb,.zx-home2 .zh-wm{display:none !important;}';
-    } else {
-        // Sem imagem do painel, remove a arte antiga do root e deixa apenas a
-        // cor do tema, sem fallback para bg_url/background/banner.
-        st.textContent = '.bg-diamonds{background-color:transparent !important;background-image:none !important;}#app-root,.app-root{background-color:#080808 !important;background-image:none !important;}'
-            + '.sidebar-screen,.zx-home2,.home-screen,.radio-screen,.search-screen,.settings-screen,.detail-screen,.detail-bg,.category-screen,.cat-screen,.content-screen,.live-screen{background-color:transparent !important;background-image:none !important;}'
-            + '.zx-home2{background:transparent !important;}.zx-home2 .zh-amb,.zx-home2 .zh-wm{display:none !important;}';
-    }
+    var resolved = String(url || 'assets/branding/fusion_background.png').trim();
+    var safeResolved = resolved.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    // O fundo Fusion fica no root e todas as páginas transparentes exibem a
+    // mesma imagem. Se o painel fornecer outro background_url, ele continua
+    // tendo prioridade; sem ele, usa o asset local Fusion.
+    st.textContent = ".bg-diamonds{background-color:transparent !important;background-image:none !important;}"
+        + "#app-root,.app-root{background-color:transparent !important;background-image:url('" + safeResolved + "') !important;background-position:center center;background-repeat:no-repeat;background-size:cover;background-attachment:fixed;}"
+        + '.sidebar-screen,.zx-home2,.home-screen,.radio-screen,.search-screen,.settings-screen,.detail-screen,.detail-bg,.category-screen,.cat-screen,.content-screen,.live-screen{background-color:transparent !important;background-image:none !important;}'
+        + '.zx-home2{background:transparent !important;}.zx-home2 .zh-amb,.zx-home2 .zh-wm{display:none !important;}';
     try { applyHomePanelWall(); } catch (e) {}
 }
 function applyHomePanelWall() {
     try {
         var els = document.querySelectorAll('.zx-panel-wall,.zx-settings-wall');
         if (!els || !els.length) return;
-        var u = String((S.branding && S.branding.background_url) || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-        for (var i = 0; i < els.length; i++) els[i].style.backgroundImage = u ? "url('" + u + "')" : 'none';
+        var u = String((S.branding && S.branding.background_url) || 'assets/branding/fusion_background.png').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        for (var i = 0; i < els.length; i++) els[i].style.backgroundImage = "url('" + u + "')";
     } catch (e) {}
 }
 function warmHomeCatalogs() {
@@ -1153,7 +1192,9 @@ function applyUltraConfig(j, rerender) {
     b.brand_name = 'Fusion';
     b.logo_url = j.ultra_logo_url || '';
     b.banner_url = j.ultra_banner_url || '';
-    b.background_url = j.ultra_background_url || '';
+    // A identidade visual Fusion enviada pelo usuário é o fundo interno padrão
+    // de todas as páginas; o campo remoto é mantido apenas no objeto bruto.
+    b.background_url = 'assets/branding/fusion_background.png';
     b.wallpaper_url = '';
     b.background = '';
     b.message_image_url = j.ultra_message_image_url || '';
@@ -3223,12 +3264,13 @@ function homeRecommendationsHtml() {
 function fillHomeRecommendations() {
     if (!S.server || !document.querySelector('.zx-home2')) return;
     var tv = getFormFactor() === 'tv';
-    // Na TV Box a Home nunca inicia parsing de M3U: sem snapshot, deixa a seção
-    // vazia e mantém o D-pad livre. A categoria completa carrega sob demanda.
-    if (tv && (!S.cat || !S.cat.movies || !S.cat.series)) return;
-    var ready = tv ? Promise.resolve() : Promise.all([ensureCatalog('movies'), ensureCatalog('series')]);
+    // A TV Box usa o parser incremental e pode montar as duas fileiras sem
+    // bloquear o D-pad. Quando há snapshot, renderiza na hora; sem snapshot,
+    // carrega em lotes e atualiza a Home assim que cada catálogo fica pronto.
+    var ready = Promise.all([ensureCatalog('movies'), ensureCatalog('series')]);
     ready.then(function () {
         var sec = $('zhReco'), row = $('zhRecoRow'); if (!sec || !row) return;
+        fillHomeNewest();
         var items = homeRecommendationItems(); if (!items.length) { sec.style.display = 'none'; return; }
         row.innerHTML = homeRecommendationCards(items); sec.style.display = '';
         loadHomePosters(); scheduleHomeFit(0);
@@ -3288,9 +3330,8 @@ function fillHomeCounts() {
     function nextCat() {
         if (qi >= defs.length) return;
         var d = defs[qi++], kind = d[0], id = d[1], noun = d[2];
-        // Sem cache na TV Box, não parsear a M3U na Home. O carregamento integral
-        // acontece ao abrir a categoria, mantendo a navegação liberada.
-        if (getFormFactor() === 'tv' && (!S.cat || !S.cat[kind])) { setTimeout(nextCat, 80); return; }
+        // O parser M3U agora processa em lotes e cede o event loop entre blocos;
+        // a Home pode carregar as contagens e fileiras sem prender o D-pad.
         var set = function () {
             try {
                 var el = document.getElementById(id); if (!el) return;

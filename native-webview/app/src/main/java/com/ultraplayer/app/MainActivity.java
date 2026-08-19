@@ -170,7 +170,7 @@ public final class MainActivity extends Activity {
 
     private View createSplash() {
         FrameLayout overlay = new FrameLayout(this);
-        overlay.setBackgroundColor(android.graphics.Color.rgb(11, 15, 26));
+        overlay.setBackgroundResource(R.drawable.fusion_background);
         android.widget.LinearLayout box = new android.widget.LinearLayout(this);
         box.setOrientation(android.widget.LinearLayout.VERTICAL);
         box.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
