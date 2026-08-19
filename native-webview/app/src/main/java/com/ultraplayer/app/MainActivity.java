@@ -480,7 +480,17 @@ public final class MainActivity extends Activity {
             runOnUiThread(() -> {
                 try {
                     JSONObject json = new JSONObject(payload == null ? "{}" : payload);
-                    if (!json.optString("url", "").isEmpty()) {
+                    String requestedUrl = json.optString("url", "");
+                    if (!requestedUrl.isEmpty()) {
+                        // Reentrada idempotente: se esta mídia já está no player
+                        // nativo, apenas garante a promoção visual. Não chama
+                        // setMediaItem/prepare e não cria outra instância.
+                        if (miniPlayer != null && miniContainer != null
+                                && miniContainer.getVisibility() == View.VISIBLE
+                                && requestedUrl.equals(miniSourceUrl)) {
+                            if (!miniExpanded) openFullMiniPlayer();
+                            return;
+                        }
                         showMiniPlayer(json.toString(), true);
                         openFullMiniPlayer();
                     }
@@ -952,6 +962,9 @@ public final class MainActivity extends Activity {
             String url = json.optString("url", "");
             String title = json.optString("title", "Canal selecionado");
             if (url.isEmpty()) return;
+            // Mesmo payload durante uma transição não deve gerar nova preparação.
+            if (miniPlayer != null && miniContainer.getVisibility() == View.VISIBLE
+                    && url.equals(miniSourceUrl) && miniExpanded) return;
             miniPayload = json.toString();
             boolean liveContent = "live".equalsIgnoreCase(json.optString("kind", ""))
                     || "live".equalsIgnoreCase(json.optString("zxKind", ""));

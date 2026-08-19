@@ -46,6 +46,7 @@ var S = {
     cat: { movies: null, series: null, live: null },   // {cats, byCat:{id:[...]}, all:[...]}
     radioCache: {}, radioPromises: {},
     catPromises: {},
+    catPromiseFull: {},
     listNotificationTimer: null,
     listNotificationBusy: false,
     ultraSessionBusy: false,
@@ -1466,14 +1467,28 @@ function ensureCatalog(kind, forceFull) {
     // A Home e os contadores usam apenas snapshot/cache. Entrar numa categoria,
     // pesquisar ou usar voz passa forceFull=true e aí recebe o catálogo completo.
     if (S.cat[kind] && (!forceFull || !S.cat[kind].partial)) return Promise.resolve(S.cat[kind]);
-    if (S.catPromises[kind]) return S.catPromises[kind];
+    if (S.catPromises[kind]) {
+        if (!forceFull || S.catPromiseFull[kind]) return S.catPromises[kind];
+        var partialPending = S.catPromises[kind];
+        return partialPending.then(function () { return refreshCatalog(kind, true); }, function () { return refreshCatalog(kind, true); });
+    }
     var cached = getFormFactor() === 'tv' ? readCatalogCache(kind) : null;
+
     if (cached && !forceFull) { S.cat[kind] = cached; return Promise.resolve(cached); }
     if (cached && forceFull) S.cat[kind] = cached;
     return refreshCatalog(kind, forceFull);
 }
 function refreshCatalog(kind, forceFull) {
-    if (S.catPromises[kind]) return S.catPromises[kind];
+    forceFull = !!forceFull;
+    if (S.catPromises[kind]) {
+        // Uma solicitação integral nunca pode ser atendida por uma promessa
+        // de preview já em andamento. Aguarda a parcial terminar e então
+        // dispara uma nova consulta completa.
+        if (!forceFull || S.catPromiseFull[kind]) return S.catPromises[kind];
+        var pending = S.catPromises[kind];
+        return pending.then(function () { return refreshCatalog(kind, true); }, function () { return refreshCatalog(kind, true); });
+    }
+    S.catPromiseFull[kind] = forceFull;
     var isM3u = (S.playlistType || '').indexOf('m3u') === 0;
     if (isM3u && !S.xtreamDerived && !S.xtreamUnavailable) xtreamCreds();
     var work;
@@ -1489,11 +1504,9 @@ function refreshCatalog(kind, forceFull) {
         throw err;
     });
     S.catPromises[kind] = work.then(function (result) {
-        saveCatalogCache(kind, result); delete S.catPromises[kind];
-        // Não atualiza o catálogo completo automaticamente depois do snapshot.
-        // A carga integral só é disparada quando o usuário entra na categoria ou pesquisa.
+        saveCatalogCache(kind, result); delete S.catPromises[kind]; delete S.catPromiseFull[kind];
         return result;
-    }, function (err) { delete S.catPromises[kind]; throw err; });
+    }, function (err) { delete S.catPromises[kind]; delete S.catPromiseFull[kind]; throw err; });
     return S.catPromises[kind];
 }
 function streamsForCat(kind, catId) {
