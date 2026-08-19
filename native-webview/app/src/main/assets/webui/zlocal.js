@@ -4180,7 +4180,8 @@ function findCat(cat, id) { for (var i = 0; i < cat.cats.length; i++) if (String
    EPG só casam na tela de canais; nas de VOD ficam inertes. O <style> vai no
    setHtml de cada tela, então NÃO vaza pras outras plataformas. */
 function liveStyles() {
-    var a = S.accent || '#10b981';
+    var a = S.accent || '#10b981', ta = themeRgba(a, 0.22), tb = themeRgba(a, 0.30), tc = themeRgba(a, 0.62), td = themeRgba(a, 0.72);
+
     return '<style>'
         // ⚠️ PERF TV fraca (19/07): esta tela ROLA — fundo CHAPADO (degradê + marca
         // d'água atrás de scroll re-compõem a tela toda por quadro) e SEM transition.
@@ -4202,9 +4203,9 @@ function liveStyles() {
         + 'body.zx-ff-tv .cat-sidebar .cat-pill .cat-count,body.ui-tv .cat-sidebar .cat-pill .cat-count{font-size:12px !important;right:.55vw;margin-left:auto;margin-top:0 !important;line-height:1 !important;}'
         + 'body.zx-ff-tv .cat-sidebar .cat-lock,body.ui-tv .cat-sidebar .cat-lock{width:14px !important;height:14px !important;flex:none !important;}'
         + 'body.zx-ff-tv .cat-sidebar .cat-pill:focus-visible,body.ui-tv .cat-sidebar .cat-pill:focus-visible{scroll-margin-top:10px;scroll-margin-bottom:10px;}'
-        + 'body.zx-ff-tv .cat-sidebar .cat-pill:focus,body.ui-tv .cat-sidebar .cat-pill:focus{background:' + a + ' !important;border-color:#ffffff !important;color:#ffffff !important;box-shadow:0 0 0 3px #ffffff,0 0 0 6px ' + a + ' !important;outline:none !important;}'
-        + 'body.zx-ff-tv .cat-sidebar .cat-pill.is-active,body.ui-tv .cat-sidebar .cat-pill.is-active{background:' + a + 'cc !important;border-color:#ffffff !important;color:#ffffff !important;box-shadow:0 0 0 2px #ffffff !important;}'
-        + 'body.zx-ff-tv a:focus,body.zx-ff-tv button:focus,body.zx-ff-tv [tabindex]:focus,body.ui-tv a:focus,body.ui-tv button:focus,body.ui-tv [tabindex]:focus{outline:3px solid #ffffff !important;outline-offset:2px !important;box-shadow:0 0 0 5px rgba(16,185,129,.95) !important;background-color:rgba(16,185,129,.28) !important;color:#ffffff !important;}'
+        + 'body.zx-ff-tv .cat-sidebar .cat-pill:focus,body.ui-tv .cat-sidebar .cat-pill:focus{background:' + ta + ' !important;border-color:' + td + ' !important;color:#ffffff !important;box-shadow:0 0 0 2px #ffffff,0 0 0 5px ' + tc + ' !important;outline:none !important;}'
+        + 'body.zx-ff-tv .cat-sidebar .cat-pill.is-active,body.ui-tv .cat-sidebar .cat-pill.is-active{background:' + ta + ' !important;border-color:' + td + ' !important;color:#ffffff !important;box-shadow:inset 0 0 0 1px ' + tc + ' !important;}'
+        + 'body.zx-ff-tv a:focus,body.zx-ff-tv button:focus,body.zx-ff-tv [tabindex]:focus,body.ui-tv a:focus,body.ui-tv button:focus,body.ui-tv [tabindex]:focus{outline:2px solid #ffffff !important;outline-offset:2px !important;box-shadow:0 0 0 5px ' + tc + ' !important;background-color:' + ta + ' !important;color:#ffffff !important;}'
         + 'body.zx-ff-tv .sidebar-content .sc-title{font-size:1.8vw;margin-bottom:1.1vw;}'
         + 'body.zx-ff-tv .live-split .channel-tile-tv,body.ui-tv .live-split .channel-tile-tv{min-height:64px !important;height:64px !important;padding:6px 7px !important;margin-bottom:4px !important;border-radius:8px !important;}'
         + 'body.zx-ff-tv .live-split .channel-tile-tv .ct-logo,body.ui-tv .live-split .channel-tile-tv .ct-logo{width:36px !important;height:36px !important;min-width:36px !important;min-height:36px !important;margin-right:6px !important;border-radius:6px !important;background-size:contain !important;background-position:center !important;background-repeat:no-repeat !important;}'
@@ -4212,9 +4213,11 @@ function liveStyles() {
         + 'body.zx-ff-tv .live-split .channel-tile-tv .ct-num,body.ui-tv .live-split .channel-tile-tv .ct-num{font-size:11px !important;margin-bottom:1px !important;}'
         + '.cat-sidebar .cat-pill:hover{border-color:' + a + '80;}'
         + '.cat-sidebar .cat-pill .cat-count{color:#8fa39a;}'
-        + '.cat-sidebar .cat-pill:focus{background:' + a + '2e;border-color:' + a + ';box-shadow:0 0 0 3px ' + a + '66;color:#fff;outline:none;}'
+                + '.cat-sidebar .cat-pill:focus{background:' + ta + ';border-color:' + td + ';box-shadow:0 0 0 2px ' + tc + ';color:#fff;outline:none;}'
+
         + '.cat-sidebar .cat-pill:focus .cat-count{color:#cfe8df;}'
-        + '.cat-sidebar .cat-pill.is-active{background:' + a + '26;border-color:' + a + '90;color:#fff;}'
+                + '.cat-sidebar .cat-pill.is-active{background:' + ta + ';border-color:' + td + ';color:#fff;}'
+
         + '.cat-sidebar .cat-pill.is-active .cat-count{color:#cfe8df;}'
         + '.cat-sidebar .cat-pill-back{color:#cfe0d8;}'
         // busca de canais (input nativo do Android) no mesmo vidro verde
@@ -4225,7 +4228,8 @@ function liveStyles() {
         + '.channel-tile-tv{background-color:' + a + '0d;background-image:none;border:1px solid ' + a + '22;border-radius:14px;box-shadow:none;}'
         + '.channel-tile-tv:hover{border-color:' + a + '80;}'
         + '.channel-tile-tv .ct-logo{background-color:#0d1a14;border-radius:10px;}'
-        + '.channel-tile-tv:focus{background:' + a + '2e;color:#fff;border-color:' + a + ';box-shadow:0 0 0 3px ' + a + '66;}'
+                + '.channel-tile-tv:focus{background:' + ta + ';color:#fff;border-color:' + td + ';box-shadow:0 0 0 2px ' + tc + ';}'
+
         + '.channel-tile-tv:focus .ct-num{color:#cfe8df;}'
         + '.channel-tile-tv:focus .ct-name{color:#fff;}'
         // ---- painel de EPG ----
@@ -4252,7 +4256,7 @@ function liveStyles() {
         + '.live-epg .epg-copy{display:block;min-width:0;}'
         + '.live-epg .epg-title{font-size:10px;line-height:1.05;font-weight:650;}'
         + '.epg-alarm{position:absolute;right:0;top:50%;z-index:5;pointer-events:auto;touch-action:manipulation;transform:translateY(-50%);width:38px;height:38px;border:1px solid ' + a + '44;border-radius:10px;background:' + a + '12;color:#9fb4aa;font-size:18px;cursor:pointer;}'
-        + '.epg-alarm:hover,.epg-alarm:focus,.epg-alarm:focus-visible{border-color:#fff;color:#fff;outline:3px solid #fff;outline-offset:2px;background:#10b981;box-shadow:0 0 0 5px rgba(16,185,129,.85);}'
+        + '.epg-alarm:hover,.epg-alarm:focus,.epg-alarm:focus-visible{border-color:' + td + ';color:#fff;outline:2px solid #fff;outline-offset:2px;background:' + ta + ';box-shadow:0 0 0 5px ' + tc + ';}'
         + '.epg-alarm.is-on{background:' + a + '42;color:' + a + ';}'
         + '.zx-epg-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:100001;display:flex;align-items:center;gap:10px;max-width:min(560px,88vw);padding:14px 20px;border:1px solid rgba(255,255,255,.18);border-radius:16px;background:rgba(9,20,15,.96);box-shadow:0 14px 36px rgba(0,0,0,.45);color:#f4fff9;font-size:16px;font-weight:700;text-align:center;line-height:1.25;}'
         + '.zx-epg-toast.is-enabled{border-color:' + a + ';box-shadow:0 0 0 3px ' + a + '33,0 14px 36px rgba(0,0,0,.45);}'
