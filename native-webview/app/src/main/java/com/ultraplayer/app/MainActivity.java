@@ -1052,17 +1052,15 @@ public final class MainActivity extends Activity {
             if (root != null) root.requestLayout();
             if (miniTitle != null) miniTitle.setVisibility(View.GONE);
             if (miniExpandHit != null) miniExpandHit.setVisibility(View.GONE);
-            if (fullControls != null) {
-                showFullControlsTemporarily();
-            }
+            fullControlsHandler.removeCallbacks(fullControlsHideTask);
+            if (fullControls != null) fullControls.setVisibility(View.GONE);
+            if (fullControlsRevealButton != null) fullControlsRevealButton.setVisibility(View.GONE);
+            fullChannelMenuHandler.removeCallbacks(fullChannelMenuHideTask);
             if (fullChannelMenu != null) fullChannelMenu.setVisibility(View.GONE);
             fullZoom = 1.0f;
             miniPlayerView.setResizeMode(androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT);
             applyFullZoom();
-            miniPlayerView.setUseController(true);
-            miniPlayerView.setControllerShowTimeoutMs(3500);
-            miniPlayerView.setControllerHideOnTouch(true);
-            miniPlayerView.setControllerAutoShow(true);
+            miniPlayerView.setUseController(false);
             if (miniCloseButton != null) {
                 miniCloseButton.setContentDescription("Voltar para o mini player");
                 miniCloseButton.setImageResource(android.R.drawable.ic_menu_revert);
@@ -1076,7 +1074,6 @@ public final class MainActivity extends Activity {
                             | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                             | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
             if (miniPlayer != null && !miniPlayer.isPlaying()) miniPlayer.play();
-            if (fullMenuButton != null) fullMenuButton.postDelayed(() -> fullMenuButton.requestFocus(), 120);
         } catch (Throwable ignored) { }
     }
 
@@ -1291,11 +1288,6 @@ public final class MainActivity extends Activity {
                 && keyCode != KeyEvent.KEYCODE_BACK && keyCode != KeyEvent.KEYCODE_ESCAPE) {
             armFullChannelMenuHide();
             return super.onKeyDown(keyCode, event);
-        }
-        if (miniExpanded && fullControls != null && fullControls.getVisibility() != View.VISIBLE
-                && keyCode != KeyEvent.KEYCODE_BACK && keyCode != KeyEvent.KEYCODE_ESCAPE) {
-            showFullControlsTemporarily();
-            return true;
         }
         return super.onKeyDown(keyCode, event);
     }
