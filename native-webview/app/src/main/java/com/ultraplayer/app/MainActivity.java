@@ -415,13 +415,17 @@ public final class MainActivity extends Activity {
                         String hay = (meta + " " + line).toLowerCase(java.util.Locale.US);
                         boolean isSeries = hay.matches(".*(series|serie|série|temporada|season|episode|episodio|/series/|/episode/|s[0-9]{1,2}e[0-9]{1,2}).*");
                         boolean isMovie = !isSeries && hay.matches(".*(filme|filmes|movie|movies|cinema|vod|documentario|documentário|desenho|cartoon|/movie/|/vod/).*");
-                        int limit = isSeries ? 80 : isMovie ? 80 : 80;
+                        // A TV Box precisa de uma amostra inicial ampla para a Home;
+                        // o celular mantém o preview menor e já está rápido.
+                        boolean tvPreview = isTv || "tv".equalsIgnoreCase(getSharedPreferences("ultraplayer", MODE_PRIVATE).getString("form_factor", ""));
+                        int limit = tvPreview ? 360 : 80;
                         int count = isSeries ? series : isMovie ? movies : live;
                         if (count < limit) {
                             body += meta + "\n" + line + "\n";
                             selected++;
                             if (isSeries) series++; else if (isMovie) movies++; else live++;
-                            if (live >= 80 && movies >= 80 && series >= 80) break;
+                            int previewLimit = tvPreview ? 360 : 80;
+                            if (live >= previewLimit && movies >= previewLimit && series >= previewLimit) break;
                         }
                         meta = null;
                     }
@@ -1087,7 +1091,8 @@ public final class MainActivity extends Activity {
                             | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
                             | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                             | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
-            if (miniPlayer != null && !miniPlayer.isPlaying()) miniPlayer.play();
+            // A promoção é somente de layout. Não chamar play(), prepare() ou
+            // seekTo(): o mesmo ExoPlayer continua com o estado que já tinha.
         } catch (Throwable ignored) { }
     }
 
@@ -1131,7 +1136,7 @@ public final class MainActivity extends Activity {
             miniPayload = "";
             return;
         }
-        if (miniPlayer != null && !miniPlayer.isPlaying()) miniPlayer.play();
+        // Retorno também é somente de layout; preserva pausa/reprodução e posição.
     }
 
     private void hideMiniPlayer() {

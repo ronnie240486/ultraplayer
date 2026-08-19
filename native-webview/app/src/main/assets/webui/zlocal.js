@@ -1197,10 +1197,13 @@ function warmHomeCatalogs() {
     if ((!S.server && !S.playlistUrl) || S._homeWarmStarted) return;
     S._homeWarmStarted = true;
     // A primeira pintura usa o cache/preview para devolver o controle remoto
-    // imediatamente. Depois, a carga integral é feita em série para não travar
-    // a TV Box: primeiro filmes, depois séries e por fim canais.
-    if (getFormFactor() === 'tv') {
-        setTimeout(function () { refreshHomeCachedCatalogs(['movies', 'series', 'live'], 0); }, 180);
+    // rapidamente. A TV Box não inicia a carga integral junto com a Home:
+    // isso competia com o WebView e deixava a tela principal lenta.
+    var tvWarm = getFormFactor() === 'tv';
+    try { tvWarm = tvWarm || (document.body && /(^|\s)(zx-ff-tv|ui-tv)(\s|$)/.test(String(document.body.className || ''))); } catch (e0) {}
+    if (tvWarm) {
+        setTimeout(function () { refreshHomePreviewCatalogs(['movies', 'series', 'live'], 0); }, 180);
+        setTimeout(function () { refreshHomeCachedCatalogs(['movies', 'series', 'live'], 0); }, 9000);
         setTimeout(function () { radioLoadCategory(radioCategory('gospel')).catch(function () {}); }, 6000);
         return;
     }
@@ -2965,6 +2968,20 @@ function renderRadioScreen() {
     for (var j = 0; j < buttons.length; j++) (function (b) { b.addEventListener('click', function () { S.radioCategory = b.getAttribute('data-radio-cat'); renderRadioScreen(); }); })(buttons[j]);
     radioLoadCategory(cat).then(function (stations) { S.radioStations = stations; radioRefreshCountries(stations); radioRenderStations(stations); }).catch(function () { if (grid) grid.innerHTML = '<div class="zx-empty">Não foi possível carregar as rádios agora. Tente novamente.</div>'; var st = document.getElementById('radio-status'); if (st) st.textContent = 'Catálogo indisponível no momento'; });
     afterRender();
+}
+function refreshHomePreviewCatalogs(kinds, index) {
+    if (!kinds || index >= kinds.length) return;
+    var kind = kinds[index];
+    try {
+        refreshCatalog(kind, false).then(function () {
+            updateHomeCatalogUI(kind);
+            setTimeout(function () { refreshHomePreviewCatalogs(kinds, index + 1); }, 220);
+        })['catch'](function () {
+            setTimeout(function () { refreshHomePreviewCatalogs(kinds, index + 1); }, 220);
+        });
+    } catch (e) {
+        setTimeout(function () { refreshHomePreviewCatalogs(kinds, index + 1); }, 220);
+    }
 }
 function refreshHomeCachedCatalogs(kinds, index) {
     if (!kinds || index >= kinds.length) return;
@@ -5772,7 +5789,9 @@ function applyFormFactor() {
         var b = document.body;
         if (b) {
             var cl = (' ' + b.className + ' ').replace(' zx-ff-mobile ', ' ').replace(' zx-ff-tv ', ' ').replace(' ui-tv ', ' ').replace(/^\s+|\s+$/g, '');
-            b.className = cl + (cl && (mob || tvMode) ? ' ' : '') + (mob ? 'zx-ff-mobile' : (tvMode ? 'zx-ff-tv' : ''));
+            // Mantém as duas marcas no TV Box: `zx-ff-tv` para o layout novo
+            // e `ui-tv` para as regras legadas do EPG e da grade Live.
+            b.className = cl + (cl && (mob || tvMode) ? ' ' : '') + (mob ? 'zx-ff-mobile' : (tvMode ? 'zx-ff-tv ui-tv' : ''));
         }
     } catch (e) {}
     try { if (known && global.HdxNative && global.HdxNative.setFormFactor) global.HdxNative.setFormFactor(tvMode ? 'tv' : 'mobile'); } catch (e) {}
