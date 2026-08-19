@@ -221,7 +221,10 @@ function arr1(x) { if (x == null) return []; return (typeof x.length === 'number
 function inArr(a, v) { a = a || []; for (var i = 0; i < a.length; i++) { if (+a[i] === +v) return true; } return false; }
 function p2(n) { return ('0' + n).slice(-2); }
 function isAdultName(n) { n = (n || '').toLowerCase(); return n.indexOf('xxx') >= 0 || n.indexOf('+18') >= 0 || n.indexOf('18+') >= 0 || n.indexOf('adult') >= 0 || n.indexOf('porn') >= 0; }
-function showLoading(on) { var lo = $('app-loading'); if (lo) lo.className = on ? 'is-on' : ''; }
+// A Home possui uma única tela inicial (#zx-splash). O overlay secundário
+// foi removido para não exibir uma segunda tela de carregamento.
+function showLoading(on) { return; }
+
 function isTouch() { return ('ontouchstart' in global) || navigator.maxTouchPoints > 0; }
 // TV box / Android TV? (lado nativo via UiModeManager/leanback). Usado SÓ pra
 // dar menos colunas no grid (fitGrid), NÃO pra mexer no viewport/CSS — o layout
@@ -1160,10 +1163,9 @@ function applyAccent(accent) {
     }
     var st = $('hdx-css');
     if (!st) { st = document.createElement('style'); st.id = 'hdx-css'; document.head.appendChild(st); }
-    st.textContent = css;
-    // spinner do #app-loading acompanha o accent
-    try { var sp = document.querySelector('#app-loading .lo-spinner'); if (sp) sp.style.borderTopColor = S.accent; } catch (e) {}
+        st.textContent = css;
 }
+
 function applyWallpaper(url) {
     var st = $('zx-wall');
     if (!st) { st = document.createElement('style'); st.id = 'zx-wall'; document.head.appendChild(st); }
@@ -1190,16 +1192,17 @@ function applyHomePanelWall() {
 function warmHomeCatalogs() {
     if ((!S.server && !S.playlistUrl) || S._homeWarmStarted) return;
     S._homeWarmStarted = true;
-    // TV Box fraca: não concorra com a navegação inicial fazendo três parses grandes
-    // ao mesmo tempo. O catálogo será carregado sob demanda; Celular mantém o
-    // aquecimento escalonado para abrir Filmes/Séries mais rápido.
+    // A primeira pintura usa o cache/preview para devolver o controle remoto
+    // imediatamente. Depois, a carga integral é feita em série para não travar
+    // a TV Box: primeiro filmes, depois séries e por fim canais.
     if (getFormFactor() === 'tv') {
+        setTimeout(function () { refreshHomeCachedCatalogs(['movies', 'series', 'live'], 0); }, 180);
         setTimeout(function () { radioLoadCategory(radioCategory('gospel')).catch(function () {}); }, 6000);
         return;
     }
     var kinds = ['movies', 'series', 'live'];
     for (var i = 0; i < kinds.length; i++) (function (kind, delay) {
-        setTimeout(function () { ensureCatalog(kind).catch(function () {}); }, delay);
+        setTimeout(function () { ensureCatalog(kind, true).catch(function () {}); }, delay);
     })(kinds[i], i * 220);
     setTimeout(function () { radioLoadCategory(radioCategory('gospel')).catch(function () {}); }, 900);
 }
@@ -2948,6 +2951,7 @@ function refreshHomeCachedCatalogs(kinds, index) {
     var kind = kinds[index];
     try {
         refreshCatalog(kind, true).then(function () {
+            updateHomeCatalogUI(kind);
             setTimeout(function () { refreshHomeCachedCatalogs(kinds, index + 1); }, 700);
         })['catch'](function () {
             setTimeout(function () { refreshHomeCachedCatalogs(kinds, index + 1); }, 700);
@@ -2955,6 +2959,17 @@ function refreshHomeCachedCatalogs(kinds, index) {
     } catch (e) {
         setTimeout(function () { refreshHomeCachedCatalogs(kinds, index + 1); }, 700);
     }
+}
+function updateHomeCatalogUI(kind) {
+    try {
+        if (!document.querySelector('.zx-home2')) return;
+        var map = { live: ['zhSubLive', 'canais'], movies: ['zhSubMovies', 'filmes'], series: ['zhSubSeries', 'séries'] };
+        var d = map[kind], c = S.cat && S.cat[kind];
+        if (d && c && c.all) { var el = document.getElementById(d[0]); if (el) el.textContent = fmtNum(c.all.length) + ' ' + t(d[1]); }
+        if (kind === 'movies') fillHomeNewest(true);
+        if (kind === 'movies' || kind === 'series') fillHomeRecommendations(true);
+        loadHomePosters();
+    } catch (e) {}
 }
 function hydrateHomeCatalogCache() {
     if (getFormFactor() !== 'tv' || !S.server) return false;
@@ -3115,7 +3130,8 @@ function renderHome() {
     if (!srvName) startHomeClock();   // com nome de parceiro no topo não há relógio pra atualizar
     loadHomePosters();   // capas do "Assistido Recentemente" (o lazy-loader global é escopado a grid)
     fillHomeNewest();    // catálogo já em cache → "Recém adicionados" entra ANTES do 1º paint
-    try { setTimeout(fillHomeCounts, getFormFactor() === 'tv' ? 5000 : 400); } catch (e) { fillHomeCounts(); }   // contagens em FILA, começando só depois da home assentar (TV fraca)
+        try { setTimeout(fillHomeCounts, getFormFactor() === 'tv' ? 1800 : 400); } catch (e) { fillHomeCounts(); }   // contagens usam cache inicial e a sincronização integral atualiza depois
+
         fitHomeAll();               // SÍNCRONO (antes do 1º paint): sem o "abre grande e encolhe" ao voltar pra home
     scheduleHomeFit(160);        // uma segunda medição coalescida depois de fontes/imagens assentarem
 
@@ -3296,7 +3312,7 @@ function homeRecommendationsHtml() {
     var head = '<h2 class="zh-h2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3z"></path></svg> Para você</h2>';
     return '<section class="zh-recent zh-recommend" id="zhReco" style="display:none">' + head + '<div class="zh-posters" id="zhRecoRow"></div></section>';
 }
-function fillHomeRecommendations() {
+function fillHomeRecommendations(forceFull) {
     if (!S.server || !document.querySelector('.zx-home2')) return;
     var tv = getFormFactor() === 'tv';
     var sec = $('zhReco'), row = $('zhRecoRow'); if (!sec || !row) return;
@@ -3320,14 +3336,18 @@ function fillHomeRecommendations() {
         if (cs && !S.cat.series) S.cat.series = cs;
         if (S.cat.movies || S.cat.series) renderRows();
         else { row.innerHTML = '<div class="zh-empty">' + te('Preparando recomendações…') + '</div>'; sec.style.display = ''; }
-        if (S._homeDeferredLoad) return;
+        if (S._homeDeferredLoad && !forceFull) return;
+        if (forceFull) {
+            Promise.all([ensureCatalog('movies', true), ensureCatalog('series', true)]).then(renderRows).catch(function () {});
+            return;
+        }
         S._homeDeferredLoad = true;
         setTimeout(function () {
             Promise.all([ensureCatalog('movies'), ensureCatalog('series')]).then(renderRows).catch(function () {});
         }, 900);
         return;
     }
-    Promise.all([ensureCatalog('movies'), ensureCatalog('series')]).then(renderRows).catch(function () {});
+    Promise.all([ensureCatalog('movies', !!forceFull), ensureCatalog('series', !!forceFull)]).then(renderRows).catch(function () {});
 }
 /* Carrega as capas da home na mão (o lazy-loader global só varre grids). */
 function loadHomePosters() {
@@ -3388,15 +3408,16 @@ function fillHomeCounts() {
         var set = function () {
             try {
                 var el = document.getElementById(id); if (!el) return;
-                var c = S.cat && S.cat[kind];
-                if (c && c.all) el.textContent = fmtNum(c.all.length) + ' ' + t(noun);
+                        var c = S.cat && S.cat[kind]; if (c && c.all) el.textContent = fmtNum(c.all.length) + ' ' + t(noun);
+
             } catch (e) {}
             pruneAdultRecent();   // catálogo carregado → re-checa adultos por CATEGORIA
             fillHomeNewest();     // sem histórico → preenche o "Recém adicionados" da home
         };
         if (S.cat && S.cat[kind]) { set(); setTimeout(nextCat, 60); return; }
         try {
-            ensureCatalog(kind).then(function () { set(); setTimeout(nextCat, 400); })['catch'](function () { setTimeout(nextCat, 400); });
+                        ensureCatalog(kind, true).then(function () { set(); setTimeout(nextCat, 400); })['catch'](function () { setTimeout(nextCat, 400); });
+
         } catch (e) { setTimeout(nextCat, 400); }
     }
     nextCat();
@@ -3431,12 +3452,15 @@ function pruneAdultRecent() {
 /* Preenche a faixa de destaques da home (só existe quando NÃO há histórico):
    pega os filmes mais NOVOS do catálogo (all já vem ordenado por added) e monta
    os cards no mesmo visual — sem barra de progresso. Pula adultos. */
-function fillHomeNewest() {
+function fillHomeNewest(forceFull) {
+
     try {
         var row = document.getElementById('zhNewestRow'); if (!row) return;
-        if (row.childNodes.length) return;   // já preenchido
+                        if (row.childNodes.length && !forceFull) return;   // já preenchido
         var c = S.cat && S.cat.movies; if (!c || !c.all || !c.all.length) return;
+        if (forceFull) row.innerHTML = '';
         var h = '', n = 0;
+
         for (var i = 0; i < c.all.length && n < 14; i++) {
             var s = c.all[i];
             var sid = parseInt(s.stream_id || 0, 10); if (!sid) continue;
