@@ -93,6 +93,14 @@ public final class MainActivity extends Activity {
 
         webView = new WebView(this);
         webView.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        // A barra de rolagem nativa do Android (cinza, sólida) fica sobreposta
+        // por cima do conteúdo da WebView e não segue o tema do app — o CSS
+        // de zlocal.js/index.html já desenha sua própria scrollbar fina e
+        // escura dentro da página. Sem desligar a nativa, as duas ficavam
+        // visíveis ao mesmo tempo e a nativa aparecia como uma barra cinza
+        // cortando a tela.
+        webView.setVerticalScrollBarEnabled(false);
+        webView.setHorizontalScrollBarEnabled(false);
         configureWebView(webView);
         root.addView(webView);
         setupMiniPlayer();
