@@ -60,6 +60,21 @@ function root() { return $('app-root'); }
 function enc(s) { return encodeURIComponent(s == null ? '' : s); }
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]); }); }
 function attr(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]); }); }
+/* O catálogo às vezes cadastra o MESMO filme duas vezes com stream_id
+   diferente: uma cópia "normal" e outra só com "Legendado"/"Dublado"/"Dual
+   Áudio" no nome. O dedupe por stream_id não pega esse caso porque o id É
+   diferente — por isso comparamos também por um nome "normalizado", que
+   remove essas marcações de idioma/versão (mas preserva ano e números de
+   sequência, pra não juntar filmes realmente diferentes por engano). */
+function movieDedupNameKey(rawName) {
+    var nm = String(rawName == null ? '' : rawName).toLowerCase();
+    try { nm = nm.normalize('NFD').replace(/[̀-ͯ]/g, ''); } catch (e) {}
+    nm = nm.replace(/\b(legendado|legendada|leg|dublado|dublada|dub|dual\s*audio|nacional)\b/g, ' ');
+    nm = nm.replace(/[\[\]\(\)\{\}]/g, ' ');
+    nm = nm.replace(/[^a-z0-9 ]/g, ' ');
+    nm = nm.replace(/\s{2,}/g, ' ').replace(/^\s+|\s+$/g, '');
+    return nm;
+}
 /* ============ i18n (PT/EN) ============================================
  * A CHAVE do dicionário é o próprio texto em PT: t('Filmes') -> 'Movies' se
  * o idioma for EN, ou o próprio 'Filmes' se for PT. Assim o PT nunca quebra
@@ -3431,7 +3446,7 @@ function homeRecommendationItems() {
             if (fitem && fitem.category_id != null) boost[String(fitem.category_id)] = (boost[String(fitem.category_id)] || 0) + 12;
         }
     }
-    var seenReco = {};
+    var seenReco = {}, seenRecoNames = {};
     for (var ki = 0; ki < defs.length; ki++) {
         var d = defs[ki], c = S.cat[d.kind], items = c && c.all || [];
         for (var ii = 0; ii < items.length; ii++) {
@@ -3443,6 +3458,13 @@ function homeRecommendationItems() {
             var recoKey = key(d.kind, id);
             if (seenReco[recoKey]) continue;
             seenReco[recoKey] = 1;
+            // Mesmo filme/série cadastrado 2x com id diferente (cópia
+            // "Legendado"/"Dublado"): compara pelo nome normalizado também.
+            var recoNameKey = key(d.kind, movieDedupNameKey(item.name || item.title || ''));
+            if (recoNameKey) {
+                if (seenRecoNames[recoNameKey]) continue;
+                seenRecoNames[recoNameKey] = 1;
+            }
             var newest = parseInt(item.added || item.last_modified || item.last_modified_at || 0, 10) || 0;
             var score = (boost[String(item.category_id)] || 0) + Math.min(8, newest > 0 ? 2 : 0);
             out.push({ kind: d.kind, id: id, item: item, score: score, newest: newest, reason: (boost[String(item.category_id)] || 0) > 0 ? 'Porque você favoritou algo parecido' : newest > 0 ? 'Novidade na sua lista' : 'Sugestão para você' });
@@ -3637,7 +3659,7 @@ function fillHomeNewest(forceFull) {
             return;
         }
         if (forceFull) row.innerHTML = '';
-        var h = '', n = 0, seenIds = {};
+        var h = '', n = 0, seenIds = {}, seenNames = {};
 
         for (var i = 0; i < c.all.length && n < 14; i++) {
             var s = c.all[i];
@@ -3650,6 +3672,14 @@ function fillHomeNewest(forceFull) {
             seenIds[sid] = 1;
             var nm = s.name || '';
             if (isAdultContent('movies', sid, nm)) continue;
+            // Cadastro duplicado do MESMO filme com stream_id diferente (versão
+            // "Legendado" separada da normal): compara pelo nome normalizado
+            // e mantém só a primeira ocorrência.
+            var nameDedupKey = movieDedupNameKey(nm);
+            if (nameDedupKey) {
+                if (seenNames[nameDedupKey]) continue;
+                seenNames[nameDedupKey] = 1;
+            }
             var img = tmdbResize(s.stream_icon || '');
             var topLine = '';
             var ym = nm.match(/\(((?:19|20)\d{2})\)/);
