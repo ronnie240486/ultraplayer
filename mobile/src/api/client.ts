@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 
-const PANEL_BASE = process.env.EXPO_PUBLIC_PANEL_BASE || 'https://renciaapp.manus.space/api/v5';
+const PANEL_BASE = process.env.EXPO_PUBLIC_PANEL_BASE || 'https://renciaapp-production.up.railway.app/api/v5';
 const PROXY_BASE = process.env.EXPO_PUBLIC_BACKEND_URL
   ? `${process.env.EXPO_PUBLIC_BACKEND_URL}/api/iptv-proxy`
   : '';
