@@ -84,7 +84,15 @@ public final class MainActivity extends Activity {
         getWindow().setStatusBarColor(android.graphics.Color.rgb(11, 15, 26));
         getWindow().setNavigationBarColor(android.graphics.Color.rgb(11, 15, 26));
         getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
-        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+        // Esconde a barra de status E a barra de navegação do Android por
+        // completo (igual o Ouro Pro já fazia) em vez de só colorir elas —
+        // é o próprio Android reservando aquele espaço pras barras do
+        // sistema (ainda mais visível quando o app força paisagem com o
+        // aparelho detectando a orientação como retrato) que aparecia como
+        // as faixas cortando a tela. "Immersive sticky": some as duas, e se
+        // a pessoa arrastar da borda pra revelar, elas voltam a sumir
+        // sozinhas em seguida.
+        applyImmersiveMode();
 
         isTv = detectTv();
         applySavedOrientation();
@@ -1208,6 +1216,35 @@ public final class MainActivity extends Activity {
             pendingInstallApk = null;
             startApkInstall(apk);
         }
+        applyImmersiveMode();
+    }
+
+    // Some a barra de status e a de navegação do Android (modo imersivo
+    // "sticky": some sozinho de novo pouco depois se a pessoa arrastar da
+    // borda pra revelar). Precisa ser chamado de novo sempre que a janela
+    // ganha foco (voltar de outro app, fechar um diálogo, girar a tela) —
+    // o próprio Android tende a trazer as barras de volta nesses momentos.
+    private void applyImmersiveMode() {
+        try {
+            getWindow().setFlags(
+                android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN,
+                android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN
+            );
+            getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+            );
+        } catch (Throwable ignored) { }
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) applyImmersiveMode();
     }
 
     private void launchVoiceRecognizer() {
