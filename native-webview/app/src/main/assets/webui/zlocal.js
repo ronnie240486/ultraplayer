@@ -1263,9 +1263,13 @@ function applyUltraConfig(j, rerender) {
     b.wallpaper_url = '';
     b.background = '';
     b.message_image_url = j.ultra_message_image_url || '';
-    b.message_title = '';
-    b.message_text = '';
-    b.impact_phrase = '';
+    // Título/texto da mensagem e frase de impacto: o painel (SettingsUltra.tsx)
+    // já tem campos pra digitar isso e o backend já manda em ultra-config —
+    // antes ficavam zerados aqui à força, então nunca apareciam em
+    // homeRemoteBannerHtml() por mais que fossem preenchidos no painel.
+    b.message_title = j.ultra_message_title || '';
+    b.message_text = j.ultra_message_text || '';
+    b.impact_phrase = j.ultra_impact_phrase || '';
     b.server_api_url = old.server_api_url || '';
     b.apk_download_url = j.ultra_apk_download_url || j.ultra_apk_link || old.apk_download_url || '';
     b.apk_version = j.ultra_apk_version || j.ultra_app_version || old.apk_version || '';
