@@ -3349,11 +3349,18 @@ function homeRecommendationItems() {
             if (fitem && fitem.category_id != null) boost[String(fitem.category_id)] = (boost[String(fitem.category_id)] || 0) + 12;
         }
     }
+    var seenReco = {};
     for (var ki = 0; ki < defs.length; ki++) {
         var d = defs[ki], c = S.cat[d.kind], items = c && c.all || [];
         for (var ii = 0; ii < items.length; ii++) {
             var item = items[ii], id = parseInt((d.kind === 'series' ? (item.series_id || item.stream_id) : item.stream_id) || 0, 10);
             if (!id || excluded[key(d.kind, id)] || !kidsAllows(item)) continue;
+            // Mesmo problema do fillHomeNewest: o catálogo repete o mesmo
+            // título uma vez por categoria em que ele está cadastrado no
+            // servidor — sem dedupe, "Para você" mostrava o mesmo item 2-3x.
+            var recoKey = key(d.kind, id);
+            if (seenReco[recoKey]) continue;
+            seenReco[recoKey] = 1;
             var newest = parseInt(item.added || item.last_modified || item.last_modified_at || 0, 10) || 0;
             var score = (boost[String(item.category_id)] || 0) + Math.min(8, newest > 0 ? 2 : 0);
             out.push({ kind: d.kind, id: id, item: item, score: score, newest: newest, reason: (boost[String(item.category_id)] || 0) > 0 ? 'Porque você favoritou algo parecido' : newest > 0 ? 'Novidade na sua lista' : 'Sugestão para você' });
@@ -3548,11 +3555,17 @@ function fillHomeNewest(forceFull) {
             return;
         }
         if (forceFull) row.innerHTML = '';
-        var h = '', n = 0;
+        var h = '', n = 0, seenIds = {};
 
         for (var i = 0; i < c.all.length && n < 14; i++) {
             var s = c.all[i];
             var sid = parseInt(s.stream_id || 0, 10); if (!sid) continue;
+            // O mesmo filme aparece mais de uma vez em c.all quando está em mais
+            // de uma categoria no servidor (mesmo stream_id, category_id
+            // diferente) — sem isso "Filmes em destaque" repetia o mesmo
+            // pôster 2-3x seguidas.
+            if (seenIds[sid]) continue;
+            seenIds[sid] = 1;
             var nm = s.name || '';
             if (isAdultContent('movies', sid, nm)) continue;
             var img = tmdbResize(s.stream_icon || '');
