@@ -1,7 +1,7 @@
 /* ============================================================
  * Fusion — controlador LOCAL (app desktop/Windows).
  * A interface roda no aparelho (igual Roku). O catálogo vem DIRETO do
- * IPTV (Xtream player_api.php). O painel tv.renciaapp.manus.space é usado só
+ * IPTV (Xtream player_api.php). O painel renciaapp-production.up.railway.app é usado só
  * via /api/r/* (login/licença/favoritos/progresso/recent/continue/
  * busca/aviso/branding). NADA é renderizado no servidor.
  *
@@ -30,7 +30,7 @@
     } catch (e) {}
 })();
 // base da API lida DINAMICAMENTE (o shell pode injetar __API_BASE após o boot)
-function apiBase() { return String(global.__API_BASE || 'https://renciaapp.manus.space').replace(/\/+$/, ''); }
+function apiBase() { return String(global.__API_BASE || 'https://renciaapp-production.up.railway.app').replace(/\/+$/, ''); }
 var S = {
     code: '', user: '', pass: '', did: '', directAuth: false,
     playlistUrl: '', playlistType: '',
@@ -1244,7 +1244,7 @@ function applyBranding(b) {
     // conter a arte antiga ou um banner diferente do fundo escolhido.
     applyWallpaper(b.background_url || '');
 }
-var ULTRA_CONFIG_ENDPOINT = 'https://renciaapp.manus.space/api/v5/ultra-config?mac=';
+var ULTRA_CONFIG_ENDPOINT = 'https://renciaapp-production.up.railway.app/api/v5/ultra-config?mac=';
 function applyUltraConfig(j, rerender) {
     if (!j) return;
     if (j.registered === false || j.allowed === false) { S.ultraDenied = true; S.remoteConfig = j; return; }
@@ -1981,7 +1981,7 @@ function installRouter() {
  * ============================================================ */
 
 /* ---- ATIVAÇÃO E LOGIN ---- */
-var DIRECT_PANEL_BASE = 'https://renciaapp.manus.space/api/v5';
+var DIRECT_PANEL_BASE = 'https://renciaapp-production.up.railway.app/api/v5';
 function macActivationStop() { try { if (S.macPoll) clearInterval(S.macPoll); } catch (e) {} S.macPoll = null; }
 function macActivationCheck(mac, statusEl, button) {
     if (button) button.disabled = true;
@@ -5828,7 +5828,7 @@ function renderPaywall(d) {
     var mac = d.mac || lic.mac || '';
     // Texto mostra SÓ até /renovar (sem ?mac=... — ninguém digita URL-encoded);
     // o MAC já aparece por extenso logo abaixo e o QR leva o link completo.
-    var pay = (d.pay_url || lic.pay_url || 'https://renciaapp.manus.space/renovar').replace(/^https?:\/\//, '').replace(/\?.*$/, '');
+    var pay = (d.pay_url || lic.pay_url || 'https://renciaapp-production.up.railway.app/renovar').replace(/^https?:\/\//, '').replace(/\?.*$/, '');
     var qr = d.qr_url || lic.qr_url || '';
     // Wrapper com scroll próprio + miolo com margin:auto: se couber, fica centrado;
     // se NÃO couber, rola a partir do TOPO. Em tela BAIXA (celular deitado — no
