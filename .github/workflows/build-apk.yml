@@ -1,0 +1,112 @@
+name: Build APK (direto no Actions)
+
+# Builda o UltraPlayer (pasta native-webview/, projeto Android nativo
+# Java + Gradle) direto aqui no GitHub Actions a cada push que muda o
+# app ou o próprio workflow — igual já é feito nos repositórios Maximus
+# e OuroPro. Antes disso, os APKs eram gerados manualmente no
+# computador e commitados à mão na pasta releases/.
+#
+# IMPORTANTE: como este repositório reúne várias pastas (mobile/,
+# native-webview/, recovered/...), o workflow precisa ficar aqui na
+# raiz (.github/workflows/) — o GitHub só reconhece workflows nesse
+# caminho exato, nunca dentro de uma subpasta. Todos os passos abaixo
+# rodam com working-directory: native-webview.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'native-webview/**'
+      - '.github/workflows/build-apk.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    # "contents: write" é necessário pro passo de Release lá embaixo poder
+    # publicar/atualizar o release e o link fixo de download do APK.
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: native-webview
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Preparar o Android SDK (instalação manual, sem depender de action de terceiro)
+        run: |
+          ANDROID_SDK_ROOT="$HOME/android-sdk"
+          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
+          curl -sSL "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -o /tmp/cmdline-tools.zip
+          unzip -q /tmp/cmdline-tools.zip -d "$ANDROID_SDK_ROOT/cmdline-tools"
+          mv "$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools" "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$ANDROID_SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+          # compileSdk do app é 36 (ver app/build.gradle) — precisa da
+          # platform 36 instalada, senão o AAPT falha ao compilar os recursos.
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-36" "build-tools;36.0.0" > /dev/null
+
+      - name: Cache do Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-ultraplayer-${{ hashFiles('native-webview/**/*.gradle') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-ultraplayer-
+
+      - name: Buildar o APK (release, assinado com o keystore de debug — ver app/build.gradle)
+        # O projeto já builda a variante "release" assinada com
+        # signingConfigs.debug (não é assinatura de produção de verdade,
+        # mas mantém a mesma assinatura entre builds pra permitir
+        # atualizar instalações existentes). É o mesmo tipo de build que
+        # já vinha sendo feito manualmente e commitado em releases/.
+        run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
+
+      - name: Encontrar o APK gerado
+        id: apk
+        run: |
+          APK_PATH=$(find app/build/outputs/apk -name "*.apk" | head -n1)
+          echo "path=$APK_PATH" >> "$GITHUB_OUTPUT"
+          echo "Encontrado: $APK_PATH"
+
+      - name: Enviar o APK como artefato do build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ultraplayer-release-apk
+          path: native-webview/${{ steps.apk.outputs.path }}
+          if-no-files-found: error
+
+      - name: Publicar o APK num link fixo (GitHub Release), pra colar no painel/Downloader
+        # O link do artefato acima muda a cada build e exige estar logado no
+        # GitHub — não dá pra colar num player de TV box nem no campo de
+        # download do painel. Um "GitHub Release" com nome de tag e de
+        # arquivo sempre iguais gera um link público fixo: o arquivo por
+        # trás dele é substituído a cada build, mas a URL nunca muda.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp "${{ steps.apk.outputs.path }}" ultraplayer-release.apk
+          gh release create ultraplayer-latest ultraplayer-release.apk \
+            --repo "${{ github.repository }}" \
+            --title "UltraPlayer — build automático mais recente" \
+            --notes "Gerado automaticamente pelo GitHub Actions a cada push em main (native-webview/). Este link não muda — sempre aponta pro build mais recente." \
+          || gh release upload ultraplayer-latest ultraplayer-release.apk \
+            --repo "${{ github.repository }}" \
+            --clobber
+
+      - name: Mostrar o link fixo de download
+        run: |
+          echo "Link fixo do APK (cole no painel ou no Downloader):"
+          echo "https://github.com/${{ github.repository }}/releases/download/ultraplayer-latest/ultraplayer-release.apk"
