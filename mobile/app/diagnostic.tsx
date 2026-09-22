@@ -17,7 +17,7 @@ import { getDeviceMac } from '@/src/lib/device';
 import { checkMac, MacStatus, proxied } from '@/src/api/client';
 import { parsePlaylistUrl } from '@/src/lib/xtream';
 
-const BACKEND = 'https://renciaapp.manus.space/api/v5';
+const BACKEND = 'https://renciaapp-production.up.railway.app/api/v5';
 
 type Result = {
   url: string;
