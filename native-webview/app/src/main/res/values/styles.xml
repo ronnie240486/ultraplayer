@@ -8,12 +8,5 @@
         <item name="android:navigationBarColor">#0B0F1A</item>
         <item name="android:statusBarColor">#0B0F1A</item>
         <item name="android:windowLightStatusBar">false</item>
-        <!-- Sem isso, o fundo da JANELA (diferente do fundo das Views) cai no
-             cinza padrão do Android (Theme.Material = #212121). Qualquer
-             pedacinho de tela que a WebView/root não cubra por completo — por
-             exemplo a faixa de um recorte de câmera — mostra esse cinza em
-             vez do azul-escuro do app, e chamava atenção do lado do tema
-             verde/azul do Fusion. Aqui força a MESMA cor do app. -->
-        <item name="android:windowBackground">#0B0F1A</item>
     </style>
 </resources>
