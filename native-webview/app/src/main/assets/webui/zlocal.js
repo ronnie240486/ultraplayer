@@ -791,6 +791,88 @@ function startListNotificationWatcher() {
     try { S.listNotificationTimer = setInterval(checkListNotifications, 60000); } catch (e) {}
 }
 
+/* ---- comandos remotos enviados pelo painel (RemoteCommands.tsx) ----
+   Mesma rota que o Ouro Pro (v295) já usa: GET /api/v5/remote-commands?mac=...
+   entrega no máximo um comando pendente por vez; o app confirma execução via
+   POST /api/v5/remote-commands/ack. De propósito NÃO manda o parâmetro
+   "app": o servidor só filtra por app quando ele é enviado, e nesse ponto o
+   cadastro consultado pelo MAC reserva do Fusion pode ter o app PRINCIPAL
+   (ex.: Ouro Pro) — mandar "app=fusion" faria o comando ser rejeitado. Sem o
+   parâmetro, funciona do mesmo jeito que list-notifications já funciona. */
+function remoteCommandSeenKey(id) { return 'zx_remote_command_seen_' + String(id || ''); }
+function remoteCommandWasSeen(id) { try { return localStorage.getItem(remoteCommandSeenKey(id)) === '1'; } catch (e) { return false; } }
+function remoteCommandMarkSeen(id) { try { localStorage.setItem(remoteCommandSeenKey(id), '1'); } catch (e) {} }
+function ackRemoteCommand(mac, id, status) {
+    if (!mac || !id) return;
+    var body = JSON.stringify({ mac: mac, command_id: Number(id) || id, status: status || 'executed' });
+    fetchT(apiBase() + '/api/v5/remote-commands/ack', 8000, {
+        method: 'POST', credentials: 'omit',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: body
+    }).catch(function () {});
+}
+function showRemoteMessage(text) {
+    if (!text || $('zx-list-notification') || $('zx-remote-message')) return;
+    var ov = document.createElement('div'); ov.id = 'zx-remote-message';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,.52);font-family:system-ui,-apple-system,Segoe UI,sans-serif;';
+    ov.innerHTML = '<div role="alertdialog" aria-modal="true" style="width:min(680px,94vw);max-height:82vh;overflow:auto;background:rgba(9,20,15,.98);border:2px solid #10b981;border-radius:18px;padding:26px;color:#f8fff9;box-shadow:0 18px 70px rgba(0,0,0,.65);box-sizing:border-box;text-align:left;">'
+        + '<div style="font-size:30px;line-height:1;margin-bottom:14px;color:#34d399">✉</div>'
+        + '<div style="font-size:22px;font-weight:800;margin-bottom:10px;">' + te('Mensagem') + '</div>'
+        + '<div style="font-size:17px;line-height:1.5;color:#d4e1d9;white-space:pre-wrap;">' + esc(String(text)) + '</div>'
+        + '<div style="text-align:right;margin-top:24px;"><button id="zx-remote-message-ok" autofocus type="button" style="min-width:140px;padding:12px 20px;border:0;border-radius:10px;background:#10b981;color:#04231a;font-size:16px;font-weight:800;">OK</button></div></div>';
+    document.body.appendChild(ov);
+    try { document.body.classList.add('tv-modal-open'); } catch (e) {}
+    var ok = $('zx-remote-message-ok');
+    if (ok) ok.addEventListener('click', function () { try { if (ov.parentNode) ov.parentNode.removeChild(ov); } catch (e) {} try { document.body.classList.remove('tv-modal-open'); } catch (e2) {} });
+    try { if (ok) ok.focus(); } catch (e3) {}
+}
+function applyRemoteCommand(cmd, mac) {
+    if (!cmd || !cmd.id) return;
+    if (remoteCommandWasSeen(cmd.id)) { ackRemoteCommand(mac, cmd.id, 'executed'); return; }
+    remoteCommandMarkSeen(cmd.id);
+    var payload = cmd.payload || {}, type = String(cmd.type || '');
+    if (type === 'show_message') {
+        showRemoteMessage(payload.message || '');
+        ackRemoteCommand(mac, cmd.id, 'executed');
+    } else if (type === 'switch_playlist') {
+        fetchDirectListsForFailover().then(function (lists) {
+            var pick = chooseFailoverList(lists, { active_list_number: payload.listIndex || payload.list_index });
+            if (pick < 0) { ackRemoteCommand(mac, cmd.id, 'failed'); return; }
+            switchDirectListBackground(pick);
+            refreshAfterPanelListSwitch(payload.message || t('Lista trocada pelo painel.'));
+            ackRemoteCommand(mac, cmd.id, 'executed');
+        }).catch(function () { ackRemoteCommand(mac, cmd.id, 'failed'); });
+    } else if (type === 'refresh_playlist') {
+        fetchDirectListsForFailover().then(function () {
+            refreshAfterPanelListSwitch(payload.message || '');
+            ackRemoteCommand(mac, cmd.id, 'executed');
+        }).catch(function () { ackRemoteCommand(mac, cmd.id, 'failed'); });
+    } else if (type === 'restart_player') {
+        refreshAfterPanelListSwitch(payload.message || '');
+        ackRemoteCommand(mac, cmd.id, 'executed');
+    } else {
+        // update_dns, sync_access etc.: reconhece pra não travar a fila do
+        // painel, mesmo sem ação local implementada ainda neste app.
+        ackRemoteCommand(mac, cmd.id, 'executed');
+    }
+}
+function checkRemoteCommands() {
+    if (S.remoteCommandBusy) return;
+    var mac = getAppMac(); if (!mac) return;
+    S.remoteCommandBusy = true;
+    var url = apiBase() + '/api/v5/remote-commands?mac=' + enc(mac);
+    fetchT(url, 9000, { cache: 'no-store', credentials: 'omit', headers: { 'Accept': 'application/json', 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' } })
+        .then(function (r) { if (!r.ok) throw new Error('remote_commands_' + r.status); return r.json(); })
+        .then(function (d) { if (d && d.command) applyRemoteCommand(d.command, mac); })
+        .catch(function () {})
+        .then(function () { S.remoteCommandBusy = false; });
+}
+function startRemoteCommandWatcher() {
+    if (S.remoteCommandTimer) return;
+    try { setTimeout(checkRemoteCommands, 1400); } catch (e) { checkRemoteCommands(); }
+    try { S.remoteCommandTimer = setInterval(checkRemoteCommands, 45000); } catch (e) {}
+}
+
 /* ---- snapshot do resolve (dns/licença/branding/aviso) ---- */
 function saveSnap(d) { lsSet('zx_snap', { ts: Date.now(), code: S.code, user: S.user, d: d }); }
 function loadSnap() {
@@ -6717,6 +6799,7 @@ function boot() {
     if (!(c && c.code && c.user && c.pass)) { renderMacActivation(); return; }
     S.code = c.code; S.user = c.user; S.pass = c.pass; S.playlistUrl = c.playlistUrl || ''; S.playlistType = c.playlistType || ''; S.listIndex = parseInt(c.listIndex || activeListIndex(), 10) || 0; S.directPlaylists = loadDirectPlaylists();
     startListNotificationWatcher();
+    startRemoteCommandWatcher();
     if (S.playlistUrl && (S.playlistType || '').indexOf('m3u') === 0) { try { S.xtreamDerived = playlistToXtream({ playlist_url: S.playlistUrl }, 'Lista ativa'); } catch (e) {} }
 
     var snap = loadSnap();
